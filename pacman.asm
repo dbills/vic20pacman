@@ -50,7 +50,7 @@ LTBLUE       equ 14
 LTYELLOW     equ 15
 
 MW           equ $e0            ;maze wall character
-SPRITES      equ 1              ;count of sprites in system
+SPRITES      equ 2              ;count of sprites in system 1 based
 ;;
 ;;  Zero page constants
 ;;
@@ -72,14 +72,15 @@ PACFRAMEDIR     equ $19        ; the direction pacman is facing
 S5              equ $30
 S6              equ $31        
 W5              equ $32
-S7              equ $43        
+S7              equ $43
+W6              equ $44
 VV              equ $02         ;testing, voice 2
 ;;
 ;; misc constants
 ;;
 PACL            equ $00            ; pacman char number
 
-GHL             equ $02            ; ghost char number
+GHL             equ $06            ; ghost char number
 
 DOT             equ $04
 PWR             equ $05
@@ -278,14 +279,13 @@ NOPAC           equ $20        ; background char for pacman
         lda #8
         sta S6
         jsr multxx
-        store16 mychars,W4
         lda W5
         clc
-        adc W4
+        adc #mychars&$ff
         sta W4
-        bcc .done
-        inc W4+1
-.done
+        lda W5+1
+        adc #mychars >> 8
+        sta W4+1
         endm
 ;; set N on joystick right
   mac onjoyr
@@ -309,270 +309,11 @@ NOPAC           equ $20        ; background char for pacman
         lda #0
         sta S7
     jmp main
-;
-; Music/sound effect tracks
-;
-; scale: 0,start freq,end freq,step,dur
-; note: 1 freq,dur
 
-Track1                ; a siren ( up,down scale )
-    ds 1,0            ; up scale
-    ds 1,220
-    ds 1,240
-    ds 1,2            ; step
-    ds 1,1            ; duration
-
-    ds 1,0            ; up scale
-    ds 1,240
-    ds 1,220
-    ds 1,2            ; step
-    ds 1,1            ; duration
-    ds 1,2            ; stop command
-
-Track3                ; a siren ( up,down scale )
-    ds 1,0            ; up scale
-    ds 1,200
-    ds 1,240
-    ds 1,1            ; step
-    ds 1,1            ; duration
-    ds 1,0            ; up scale
-    ds 1,210
-    ds 1,240
-    ds 1,1            ; step
-    ds 1,2            ; duration
-    ds 1,2            ; stop command
-Track2
-    ds 1,1
-    ds 1,200
-    ds 1,50
-    ds 1,1
-    ds 1,220
-    ds 1,50
-    ds 1,1
-    ds 1,0
-    ds 1,50
-    ds 1,2            ; repeat
-Track21
-    ds 1,1
-    ds 1,200
-    ds 1,1
-    ds 1,1
-    ds 1,240
-    ds 1,1
-    ds 1,2            ; repeat
-
-table1                ; multiple of 22 table for screen
-    ds 1,44
-    ds 1,66
-    ds 1,88
-    ds 1,110
-    ds 1,132
-    ds 1,154
-    ds 1,176
-    ds 1,198
-    ds 1,220
-    ds 1,242
-    ds 1,264
-    ds 1,286
-    ds 1,308
-    ds 1,330
-    ds 1,352
-    ds 1,374
-    ds 1,396
-    ds 1,418
-    ds 1,440
-    ds 1,462
-    ds 1,484
-
-TrackBass
-	ds 1,1
-	ds 1,214
-	ds 1,240
-	ds 1,1
-	ds 1,218
-	ds 1,120
-	ds 1,1
-	ds 1,222
-	ds 1,255
-	ds 1,1
-	ds 1,222
-	ds 1,105
-	ds 1,1
-	ds 1,224
-	ds 1,255
-	ds 1,1
-	ds 1,224
-	ds 1,105
-	ds 1,1
-	ds 1,222
-	ds 1,255
-	ds 1,1
-	ds 1,222
-	ds 1,105
-	ds 1,1
-	ds 1,218
-	ds 1,255
-	ds 1,1
-	ds 1,218
-	ds 1,105
-	ds 1,1
-	ds 1,214
-	ds 1,255
-	ds 1,1
-	ds 1,214
-	ds 1,105
-	ds 1,1
-	ds 1,227
-	ds 1,120
-	ds 1,1
-	ds 1,222
-	ds 1,120
-	ds 1,1
-	ds 1,214
-	ds 1,120
-	ds 1,1
-	ds 1,227
-	ds 1,120
-	ds 1,1
-	ds 1,200
-	ds 1,60
-	ds 1,1
-	ds 1,224
-	ds 1,60
-	ds 1,1
-	ds 1,222
-	ds 1,60
-	ds 1,1
-	ds 1,218
-	ds 1,60
-	ds 1,1
-	ds 1,222
-	ds 1,120
-	ds 1,1
-	ds 1,0
-	ds 1,60
-        ds 1,2
-TrackHigh
-	ds 1,1
-	ds 1,227
-	ds 1,120
-	ds 1,1
-	ds 1,214
-	ds 1,60
-	ds 1,1
-	ds 1,218
-	ds 1,60
-	ds 1,1
-	ds 1,222
-	ds 1,60
-	ds 1,1
-	ds 1,224
-	ds 1,60
-	ds 1,1
-	ds 1,227
-	ds 1,120
-	ds 1,1
-	ds 1,214
-	ds 1,90
-	ds 1,1
-	ds 1,0
-	ds 1,30
-	ds 1,1
-	ds 1,214
-	ds 1,90
-	ds 1,1
-	ds 1,0
-	ds 1,30
-	ds 1,1
-	ds 1,231
-	ds 1,120
-	ds 1,1
-	ds 1,224
-	ds 1,60
-	ds 1,1
-	ds 1,227
-	ds 1,60
-	ds 1,1
-	ds 1,231
-	ds 1,60
-	ds 1,1
-	ds 1,233
-	ds 1,60
-	ds 1,1
-	ds 1,234
-	ds 1,120
-	ds 1,1
-	ds 1,214
-	ds 1,90
-	ds 1,1
-	ds 1,0
-	ds 1,30
-	ds 1,1
-	ds 1,214
-	ds 1,90
-	ds 1,1
-	ds 1,0
-	ds 1,30
-	ds 1,1
-	ds 1,224
-	ds 1,120
-	ds 1,1
-	ds 1,227
-	ds 1,60
-	ds 1,1
-	ds 1,224
-	ds 1,60
-	ds 1,1
-	ds 1,222
-	ds 1,60
-	ds 1,1
-	ds 1,218
-	ds 1,60
-	ds 1,1
-	ds 1,222
-	ds 1,120
-	ds 1,1
-	ds 1,224
-	ds 1,60
-	ds 1,1
-	ds 1,222
-	ds 1,60
-	ds 1,1
-	ds 1,218
-	ds 1,60
-	ds 1,1
-	ds 1,214
-	ds 1,60
-	ds 1,1
-	ds 1,211
-	ds 1,120
-	ds 1,1
-	ds 1,214
-	ds 1,60
-	ds 1,1
-	ds 1,218
-	ds 1,60
-	ds 1,1
-	ds 1,222
-	ds 1,60
-	ds 1,1
-	ds 1,214
-	ds 1,60
-	ds 1,1
-	ds 1,222
-	ds 1,120
-	ds 1,1
-	ds 1,218
-	ds 1,120
-	ds 1,1
-	ds 1,0
-	ds 1,255
-	ds 1,1
-	ds 1,0
-	ds 1,45
- ds 1,2
+    INCLUDE "music.asm"        
 ;;; screen map for maze
 Maze1
+    HEX  20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20
     HEX  20 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0
     HEX  20 E0 04 04 04 04 04 04 04 04 04 E0 04 04 04 04 04 04 04 04 04 E0
     HEX  20 E0 05 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 05 E0
@@ -583,7 +324,7 @@ Maze1
     HEX  20 E0 E0 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 E0 E0
     HEX  20 20 20 20 E0 04 E0 20 20 20 20 20 20 20 20 20 E0 04 E0 20 20 20
     HEX  20 E0 E0 E0 E0 04 E0 20 E0 E0 E0 E0 E0 E0 E0 20 E0 04 E0 E0 E0 E0
-    HEX  20 20 20 20 20 04 20 20 E0 20 20 20 20 20 E0 20 20 04 20 20 20 20
+    HEX  20 20 20 20 21 04 20 20 E0 20 20 20 20 20 E0 20 20 04 20 20 20 20
     HEX  20 E0 E0 E0 E0 04 E0 20 E0 E0 E0 E0 E0 E0 E0 20 E0 04 E0 E0 E0 E0
     HEX  20 20 20 20 E0 04 E0 20 20 20 20 20 20 20 20 20 E0 04 E0 20 20 20
     HEX  20 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0
@@ -595,9 +336,9 @@ Maze1
     HEX  20 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0
     HEX  20 E0 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 E0
     HEX  20 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0
-    HEX  20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20
 ;;; color map for maze
 Maze1C
+    HEX  01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
     HEX  01 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06
     HEX  01 06 01 01 01 01 01 01 01 01 01 06 01 01 01 01 01 01 01 01 01 06
     HEX  01 06 08 06 06 01 06 06 06 06 01 06 01 06 06 06 06 01 06 06 08 06
@@ -620,11 +361,10 @@ Maze1C
     HEX  01 06 01 06 06 06 06 06 06 06 01 06 01 06 06 06 06 06 06 06 01 06
     HEX  01 06 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 06
     HEX  01 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06
-    HEX  01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
 
 pacframes  equ #3            ; total number of pacman animation frames
 
-#if 0
+#if 1
 PAC1                            ; closed
     ds 1,60
     ds 1,126
@@ -699,19 +439,32 @@ PDOT
     ds 1,0
 
 ;------------------------------------
-;
-; class Sprite
-; 5 instances, 4 ghosts, 1 pacman
+;;;
+;;; class Sprite
+;;; 5 instances, 4 ghosts, 1 pacman
+;;; sprite tile is the 'head tile'
+;;; sprite tile + 1 is the tail tile
+;;; sprite tile + 2 is the upcoming frame's head tile
+;;; sprite tile + 3 is the upcoming frame's tail tile
+;;; we 'page flip' the tiles so that the expensive bit rendering
+;;; does not have to be done on the vertical blank as my routines
+;;; which probably suck, take up too much time, and I was
+;;; getting flicker on the first few dozen scan lines because I
+;;; was still busy rendering
+;;; sprite_page control which set of tiles we draw , it alternates
+;;; between 0 and 1
 ;------------------------------------
-Sprite_loc      DC.W screen+24+22*3+3,screen+24+22*3+1,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+24+22*3+3,screen+24+22*3+1,0,0,0    ;new screen loc
-Sprite_back     dc.b DOT,DOT,0,0,0            ;background char value
+Sprite_page     dc.b 0        
+Sprite_loc      DC.W screen+24+22*16+4,screen+24+22*16+1,0,0,0    ;screen loc
+Sprite_loc2     DC.W screen+24+22*16+4,screen+24+22*16+1,0,0,0    ;new screen loc
+Sprite_back     dc.b DOT,DOT,0,0,0            ;background char value before other sprites are drawn
 Sprite_back2    dc.b DOT,DOT,0,0,0        
-Sprite_sback    dc.b 0,0,0,0,0            ;background char value
+Sprite_sback    dc.b 0,0,0,0,0            ;current screen 
 Sprite_sback2   dc.b 0,0,0,0,0        
 Sprite_tile     dc.b PACL,GHL,0,0,0         ;foreground char
-Sprite_src      dc.w PAC1,GHOST,0,0,0         ;sprite source bitmap
+Sprite_src      dc.w PAC2,GHOST,0,0,0         ;sprite source bitmap
 Sprite_bmap     dc.w mychars+(PACL*8),mychars+(GHL*8),0,0,0      ;sprite chargen ram ( where to put the source bmap )
+Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(2*8),0,0,0    
 Sprite_dir      dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,0,0,0,0  ;sprite bit offset in tiles
@@ -731,6 +484,25 @@ Sprite_offset2  dc.b 0,0,0,0,0  ;sprite bit offset in tiles
 .done        
         
         endm        
+render_horiz2 SUBROUTINE
+        stx S2                  ;set for call to blith
+        move16x Sprite_src,W1   ;bitmap source -> W1
+        ;; assume page 0
+        ;; if we are currently on page 0 , then render into page 1
+        move16x Sprite_bmap2,W2  ;left tile chargen ram
+        ldy #0
+        cpy Sprite_page
+        beq .page0
+        ;; else currently on page 1, render into page 0
+        move16x Sprite_bmap,W2  ;left tile chargen ram
+.page0
+        addxx W2,W3,#$8          ;right tile chargen ram
+        
+        lda Sprite_offset2,X
+        sta S1
+        jsr blitc        ;
+        jsr blith
+        rts
 ;;; 
 ;;; updates the bits in a sprite
 ;;; X = sprite to render
@@ -781,7 +553,15 @@ drwsprt1 SUBROUTINE
         lda (W1),Y
         sta Sprite_sback,X      ;current screen backing tile
         lda Sprite_tile,X
+        ;; figure out which set of tiles we should be rendering
+        ;; we 'page flip' between tiles for speed
+        cpy Sprite_page
+        beq .page0
+        clc
+        adc #2
+.page0        
         sta (W1),Y
+        clc
         adc #01
         sta S1                  ;save right tile character
         ldy Sprite_dir,X
@@ -800,126 +580,7 @@ drwsprt1 SUBROUTINE
         sta (W1),Y
         rts
 
-;------------------------------------
-;
-; class Scale &  Note
-;    plays a Scale or a note on a VoiceTrack
-;    4 instances for the 4 voices
-;    if playing a note, then Scale_ef and Scale_st is not relevant
-;------------------------------------
-Scale_sf      ds 4,0,0,0,0        ; current start freq
-Scale_ef      ds 4,0,0,0,0        ; current end freq
-Scale_st      ds 4,0,0,0,0        ; step
-Note_dur
-Scale_dur     ds 4,0,0,0,0        ; duration in jiffys
-Note_rem
-Scale_rem     ds 4,0,0,0,0        ; remaining jiffys in current sound
-Scale_dir     ds 4,0,0,0,0        ; direction of scale
-;--------
-; methods
-;--------
-;
-; called every VoiceTrack, figures out the next
-; note to play and when, loads it into the sound
-; register
-; X = voicetrack we are on
-;
-Scale_service SUBROUTINE
-    lda Scale_sf,X              ; get current note
-    sta voice1,X                ; play it
-    lda Scale_rem,X
-    clc
-    cmp #0
-    beq .done
-    dec Scale_rem,X             ; decrement remaining note time
-    rts
-.done
-    lda #1                      ;tell voicetrack we are done
-    sta VoiceTrack_done,X
-    rts
-;-------------------------------------------
-; end class Scale
-;-------------------------------------------
-
-;-------------------------------------------
-; class VoiceTrack
-;    manages a series of Commands for a
-;    voice
-;    e.g. Scale,Note ( see above )
-;;; voice track data commands
-;;; 0 = scale
-;;; [cmd][note][duration]
-;;; 1 = note
-;;; not doc'd yet
-;;; 2 = repeat
-;-------------------------------------------
-VoiceTrack_data ds.w    4,0,0,0,0      ; pointer to track data
-VoiceTrack_done ds      4,1,1,1,1      ;true when last command is done
-VoiceTrack_st   ds.w    4,0,0,0,0      ;address beginning
-;
-; Called regularly by main loop or VBI
-; to service the voice track
-; X = voice track to service
-;
-VoiceTrack_svc SUBROUTINE
-#if _debug
-    cpx #4                      ; there's only 4 voices
-    bmi .d1
-    brk                         ; param out of range
-.d1
-#endif
-    lda #1                      ; IF last command done
-    clc
-    cmp VoiceTrack_done,X
-    beq .load_next_command
-.1
-    jmp Scale_service           ;
-    brk                         ; service routine shoulda called rts
-
-.load_next_command
-    ; move pointer to zero page so we can use it for indexing
-    move16x VoiceTrack_data,W1
-    ldy #0
-    lda (W1),Y
-    ;                 ; switch ( track[idx] )
-    clc
-    cmp #1                      ; case 1
-    beq  .load_note   ;
-    clc
-    cmp #02           ; case 2 stop command
-        brk
-;    move16x VoiceTrack_st, W1
-;    move16x2 W1,VoiceTrack_data
-
-    rts
-
-.load_note
-    inc16 W1
-    ldy #0
-    lda (W1),Y                  ; get note freq
-        ;; we use the same start/end freq for 'notes'
-    sta Scale_sf,X              ; save start freq
-    sta Scale_ef,X              ; save end freq
-    lda #1                      ; direction = up ( not really relevant )
-    sta Scale_st,X
-    inc16 W1
-    lda (W1),Y                  ; get note dur
-    sta Note_dur,X              ;
-    sta Note_rem,X              ; initialize remaining time
-    inc16 W1
-                                ; install Scale as service handler
-    move16x2 W1,VoiceTrack_data
-.2
-    lda #0                      ; set done = false
-    sta VoiceTrack_done,X       ;
-    jmp Scale_service           ;
-    brk                         ; shouldn't get here
-
-
-;-------------------------------------------
-; end class VoiceTrack
-;-------------------------------------------
-
+ INCLUDE "audio.asm"
 ;-------------------------------------------
 ; MAIN()
 ;-------------------------------------------
@@ -954,7 +615,7 @@ main SUBROUTINE
 ;    store16x Track1,VoiceTrack_data    ; load track 1 on voice 2
 
 .loop
-        ldx #20
+        ldx #125
 .iloop        
         lda $9004
         beq .2
@@ -963,6 +624,9 @@ main SUBROUTINE
 .2
         dex
         bne .iloop
+        lda #1
+        eor Sprite_page
+        sta Sprite_page
 ;    ldx #1                     ; service voice VV
 ;    jsr VoiceTrack_svc         ; run sound engine
 ;    ldx #2
@@ -1013,10 +677,10 @@ main SUBROUTINE
         beq .vert
         brk
 .vert        
-        jsr render_vert
+;        jsr render_vert
         jmp .drawloop
 .horiz
-        jsr render_horiz
+;        jsr render_horiz
         jmp .drawloop
 .player
         ;;  figure out the next move
@@ -1102,7 +766,7 @@ md4
 
 ;;; read joystick and move sprites
 Sprite_svc SUBROUTINE
-#if 0
+#if 1
 ;;; Service ghosts
         ldx #1
         lda S7
@@ -1119,8 +783,9 @@ Sprite_svc SUBROUTINE
         bcs .reverse
         bcc .0
 .reverse
+        brk
         lda #1
-       sta S7                ;
+        sta S7                ;
 #endif
 .0
 ;;; Service PACMAN
@@ -1137,6 +802,9 @@ Sprite_svc SUBROUTINE
         and #JOYDWN             ; check for down bit
         beq .down
         tya
+        and #JOYT
+        beq .fire
+        tya
         onjoyr
         beq .right
         rts
@@ -1152,6 +820,9 @@ Sprite_svc SUBROUTINE
         rts
 .up
         jsr scroll_up
+        rts
+.fire
+        brk
         rts
 ;;;
 ;;; move pacman right
@@ -1186,6 +857,7 @@ scroll_right SUBROUTINE
         tya                     ;note, if we just course scrolled, we've already set Y = 0
         sta Sprite_offset2,X
 .done
+        jsr render_horiz2
         clc
         rts
 
@@ -1269,8 +941,7 @@ blitd SUBROUTINE
         ldx S2                 
         lda Sprite_sback,X      ;input to mergeTile
 
-;        mergeTile               ;font address of underneath tile into W4
-        store16 mychars+[8*DOT],W4
+        mergeTile               ;font address of underneath tile into W4
 
         ldx #0
         ldy #0
@@ -1288,7 +959,9 @@ blitd SUBROUTINE
         cpx #8
         bmi .loop
 
-        store16 mychars+[8*DOT],W4
+        ldx S2
+        lda Sprite_sback2,X
+        mergeTile
 
         ldx #0                  
 
@@ -1324,57 +997,45 @@ blith SUBROUTINE
     brk
 .0
 #endif
-        ;; get left hand tile 'underneath' bitmap
-        ;; so we can or it into this new image
+#if 1
         ldx S2                 
         lda Sprite_sback,X      ;input to mergeTile
-
+        sta $1004
         mergeTile               ;font address of underneath tile into W4
-
+        move16 W4,W6
+        lda Sprite_sback2,X
+        sta $1005
+        mergeTile
+#endif        
         ldy #7
-.lh                   ; left half copy
-        lda (W1),y
         ldx S1
-.loop1                ; bit shift loop
-        beq .shiftdone1
+.nextbyte
+        lda (W1),Y
+        sta (W2),Y
+        ldx S1
+.loop
+        beq .shiftdone
+        lda (W2),y
         clc
         ror
-        dex
-        jmp .loop1
-.shiftdone1
-        ora (W4),Y
-        sta (W2),y
-        dey
-        cpy #$ff
-        beq .lhdone
-        jmp .lh
-.lhdone                         ;left half done
-
-;;;  right half copy
-        ;; get right hand tile 'underneath' bitmap
-        ;; so we can 'or' it into this new image
-        ldx S2
-        lda Sprite_sback2,X
-
-        mergeTile               ;font address of underneath tile into W4
-        
-        ldy #7
-.rh
-        lda (W1),y
-        ldx #8
-.loop2                          ; bit shift loop
-        cpx S1
-        beq .shiftdone2
-        asl
-        dex
-        jmp .loop2
-.shiftdone2
-        ora (W4),Y
+        sta (W2),Y
+        lda (W3),Y
+        ror
         sta (W3),Y
+        dex
+        jmp .loop
+.shiftdone
+#if 1        
+        lda (W6),Y              ;load left tile underneath bits
+        ora (W2),Y              ;overlay to left tile
+        sta (W2),Y
+        lda (W4),Y              ;load right tile underneath buts
+        ora (W3),Y              ;overlay to right tile
+        sta (W3),Y
+#endif        
         dey
-        cpy #$ff
-        beq .done
-        jmp .rh
+        bmi .done
+        jmp .nextbyte
 .done
     rts
 ;;;
