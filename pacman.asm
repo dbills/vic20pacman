@@ -50,7 +50,7 @@ LTBLUE       equ 14
 LTYELLOW     equ 15
 
 MW           equ $e0            ;maze wall character
-SPRITES      equ 2              ;count of sprites in system 1 based
+SPRITES      equ 2             ;count of sprites in system 1 based
 ;;
 ;;  Zero page constants
 ;;
@@ -455,8 +455,8 @@ PDOT
 ;;; between 0 and 1
 ;------------------------------------
 Sprite_page     dc.b 0        
-Sprite_loc      DC.W screen+24+22*16+4,screen+24+22*16+1,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+24+22*16+4,screen+24+22*16+1,0,0,0    ;new screen loc
+Sprite_loc      DC.W screen+24+22*4+4,screen+24+22*16+1,0,0,0    ;screen loc
+Sprite_loc2     DC.W screen+24+22*4+4,screen+24+22*16+1,0,0,0    ;new screen loc
 Sprite_back     dc.b DOT,DOT,0,0,0            ;background char value before other sprites are drawn
 Sprite_back2    dc.b DOT,DOT,0,0,0        
 Sprite_sback    dc.b 0,0,0,0,0            ;current screen 
@@ -485,23 +485,41 @@ Sprite_offset2  dc.b 0,0,0,0,0  ;sprite bit offset in tiles
         
         endm        
 render_horiz2 SUBROUTINE
+#if _debug        
         stx S2                  ;set for call to blith
+        lda #SPRITES
+        cmp S2
+        bcs .ok
+        brk
+.ok
+#endif        
         move16x Sprite_src,W1   ;bitmap source -> W1
-        ;; assume page 0
-        ;; if we are currently on page 0 , then render into page 1
+        ;; assume tile pair 0
+        ;; if we are currently on tile pair 0 , then render into pair 1
         move16x Sprite_bmap2,W2  ;left tile chargen ram
         ldy #0
         cpy Sprite_page
         beq .page0
-        ;; else currently on page 1, render into page 0
+        ;; else currently on tile pair 1, render into page 0
         move16x Sprite_bmap,W2  ;left tile chargen ram
 .page0
         addxx W2,W3,#$8          ;right tile chargen ram
         
         lda Sprite_offset2,X
-        sta S1
+        sta S1                  ;setup for blitd,blith,blitc
         jsr blitc        ;
+        ldx S2
+        lda Sprite_dir2,X
+        cmp #1
+        beq .horiz
+        cmp #22
+        beq .vert
+        brk
+.horiz        
         jsr blith
+        rts
+.vert
+        jsr blitd
         rts
 ;;; 
 ;;; updates the bits in a sprite
@@ -615,7 +633,7 @@ main SUBROUTINE
 ;    store16x Track1,VoiceTrack_data    ; load track 1 on voice 2
 
 .loop
-        ldx #125
+        ldx #25
 .iloop        
         lda $9004
         beq .2
@@ -652,7 +670,7 @@ main SUBROUTINE
         sta Sprite_dir,X
         lda Sprite_offset2,X
         sta Sprite_offset,X
-        ;; collect background tiles
+        ;; collect background tiles so we can replace them later
         move16x Sprite_loc,W1
         ldy #0
         lda (W1),Y
@@ -662,6 +680,7 @@ main SUBROUTINE
         sta Sprite_back2,X
         ;; end collection of background tiles
         jmp .backloop
+        
 .draw
         lda #SPRITES
         sta S3
@@ -670,24 +689,24 @@ main SUBROUTINE
         bmi .player
         ldx S3
         jsr drwsprt1             ;draw in new location
-        lda Sprite_dir,X
-        cmp #1
-        beq .horiz
-        cmp #22
-        beq .vert
-        brk
-.vert        
-;        jsr render_vert
-        jmp .drawloop
-.horiz
-;        jsr render_horiz
         jmp .drawloop
 .player
-        ;;  figure out the next move
-        jsr Sprite_svc
+;;; this is the beginning of non-time critical stuff
+;;; everything before this, we hoped had been completed on the vertical blank
+        jsr Pacman
+        jsr Ghost
+        lda #SPRITES
+        sta S3
+.playerloop
+        dec S3
+        bmi .loopend
+        ldx S3
+        jsr render_horiz2
+        jmp .playerloop
+
 ;    ldx #1
 ;    jsr VoiceTrack_svc    ; service sound
-
+.loopend
         jmp .loop
         brk
 ;;; -------------------------------------------------------------------------------------------
@@ -765,10 +784,10 @@ md4
         RTS
 
 ;;; read joystick and move sprites
-Sprite_svc SUBROUTINE
+Ghost SUBROUTINE
+        ldx #1
 #if 1
 ;;; Service ghosts
-        ldx #1
         lda S7
         beq .sr
         jsr scroll_left        ;
@@ -783,11 +802,12 @@ Sprite_svc SUBROUTINE
         bcs .reverse
         bcc .0
 .reverse
-        brk
         lda #1
         sta S7                ;
 #endif
 .0
+        rts
+Pacman SUBROUTINE
 ;;; Service PACMAN
         ldx #0                  ;work with sprite 0
         lda JOY0                ; read joy register
@@ -857,7 +877,6 @@ scroll_right SUBROUTINE
         tya                     ;note, if we just course scrolled, we've already set Y = 0
         sta Sprite_offset2,X
 .done
-        jsr render_horiz2
         clc
         rts
 
