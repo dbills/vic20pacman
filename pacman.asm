@@ -80,17 +80,29 @@ VV              equ $02         ;testing, voice 2
 ;;
 PACL            equ $00            ; pacman char number
 
-GHL             equ $06            ; ghost char number
+GHL             equ $08            ; ghost char number
 
 DOT             equ $04
-PWR             equ $05
-NOPAC           equ $20        ; background char for pacman
+PWR             equ $C0
 ;
 ;
 ;------------------------------------
 ; Utility macros
 ;------------------------------------
 ;
+#if _debug        
+   mac checkYDir
+        cpy #22
+        beq .checkYok
+        cpy #1
+        beq .checkYok
+        brk
+.checkYok
+   endm
+#else        
+   mac checkYDir
+   endm
+#endif        
 ; write a 16 bit address to a destination
 ; indexed by X
 ; store16x(source_label,dest[X])
@@ -226,28 +238,6 @@ NOPAC           equ $20        ; background char for pacman
         ADC [{2}]+1             ;... and any propagated carry bit
         STA [{1}]+1             ;... and store the result    clc
     endm
-    ;; add 22
-    ;; usage add source,dest
-    mac add22
-        CLC                     ;Ensure carry is clear
-        LDA [{1}]+0             ;Add the two least significant bytes
-        ADC #22                 ;
-        STA [{2}]+0             ;... and store the result
-        LDA [{1}]+1             ;Add the two most significant bytes
-        ADC #0                  ;... and any propagated carry bit
-        STA [{2}]+1             ;... and store the result    clc
-    endm
-;; subtract 22
-;; usage:     sub22 source,dest
-    mac sub22
-    SEC
-    LDA [{1}]+0
-    SBC #22
-    STA [{2}]+0
-    LDA [{1}]+1
-    SBC #0
-    STA [{2}]+1
-    endm
 ;; usage add source,dest,X
 ;;; source +x into dest
     mac addxx
@@ -316,9 +306,9 @@ Maze1
     HEX  20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20
     HEX  20 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0
     HEX  20 E0 04 04 04 04 04 04 04 04 04 E0 04 04 04 04 04 04 04 04 04 E0
-    HEX  20 E0 05 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 05 E0
+    HEX  20 E0 C0 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 C0 E0
     HEX  20 E0 04 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 04 E0
-    HEX  20 E0 04 04 04 04 04 04 04 05 04 04 04 04 04 04 04 04 04 04 04 E0
+    HEX  20 E0 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 E0
     HEX  20 E0 04 E0 E0 04 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0 04 E0 E0 04 E0
     HEX  20 E0 04 04 04 04 E0 04 04 04 04 E0 04 04 04 04 E0 04 04 04 04 E0
     HEX  20 E0 E0 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 E0 E0
@@ -328,11 +318,11 @@ Maze1
     HEX  20 E0 E0 E0 E0 04 E0 20 E0 E0 E0 E0 E0 E0 E0 20 E0 04 E0 E0 E0 E0
     HEX  20 20 20 20 E0 04 E0 20 20 20 20 20 20 20 20 20 E0 04 E0 20 20 20
     HEX  20 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0
-    HEX  20 E0 04 04 04 04 04 04 04 04 04 E0 04 04 04 04 04 04 04 04 04 E0
+    HEX  20 E0 25 29 27 28 04 04 04 04 04 E0 04 04 04 04 04 04 04 04 04 E0
     HEX  20 E0 04 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 04 E0
     HEX  20 E0 04 04 E0 04 04 04 04 04 04 04 04 04 04 04 04 04 E0 04 04 E0
     HEX  20 E0 E0 04 E0 04 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0 04 E0 04 E0 E0
-    HEX  20 E0 05 04 04 04 E0 04 04 04 04 E0 04 04 04 04 E0 04 04 04 05 E0
+    HEX  20 E0 C0 04 04 04 E0 04 04 04 04 E0 04 04 04 04 E0 04 04 04 C0 E0
     HEX  20 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0
     HEX  20 E0 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 E0
     HEX  20 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0
@@ -455,20 +445,21 @@ PDOT
 ;;; between 0 and 1
 ;------------------------------------
 Sprite_page     dc.b 0        
-Sprite_loc      DC.W screen+24+22*4+4,screen+24+22*16+1,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+24+22*4+4,screen+24+22*16+1,0,0,0    ;new screen loc
-Sprite_back     dc.b DOT,DOT,0,0,0            ;background char value before other sprites are drawn
-Sprite_back2    dc.b DOT,DOT,0,0,0        
-Sprite_sback    dc.b 0,0,0,0,0            ;current screen 
+Sprite_loc      DC.W screen+22*5+4,screen+22*15+2,0,0,0    ;screen loc
+Sprite_loc2     DC.W screen+22*5+4,screen+22*15+2,0,0,0    ;new screen loc
+Sprite_back     dc.b DOT,DOT,0,0,0           ;background char value before other sprites are drawn
+Sprite_back2    dc.b DOT,DOT,0,0,0           ;static screen background
+Sprite_sback    dc.b 0,0,0,0,0              ;current screen background ( might include some other sprite tile that was laid down )
 Sprite_sback2   dc.b 0,0,0,0,0        
 Sprite_tile     dc.b PACL,GHL,0,0,0         ;foreground char
-Sprite_src      dc.w PAC2,GHOST,0,0,0         ;sprite source bitmap
-Sprite_bmap     dc.w mychars+(PACL*8),mychars+(GHL*8),0,0,0      ;sprite chargen ram ( where to put the source bmap )
+Sprite_src      dc.w PAC2,GHOST,0,0,0       ;sprite source bitmap
+;;; sprite chargen ram ( where to put the source bmap )
+Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,0,0,0    
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(2*8),0,0,0    
 Sprite_dir      dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)    
-Sprite_offset   dc.b 0,0,0,0,0  ;sprite bit offset in tiles
-Sprite_offset2  dc.b 0,0,0,0,0  ;sprite bit offset in tiles       
+Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
+Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles       
 ;;; IncSprite
 ;;; X sprite
         mac IncSprite
@@ -484,7 +475,7 @@ Sprite_offset2  dc.b 0,0,0,0,0  ;sprite bit offset in tiles
 .done        
         
         endm        
-render_horiz2 SUBROUTINE
+render_sprite SUBROUTINE
 #if _debug        
         stx S2                  ;set for call to blith
         lda #SPRITES
@@ -521,29 +512,6 @@ render_horiz2 SUBROUTINE
 .vert
         jsr blitd
         rts
-;;; 
-;;; updates the bits in a sprite
-;;; X = sprite to render
-render_horiz SUBROUTINE
-        stx S2                  ;set for call to blith
-        lda Sprite_offset,X
-        sta S1
-        move16x Sprite_src,W1   ;bitmap source -> W1
-        move16x Sprite_bmap,W2  ;left tile chargen ram
-        addxx W2,W3,#$8         ;right tile chargen ram
-        jsr blitc        ;
-        jsr blith
-        rts
-render_vert SUBROUTINE
-        stx S2
-        lda Sprite_offset,X
-        sta S1
-        move16x Sprite_src,W1   ;bitmap source -> W1
-        move16x Sprite_bmap,W2  ;left tile chargen ram
-        addxx W2,W3,#$8         ;right tile chargen ram
-        jsr blitc        ;
-        jsr blitd
-        rts
 ;;; X = sprite to erase
 erasesprt SUBROUTINE
         move16x Sprite_loc,W1
@@ -551,7 +519,7 @@ erasesprt SUBROUTINE
         lda Sprite_back,X
         sta (W1),Y
         ldy Sprite_dir,X
-        lda Sprite_back2,X
+        lda Sprite_back2,Y
         sta (W1),Y              ;save char under right tile
 
         clc
@@ -632,6 +600,7 @@ main SUBROUTINE
 ;    ldx #1
 ;    store16x Track1,VoiceTrack_data    ; load track 1 on voice 2
 
+    jmp .background
 .loop
         ldx #25
 .iloop        
@@ -653,11 +622,11 @@ main SUBROUTINE
         sta S3
 .eraseloop
         dec S3
-        bmi .back
+        bmi .background
         ldx S3
         jsr erasesprt
         jmp .eraseloop
-.back        
+.background
         lda #SPRITES
         sta S3
 .backloop        
@@ -674,20 +643,26 @@ main SUBROUTINE
         move16x Sprite_loc,W1
         ldy #0
         lda (W1),Y
+        bne .ok0
+        brk
+.ok0        
         sta Sprite_back,X
         ldy Sprite_dir,X
+        checkYDir
         lda (W1),Y
         sta Sprite_back2,X
         ;; end collection of background tiles
         jmp .backloop
         
 .draw
+        ;brk
         lda #SPRITES
         sta S3
 .drawloop
         dec S3
         bmi .player
         ldx S3
+        jsr dumpBack
         jsr drwsprt1             ;draw in new location
         jmp .drawloop
 .player
@@ -701,12 +676,13 @@ main SUBROUTINE
         dec S3
         bmi .loopend
         ldx S3
-        jsr render_horiz2
+        jsr render_sprite
         jmp .playerloop
 
 ;    ldx #1
 ;    jsr VoiceTrack_svc    ; service sound
 .loopend
+        brk
         jmp .loop
         brk
 ;;; -------------------------------------------------------------------------------------------
@@ -785,6 +761,7 @@ md4
 
 ;;; read joystick and move sprites
 Ghost SUBROUTINE
+        rts
         ldx #1
 #if 1
 ;;; Service ghosts
@@ -959,6 +936,9 @@ blitd SUBROUTINE
         ;; so we can or it into this new image
         ldx S2                 
         lda Sprite_sback,X      ;input to mergeTile
+        bne .00
+        brk
+.00        
 
         mergeTile               ;font address of underneath tile into W4
 
@@ -980,6 +960,9 @@ blitd SUBROUTINE
 
         ldx S2
         lda Sprite_sback2,X
+        bne .01
+        brk
+.01        
         mergeTile
 
         ldx #0                  
@@ -1000,6 +983,22 @@ blitd SUBROUTINE
 
 .done
         rts
+;;; X sprite background tiles to dump
+dumpBack SUBROUTINE
+        txa
+        asl
+        tay
+        lda Sprite_sback,X      ;input to mergeTile
+        bne .ok0
+        brk
+.ok0        
+        sta $1004,Y
+        lda Sprite_sback2,X
+        bne .ok1
+        brk
+.ok1        
+        sta $1005,Y
+        rts
 ;;; horizontal blit
 ;;; W1 = source bits
 ;;; W2 = left tile dest bits
@@ -1017,13 +1016,20 @@ blith SUBROUTINE
 .0
 #endif
 #if 1
-        ldx S2                 
+        ldx S2
+        txa
+        asl
+        pha
+        tay
         lda Sprite_sback,X      ;input to mergeTile
-        sta $1004
+;        sta $1004,Y
         mergeTile               ;font address of underneath tile into W4
         move16 W4,W6
+
+        pla
+        tay
         lda Sprite_sback2,X
-        sta $1005
+;        sta $1005,Y
         mergeTile
 #endif        
         ldy #7
@@ -1048,7 +1054,7 @@ blith SUBROUTINE
         lda (W6),Y              ;load left tile underneath bits
         ora (W2),Y              ;overlay to left tile
         sta (W2),Y
-        lda (W4),Y              ;load right tile underneath buts
+        lda (W4),Y              ;load right tile underneath bits
         ora (W3),Y              ;overlay to right tile
         sta (W3),Y
 #endif        
