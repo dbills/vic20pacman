@@ -50,10 +50,12 @@ LTBLUE       equ 14
 LTYELLOW     equ 15
 
 MW           equ $e0            ;maze wall character
-SPRITES      equ 2             ;count of sprites in system 1 based
+SPRITES      equ 1             ;count of sprites in system 1 based
 ;;
 ;;  Zero page constants
 ;;
+;;; W prefix vars are WORD width
+;;; S or byte, short for 'scratch'
 W1              equ 0
 W1_l            equ 0
 W1_h            equ 1
@@ -161,12 +163,6 @@ PWR             equ $C0
     BNE .done
     INC [{1}]+1
 .done
-    endm
-    ;; swap16
-    mac swap16
-    move16 [{1}],W1
-    move16 [{2}],[{1}]
-    move16 W1,[{2}]
     endm
     ;; move 16
     mac move16
@@ -353,7 +349,9 @@ Maze1C
     HEX  01 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06
 
 pacframes  equ #3            ; total number of pacman animation frames
-
+;;; 
+;;; define some 8x8 characters
+;;; 
 #if 1
 PAC1                            ; closed
     ds 1,60
@@ -447,8 +445,8 @@ PDOT
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W screen+22*5+4,screen+22*15+2,0,0,0    ;screen loc
 Sprite_loc2     DC.W screen+22*5+4,screen+22*15+2,0,0,0    ;new screen loc
-Sprite_back     dc.b DOT,DOT,0,0,0           ;background char value before other sprites are drawn
-Sprite_back2    dc.b DOT,DOT,0,0,0           ;static screen background
+Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
+Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0              ;current screen background ( might include some other sprite tile that was laid down )
 Sprite_sback2   dc.b 0,0,0,0,0        
 Sprite_tile     dc.b PACL,GHL,0,0,0         ;foreground char
@@ -459,22 +457,9 @@ Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(2*8),0,0,0
 Sprite_dir      dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
-Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles       
-;;; IncSprite
-;;; X sprite
-        mac IncSprite
-
-        clc
-        inc Sprite_loc,X
-        bne .done
-        txa
-        asl
-        tax
-        inc Sprite_loc,X
-        lsr                     ;restore X
-.done        
+Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
         
-        endm        
+;;; S2 sprite to render
 render_sprite SUBROUTINE
 #if _debug        
         stx S2                  ;set for call to blith
@@ -514,12 +499,20 @@ render_sprite SUBROUTINE
         rts
 ;;; X = sprite to erase
 erasesprt SUBROUTINE
-        move16x Sprite_loc,W1
+        move16x Sprite_loc,W1   ;sprite location to W1
         ldy #0
         lda Sprite_back,X
+        bne .ok0
+        brk
+.ok0        
         sta (W1),Y
+        
         ldy Sprite_dir,X
-        lda Sprite_back2,Y
+        checkYDir
+        lda Sprite_back2,X
+        bne .ok1
+        brk
+.ok1        
         sta (W1),Y              ;save char under right tile
 
         clc
@@ -626,6 +619,7 @@ main SUBROUTINE
         ldx S3
         jsr erasesprt
         jmp .eraseloop
+
 .background
         lda #SPRITES
         sta S3
@@ -643,9 +637,11 @@ main SUBROUTINE
         move16x Sprite_loc,W1
         ldy #0
         lda (W1),Y
+#if _debug        
         bne .ok0
         brk
-.ok0        
+.ok0
+#endif        
         sta Sprite_back,X
         ldy Sprite_dir,X
         checkYDir
@@ -662,7 +658,9 @@ main SUBROUTINE
         dec S3
         bmi .player
         ldx S3
+#if _debug        
         jsr dumpBack
+#endif        
         jsr drwsprt1             ;draw in new location
         jmp .drawloop
 .player
@@ -679,10 +677,8 @@ main SUBROUTINE
         jsr render_sprite
         jmp .playerloop
 
-;    ldx #1
-;    jsr VoiceTrack_svc    ; service sound
 .loopend
-        brk
+
         jmp .loop
         brk
 ;;; -------------------------------------------------------------------------------------------
@@ -759,7 +755,7 @@ md3
 md4
         RTS
 
-;;; read joystick and move sprites
+;;; animate a ghost back and forth
 Ghost SUBROUTINE
         rts
         ldx #1
@@ -784,8 +780,10 @@ Ghost SUBROUTINE
 #endif
 .0
         rts
+;;; 
+;;; Service PACMAN, read joystick and move
+;;; 
 Pacman SUBROUTINE
-;;; Service PACMAN
         ldx #0                  ;work with sprite 0
         lda JOY0                ; read joy register
         sta $1001               ; debug char on screen
@@ -822,8 +820,8 @@ Pacman SUBROUTINE
         brk
         rts
 ;;;
-;;; move pacman right
-;;; 
+;;; move sprite  right
+;;; X = sprite to move
 scroll_right SUBROUTINE
         lda Sprite_dir,X
         cmp #1
@@ -857,10 +855,9 @@ scroll_right SUBROUTINE
         clc
         rts
 
-;;; X in the sprite to draw
-;;; experimental using new generic sprite drawing
-;;; instead of drwpac
-
+;;;
+;;; move sprite  
+;;; X = sprite to move
 scroll_left SUBROUTINE
         lda Sprite_dir,X
         cmp #1
@@ -983,22 +980,24 @@ blitd SUBROUTINE
 
 .done
         rts
+#if _debug        
 ;;; X sprite background tiles to dump
 dumpBack SUBROUTINE
         txa
         asl
         tay
-        lda Sprite_sback,X      ;input to mergeTile
+        lda Sprite_back,X      ;input to mergeTile
         bne .ok0
         brk
 .ok0        
         sta $1004,Y
-        lda Sprite_sback2,X
+        lda Sprite_back2,X
         bne .ok1
         brk
 .ok1        
         sta $1005,Y
         rts
+#endif        
 ;;; horizontal blit
 ;;; W1 = source bits
 ;;; W2 = left tile dest bits
@@ -1064,8 +1063,7 @@ blith SUBROUTINE
 .done
     rts
 ;;;
-;;; SCROLL UP
-;;;
+;;; X = sprite to move
 scroll_up SUBROUTINE
         lda Sprite_dir,X
         cmp #22                     ;check if already vertical
@@ -1134,7 +1132,7 @@ changehoriz SUBROUTINE
         cmp #MW                 ;is it a wall
         beq .failed             ;we hit a wall, abort move
         
-        lda #1                 ;change direction to horiz
+        lda #1                  ;change direction to horiz
         sta Sprite_dir2,X
 
         lda #0                  ;assume going right
@@ -1156,7 +1154,7 @@ changehoriz SUBROUTINE
         addxx W2,W1,S3          ;update new sprite pos
         move16x2 W1,Sprite_loc2
 
-        clc                         ;return success
+        clc                     ;return success
         rts
 
 
@@ -1229,17 +1227,17 @@ changevert SUBROUTINE
 .isdown
         addxx W2,W1,S3          ;update new sprite pos
         move16x2 W1,Sprite_loc2
-;        jsr drwsprt1
-        clc                         ;return success
+
+        clc                     ;return success
         rts
 ;;; X = sprite to scroll down
 scroll_down SUBROUTINE
         lda Sprite_dir,X
-        cmp #22                     ;check if already vertical
+        cmp #22                 ;check if already vertical
         beq .00
         lda #45
         sta S1
-        jsr changevert              ;if not, change us to down
+        jsr changevert          ;if not, change us to down
         bcc .00
         rts
 .00
