@@ -50,7 +50,7 @@ LTBLUE       equ 14
 LTYELLOW     equ 15
 
 MW           equ $e0            ;maze wall character
-SPRITES      equ 1             ;count of sprites in system 1 based
+SPRITES      equ 2             ;count of sprites in system 1 based
 ;;
 ;;  Zero page constants
 ;;
@@ -255,9 +255,9 @@ PWR             equ $C0
         SBC #0
         STA [{2}]+1
     endm
-;;; find the charcater font address of the tile
+;;; find the character font address of the tile
 ;;; underneath a sprite
-;;; on entry: A tile in question
+;;; on entry: A = tile in question
 ;;; W4 (out) font address of tile underneath
 ;;; uses S5,S6,W5
         mac mergeTile 
@@ -301,7 +301,7 @@ PWR             equ $C0
 Maze1
     HEX  20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20
     HEX  20 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0
-    HEX  20 E0 04 04 04 04 04 04 04 04 04 E0 04 04 04 04 04 04 04 04 04 E0
+    HEX  20 E0 04 04 04 04 C0 04 04 04 04 E0 04 04 04 04 04 04 04 04 04 E0
     HEX  20 E0 C0 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 C0 E0
     HEX  20 E0 04 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 04 E0
     HEX  20 E0 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 E0
@@ -453,7 +453,7 @@ Sprite_tile     dc.b PACL,GHL,0,0,0         ;foreground char
 Sprite_src      dc.w PAC2,GHOST,0,0,0       ;sprite source bitmap
 ;;; sprite chargen ram ( where to put the source bmap )
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,0,0,0    
-Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(2*8),0,0,0    
+Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16),0,0,0    
 Sprite_dir      dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
@@ -484,7 +484,6 @@ render_sprite SUBROUTINE
         lda Sprite_offset2,X
         sta S1                  ;setup for blitd,blith,blitc
         jsr blitc        ;
-        ldx S2
         lda Sprite_dir2,X
         cmp #1
         beq .horiz
@@ -595,7 +594,7 @@ main SUBROUTINE
 
     jmp .background
 .loop
-        ldx #25
+        ldx #1
 .iloop        
         lda $9004
         beq .2
@@ -757,7 +756,7 @@ md4
 
 ;;; animate a ghost back and forth
 Ghost SUBROUTINE
-        rts
+
         ldx #1
 #if 1
 ;;; Service ghosts
@@ -882,7 +881,7 @@ scroll_left SUBROUTINE
         beq .done               ; we hit a wall
         
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
-        ldy #8                  ;reset sprite offset to 8
+        ldy #8                   ;reset sprite offset to 8
 .draw
         dey                     ; increment smooth scroll
         tya
@@ -1021,14 +1020,14 @@ blith SUBROUTINE
         pha
         tay
         lda Sprite_sback,X      ;input to mergeTile
-;        sta $1004,Y
+        sta $1008,Y
         mergeTile               ;font address of underneath tile into W4
         move16 W4,W6
 
         pla
         tay
         lda Sprite_sback2,X
-;        sta $1005,Y
+        sta $1009,Y
         mergeTile
 #endif        
         ldy #7
@@ -1263,7 +1262,7 @@ scroll_down SUBROUTINE
         rts
 .dbg
         brk
-;;; 
+;;; Y is clobbered
 ;;; S5 * S6 output ( 16 bit ) W5
 multxx SUBROUTINE
 ;
@@ -1273,7 +1272,7 @@ multxx SUBROUTINE
         lda #0                  ; final result starts at 0
         sta W5
         sta W5+1
-        ldx #8
+        ldy #8
 loop:
         asl S5                  ; shift B to the right
         bcc nextdigit
@@ -1282,7 +1281,7 @@ loop:
         bcc nextdigit
         inc W5+1
 nextdigit:
-        dex                     ; loop counter dec
+        dey                     ; loop counter dec
         beq done
         asl                     ; multiply by 2
 rotatehighbyte:
