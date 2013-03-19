@@ -304,7 +304,7 @@ Maze1
     HEX  20 E0 04 04 04 04 C0 04 04 04 04 E0 04 04 04 04 04 04 04 04 04 E0
     HEX  20 E0 C0 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 C0 E0
     HEX  20 E0 04 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 04 E0
-    HEX  20 E0 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 E0
+    HEX  20 E0 04 04 04 04 04 C0 04 04 04 04 04 04 04 04 04 04 04 04 04 E0
     HEX  20 E0 04 E0 E0 04 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0 04 E0 E0 04 E0
     HEX  20 E0 04 04 04 04 E0 04 04 04 04 E0 04 04 04 04 E0 04 04 04 04 E0
     HEX  20 E0 E0 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 E0 E0
@@ -443,8 +443,8 @@ PDOT
 ;;; between 0 and 1
 ;------------------------------------
 Sprite_page     dc.b 0        
-Sprite_loc      DC.W screen+22*5+4,screen+22*15+2,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*5+4,screen+22*15+2,0,0,0    ;new screen loc
+Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
+Sprite_loc2     DC.W screen+22*5+2,screen+22*5+3,0,0,0    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0              ;current screen background ( might include some other sprite tile that was laid down )
@@ -594,7 +594,7 @@ main SUBROUTINE
 
     jmp .background
 .loop
-        ldx #1
+        ldx #125
 .iloop        
         lda $9004
         beq .2
@@ -756,7 +756,7 @@ md4
 
 ;;; animate a ghost back and forth
 Ghost SUBROUTINE
-
+        rts
         ldx #1
 #if 1
 ;;; Service ghosts
@@ -846,14 +846,50 @@ scroll_right SUBROUTINE
         ldy #0
         inc16 W2
         move16x2 W2,Sprite_loc2
+        lda Sprite_back2,X
+        sta Sprite_sback,X
         iny                     ;reset scroll offset to 1
+        lda (W2),Y
+        sta Sprite_sback2,X
+        jsr blargo
 .draw
         tya                     ;note, if we just course scrolled, we've already set Y = 0
         sta Sprite_offset2,X
 .done
         clc
         rts
+        
+blargo SUBROUTINE
+        stx S1
+        inc16 W2
+        ldx #SPRITES
+.loop        
+        dex
+        cpx S1
+        beq .done
+        
+        move16x Sprite_loc2,W1
+        lda W1
+        cmp W2
+        bne .loop
 
+        lda W2+1
+        cmp W1+1
+        beq .xxx
+;        lda W2,Y
+;        cmp W1,Y
+;        beq .xxx
+        bne .loop
+.xxx
+        lda Sprite_sback,X
+        ldx S1
+        sta Sprite_sback2,X
+ ;       brk
+        sec
+        rts
+.done
+        clc
+        rts
 ;;;
 ;;; move sprite  
 ;;; X = sprite to move
