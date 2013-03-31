@@ -456,8 +456,8 @@ Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,0,0,0
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16),0,0,0    
 Sprite_dir      dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)    
-Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
-Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
+Sprite_offset   dc.b 1,4,0,0,0  ;sprite bit offset in tiles
+Sprite_offset2  dc.b 1,4,0,0,0  ;sprite bit offset in tiles
         
 ;;; S2 sprite to render
 render_sprite SUBROUTINE
@@ -475,6 +475,7 @@ render_sprite SUBROUTINE
         move16x Sprite_bmap2,W2  ;left tile chargen ram
         ldy #0
         cpy Sprite_page
+;        ldy #1
         beq .page0
         ;; else currently on tile pair 1, render into page 0
         move16x Sprite_bmap,W2  ;left tile chargen ram
@@ -524,12 +525,16 @@ erasesprt SUBROUTINE
         ldy Sprite_dir,X
         sta (W1),Y
         rts
+;;; TODO: the screen backing tiles needs to check to 'upcoming' sprite tile positions
 ;;; X = sprite to move
+;;; uses W2,S2
 drwsprt1 SUBROUTINE
         move16x Sprite_loc,W1
+
         ldy #0
         lda (W1),Y
-        sta Sprite_sback,X      ;current screen backing tile
+        sta Sprite_sback,X
+
         lda Sprite_tile,X
         ;; figure out which set of tiles we should be rendering
         ;; we 'page flip' between tiles for speed
@@ -538,15 +543,20 @@ drwsprt1 SUBROUTINE
         clc
         adc #2
 .page0        
+        ldy #0
         sta (W1),Y
         clc
-        adc #01
-        sta S1                  ;save right tile character
+        adc #01                 ;inc to right side tile
+
+;        jmp .skip
+        pha
         ldy Sprite_dir,X
         lda (W1),Y
-        sta Sprite_sback2,X     ;current screen backing tile(2)
-        lda S1                  ;load right tile character
-        sta (W1),Y
+        sta Sprite_sback2,X
+        jsr blargo
+        pla
+.skip        
+        sta (W1),Y              ;lay down the tile
         clc
         lda #$84                ;W1 now = color ram location
         adc W1+1
@@ -571,9 +581,6 @@ main SUBROUTINE
     lda #0
     sta $9113                   ; joy VIA to input
     jsr copychar                ; copy our custom char set
-    store16 PAC4,W1             ; copy(pacman,character[0])
-    store16 mychars,W2
-    jsr loadch                  ;
     store16 PDOT,W1             ; copy(dot,character[1]);
     store16 mychars+[8*DOT] ,W2 ;
     jsr loadch                  ;
@@ -620,6 +627,7 @@ main SUBROUTINE
         jmp .eraseloop
 
 .background
+;        jsr WaitFire
         lda #SPRITES
         sta S3
 .backloop        
@@ -650,11 +658,12 @@ main SUBROUTINE
         jmp .backloop
         
 .draw
+        jsr WaitFire
         ;brk
         lda #SPRITES
         sta S3
 .drawloop
-        dec S3
+        dec S3                  ;for i = sprites to 0 , i--
         bmi .player
         ldx S3
 #if _debug        
@@ -667,8 +676,10 @@ main SUBROUTINE
 ;;; everything before this, we hoped had been completed on the vertical blank
         jsr Pacman
         jsr Ghost
-        lda #SPRITES
+
+        lda #SPRITES            ;for i = sprites to 0, i--
         sta S3
+        jsr WaitFire
 .playerloop
         dec S3
         bmi .loopend
@@ -677,7 +688,7 @@ main SUBROUTINE
         jmp .playerloop
 
 .loopend
-
+        jsr WaitFire
         jmp .loop
         brk
 ;;; -------------------------------------------------------------------------------------------
@@ -779,6 +790,27 @@ Ghost SUBROUTINE
 #endif
 .0
         rts
+
+
+WaitFire SUBROUTINE
+.loop        
+        lda JOY0                ; read joy register
+        tay
+        and #JOYT
+        beq .loop1
+        tya
+        and #JOYL
+        beq .lbrk
+        jmp .loop
+.lbrk
+        brk
+.loop1
+        lda JOY0
+        and #JOYT
+        bne .fire
+        jmp .loop1
+.fire
+        rts
 ;;; 
 ;;; Service PACMAN, read joystick and move
 ;;; 
@@ -810,13 +842,14 @@ Pacman SUBROUTINE
         jsr scroll_right
         rts
 .left
+        brk
         jsr scroll_left
         rts
 .up
         jsr scroll_up
         rts
 .fire
-        brk
+;        brk
         rts
 ;;;
 ;;; move sprite  right
@@ -851,43 +884,88 @@ scroll_right SUBROUTINE
         iny                     ;reset scroll offset to 1
         lda (W2),Y
         sta Sprite_sback2,X
-        jsr blargo
+;        jsr blargo
 .draw
         tya                     ;note, if we just course scrolled, we've already set Y = 0
         sta Sprite_offset2,X
 .done
         clc
         rts
+        ;; load the currently rendered tile for a sprite
+        ;; X sprite in question
+        mac loadTile
+        lda Sprite_tile,X
+        ldy #0
+        cpy Sprite_page         
+        bne .tileSet0
+        clc
+        adc #2
+.tileSet0
+        endm
         
+        mac cmp16
+        clc
+        lda {1}
+        cmp {2}
+        bne .done
+        lda {1}+1
+        cmp {2}+1
+        bne .done
+        sec
+.done        
+        endm
+;;; W2 = screen position to check if another sprite will occupy
 blargo SUBROUTINE
+        tya
+        pha
         stx S1
-        inc16 W2
-        ldx #SPRITES
-.loop        
-        dex
-        cpx S1
-        beq .done
-        
-        move16x Sprite_loc2,W1
-        lda W1
-        cmp W2
-        bne .loop
 
-        lda W2+1
-        cmp W1+1
-        beq .xxx
-;        lda W2,Y
-;        cmp W1,Y
-;        beq .xxx
+        ldy #SPRITES
+.loop
+        dey
+        cpy S1
+        beq .done
+        tya
+        tax
+        move16x Sprite_loc2,W2
+
+        ;; lda #0
+        ;; cmp S1
+        ;; bne .cont
+        ;; brk
+.cont        
+
+        
+        cmp16 W1,W2
+        bcs .xxx
+        ldx S1
+        lda Sprite_dir,X
+        sta S2
+        addxx W1,W3,S2
+        cmp16 W3,W2
+        bcs .xxx2
         bne .loop
-.xxx
-        lda Sprite_sback,X
+.xxx2                           ;right half hit some other sprite
+        tya
+        tax
+        loadTile
         ldx S1
         sta Sprite_sback2,X
- ;       brk
+        
+        jmp .done
+.xxx
+        brk
+        lda Sprite_tile,X
+        ldx S1
+        sta Sprite_sback2,X
+        pla
+        tay
         sec
         rts
 .done
+        ldx S1
+        pla
+        tay
         clc
         rts
 ;;;
@@ -1056,14 +1134,14 @@ blith SUBROUTINE
         pha
         tay
         lda Sprite_sback,X      ;input to mergeTile
-        sta $1008,Y
+        sta $1009,Y
         mergeTile               ;font address of underneath tile into W4
         move16 W4,W6
 
         pla
         tay
         lda Sprite_sback2,X
-        sta $1009,Y
+        sta $100A,Y
         mergeTile
 #endif        
         ldy #7
