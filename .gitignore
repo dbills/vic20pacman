@@ -95,6 +95,15 @@ DocProject/Help/html
 
 # Click-Once directory
 publish
+#emacs directory
+\#*\#
+.emacs.d/
+_emacs
+#bash
+.bashrc
+# dasm stuff
+*.lst
+*.p00
 
 # Others
 [Bb]in
