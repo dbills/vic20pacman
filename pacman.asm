@@ -50,7 +50,7 @@ LTBLUE       equ 14
 LTYELLOW     equ 15
 
 MW           equ $e0            ;maze wall character
-SPRITES      equ 2             ;count of sprites in system 1 based
+SPRITES      equ 1             ;count of sprites in system 1 based
 ;;
 ;;  Zero page constants
 ;;
@@ -62,7 +62,7 @@ W1_h            equ 1
 W2              equ 2
 W2_l            equ 2
 W2_h            equ 3        
-S3              equ 4
+SPRITEIDX       equ 4           ;sprite index for main loop
 S4              equ 5
 W4              equ 6           ;2 byte work var
 W3              equ $12        ; 16 bit work 3
@@ -76,6 +76,7 @@ S6              equ $31
 W5              equ $32
 S7              equ $43
 W6              equ $44
+S3              equ $46        
 VV              equ $02         ;testing, voice 2
 ;;
 ;; misc constants
@@ -468,7 +469,8 @@ render_sprite SUBROUTINE
         bcs .ok
         brk
 .ok
-#endif        
+#endif
+        jsr dumpBack2
         move16x Sprite_src,W1   ;bitmap source -> W1
         ;; assume tile pair 0
         ;; if we are currently on tile pair 0 , then render into pair 1
@@ -531,10 +533,6 @@ erasesprt SUBROUTINE
 drwsprt1 SUBROUTINE
         move16x Sprite_loc,W1
 
-        ldy #0
-        lda (W1),Y
-        sta Sprite_sback,X
-
         lda Sprite_tile,X
         ;; figure out which set of tiles we should be rendering
         ;; we 'page flip' between tiles for speed
@@ -549,12 +547,7 @@ drwsprt1 SUBROUTINE
         adc #01                 ;inc to right side tile
 
 ;        jmp .skip
-        pha
         ldy Sprite_dir,X
-        lda (W1),Y
-        sta Sprite_sback2,X
-        jsr blargo
-        pla
 .skip        
         sta (W1),Y              ;lay down the tile
         clc
@@ -618,22 +611,21 @@ main SUBROUTINE
 ;    ldx #2
 ;    jsr VoiceTrack_svc          ; run sound engine
         lda #SPRITES
-        sta S3
+        sta SPRITEIDX
 .eraseloop
-        dec S3
+        dec SPRITEIDX
         bmi .background
-        ldx S3
+        ldx SPRITEIDX
         jsr erasesprt
         jmp .eraseloop
 
 .background
-;        jsr WaitFire
         lda #SPRITES
-        sta S3
+        sta SPRITEIDX
 .backloop        
-        dec S3
+        dec SPRITEIDX
         bmi .draw
-        ldx S3
+        ldx SPRITEIDX
         ;; swap the new position to the current
         move16xx Sprite_loc2,Sprite_loc
         lda Sprite_dir2,X
@@ -658,14 +650,13 @@ main SUBROUTINE
         jmp .backloop
         
 .draw
-        jsr WaitFire
         ;brk
         lda #SPRITES
-        sta S3
+        sta SPRITEIDX
 .drawloop
-        dec S3                  ;for i = sprites to 0 , i--
+        dec SPRITEIDX                  ;for i = sprites to 0 , i--
         bmi .player
-        ldx S3
+        ldx SPRITEIDX
 #if _debug        
         jsr dumpBack
 #endif        
@@ -674,21 +665,20 @@ main SUBROUTINE
 .player
 ;;; this is the beginning of non-time critical stuff
 ;;; everything before this, we hoped had been completed on the vertical blank
+        jsr WaitFire
         jsr Pacman
         jsr Ghost
-
         lda #SPRITES            ;for i = sprites to 0, i--
-        sta S3
-        jsr WaitFire
+        sta SPRITEIDX
 .playerloop
-        dec S3
+        dec SPRITEIDX
         bmi .loopend
-        ldx S3
+        ldx SPRITEIDX
+        jsr blargo
         jsr render_sprite
         jmp .playerloop
 
 .loopend
-        jsr WaitFire
         jmp .loop
         brk
 ;;; -------------------------------------------------------------------------------------------
@@ -791,12 +781,13 @@ Ghost SUBROUTINE
 .0
         rts
 
-
+;;; waits for joystick to be pressed
+;;; and released
 WaitFire SUBROUTINE
 .loop        
         lda JOY0                ; read joy register
         tay
-        and #JOYT
+        and #JOYT               ;was trigger pressed?
         beq .loop1
         tya
         and #JOYL
@@ -804,7 +795,7 @@ WaitFire SUBROUTINE
         jmp .loop
 .lbrk
         brk
-.loop1
+.loop1                          ;wait for trigger to be released
         lda JOY0
         and #JOYT
         bne .fire
@@ -816,6 +807,9 @@ WaitFire SUBROUTINE
 ;;; 
 Pacman SUBROUTINE
         ldx #0                  ;work with sprite 0
+        jsr scroll_right
+        rts
+        
         lda JOY0                ; read joy register
         sta $1001               ; debug char on screen
         tay                   
@@ -884,13 +878,28 @@ scroll_right SUBROUTINE
         iny                     ;reset scroll offset to 1
         lda (W2),Y
         sta Sprite_sback2,X
-;        jsr blargo
+;;; W2 = screen position to check if another sprite will occupy;        jsr blargo
 .draw
         tya                     ;note, if we just course scrolled, we've already set Y = 0
         sta Sprite_offset2,X
 .done
         clc
         rts
+        ;; load sprite head tile
+        ;; X = sprite
+        mac loadSpos1
+        move16x Sprite_loc2,{1}
+        endm
+        
+        mac loadSpos2
+        move16x Sprite_loc2,{1}
+        lda Sprite_dir,X
+        clc                     ;16 bit add the sprite_dir
+        adc {1}
+        lda {1}+1
+        adc #0
+        sta {1}+1
+        endm
         ;; load the currently rendered tile for a sprite
         ;; X sprite in question
         mac loadTile
@@ -914,60 +923,61 @@ scroll_right SUBROUTINE
         sec
 .done        
         endm
-;;; W2 = screen position to check if another sprite will occupy
+
+;;; uses W1,W2,W3
 blargo SUBROUTINE
-        tya
-        pha
-        stx S1
-
-        ldy #SPRITES
-.loop
-        dey
-        cpy S1
-        beq .done
-        tya
-        tax
-        move16x Sprite_loc2,W2
-
-        ;; lda #0
-        ;; cmp S1
-        ;; bne .cont
-        ;; brk
-.cont        
-
-        
-        cmp16 W1,W2
-        bcs .xxx
-        ldx S1
-        lda Sprite_dir,X
-        sta S2
-        addxx W1,W3,S2
-        cmp16 W3,W2
-        bcs .xxx2
-        bne .loop
-.xxx2                           ;right half hit some other sprite
-        tya
-        tax
-        loadTile
-        ldx S1
-        sta Sprite_sback2,X
-        
-        jmp .done
-.xxx
-        brk
-        lda Sprite_tile,X
-        ldx S1
-        sta Sprite_sback2,X
-        pla
-        tay
-        sec
-        rts
+        stx S2
+        lda #SPRITES
+        sta S3
+        loadSpos1 W1
+        loadSpos2 W2
+        jmp .loop
 .done
-        ldx S1
-        pla
-        tay
-        clc
         rts
+.loop
+        dec S3
+        bmi .done
+        ldx S3
+        loadSpos1 W3
+        ;; check if we hit sprite S3's head with our head
+        cmp16 W1,W3
+
+        beq .head2head
+        ;; check for tail to head
+        cmp16 W2,W3
+        beq .tail2head
+        loadSpos2 W3
+        cmp16 W1,W3
+        beq .head2tail
+        cmp16 W2,W3
+        beq .tail2tail
+        jmp .loop
+.self
+        ldx S3
+
+        lda Sprite_back,X
+        sta Sprite_sback,X
+        lda Sprite_back2,X
+        sta Sprite_sback2,X
+        jmp .done
+.notself
+        brk
+        jmp .done
+.head2head
+        lda S2                  ;cmp s2,s3
+        cmp S3
+        beq .self
+        jmp .notself
+.tail2head
+        brk
+        jmp .done
+.head2tail
+        brk
+        jmp .done
+.tail2tail
+        brk
+        jmp .done
+
 ;;;
 ;;; move sprite  
 ;;; X = sprite to move
@@ -1109,6 +1119,15 @@ dumpBack SUBROUTINE
         brk
 .ok1        
         sta $1005,Y
+        rts
+dumpBack2 SUBROUTINE
+        txa
+        asl
+        tay
+        lda Sprite_sback,X      ;input to mergeTile
+        sta $1007,Y
+        lda Sprite_sback2,X
+        sta $1008,Y
         rts
 #endif        
 ;;; horizontal blit
