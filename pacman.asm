@@ -445,7 +445,7 @@ PDOT
 ;------------------------------------
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*5+2,screen+22*5+3,0,0,0    ;new screen loc
+Sprite_loc2     DC.W screen+22*5+5,screen+22*5+3,0,0,0    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0              ;current screen background ( might include some other sprite tile that was laid down )
@@ -888,17 +888,18 @@ scroll_right SUBROUTINE
         ;; load sprite head tile
         ;; X = sprite
         mac loadSpos1
-        move16x Sprite_loc2,{1}
+        move16x {1},{2}
         endm
-        
+        ;; load sprite tail tile
         mac loadSpos2
-        move16x Sprite_loc2,{1}
+        move16x {1},{2}
         lda Sprite_dir,X
         clc                     ;16 bit add the sprite_dir
-        adc {1}
-        lda {1}+1
+        adc {2}
+        sta {2}
+        lda {2}+1
         adc #0
-        sta {1}+1
+        sta {2}+1
         endm
         ;; load the currently rendered tile for a sprite
         ;; X sprite in question
@@ -923,14 +924,22 @@ scroll_right SUBROUTINE
         sec
 .done        
         endm
-
+        
+stuff1 SUBROUTINE
+        lda Sprite_back,X       ; transfer playfield tile to compositing tile
+        sta Sprite_sback,X
+        lda Sprite_back2,X
+        sta Sprite_sback2,X
+        rts
+        
 ;;; uses W1,W2,W3
 blargo SUBROUTINE
         stx S2
         lda #SPRITES
-        sta S3
-        loadSpos1 W1
-        loadSpos2 W2
+        sta S3                  ;loop counter S3, start at SPRITES
+
+        loadSpos1 Sprite_loc2,W1 ;current sprite head into W1
+        loadSpos2 Sprite_loc2,W2 ;current sprite tail into W2
         jmp .loop
 .done
         rts
@@ -938,36 +947,42 @@ blargo SUBROUTINE
         dec S3
         bmi .done
         ldx S3
-        loadSpos1 W3
+
+        loadSpos1 Sprite_loc,W3 ;S3 sprite's current head position into W3
+        cpx S2                  ;are we checking against ourselves?
+        beq .ourselves          ;ok, W3 is good to go
+        brk
+        loadSpos1 Sprite_loc2,W3 ;not ourselves, load W3 with S3 sprites's new position
+.ourselves        
         ;; check if we hit sprite S3's head with our head
         cmp16 W1,W3
+        bne .nothead2head
+        ;; head2head collision
+        lda S2                  ;cmp s2,s3
+        cmp S3
+        beq .self
+.notself
+        brk
+        jmp .nothead2head
+.self
+        ldx S3
+        jsr stuff1
 
-        beq .head2head
-        ;; check for tail to head
+.nothead2head        
+        ;; check sprite S3's head for collision with our tail
         cmp16 W2,W3
         beq .tail2head
-        loadSpos2 W3
+        
+        loadSpos2 Sprite_loc,W3 ;S3 sprite's current tail position into W3
+        cpx S2
+        beq .ourselves2
+        loadSpos2 Sprite_loc2,W3
+.ourselves2        
         cmp16 W1,W3
         beq .head2tail
         cmp16 W2,W3
         beq .tail2tail
         jmp .loop
-.self
-        ldx S3
-
-        lda Sprite_back,X
-        sta Sprite_sback,X
-        lda Sprite_back2,X
-        sta Sprite_sback2,X
-        jmp .done
-.notself
-        brk
-        jmp .done
-.head2head
-        lda S2                  ;cmp s2,s3
-        cmp S3
-        beq .self
-        jmp .notself
 .tail2head
         brk
         jmp .done
@@ -975,7 +990,6 @@ blargo SUBROUTINE
         brk
         jmp .done
 .tail2tail
-        brk
         jmp .done
 
 ;;;
@@ -1110,14 +1124,8 @@ dumpBack SUBROUTINE
         asl
         tay
         lda Sprite_back,X      ;input to mergeTile
-        bne .ok0
-        brk
-.ok0        
         sta $1004,Y
         lda Sprite_back2,X
-        bne .ok1
-        brk
-.ok1        
         sta $1005,Y
         rts
 dumpBack2 SUBROUTINE
@@ -1125,9 +1133,9 @@ dumpBack2 SUBROUTINE
         asl
         tay
         lda Sprite_sback,X      ;input to mergeTile
-        sta $1007,Y
+        sta $1009,Y
         lda Sprite_sback2,X
-        sta $1008,Y
+        sta $100A,Y
         rts
 #endif        
 ;;; horizontal blit
