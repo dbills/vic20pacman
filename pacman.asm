@@ -50,7 +50,7 @@ LTBLUE       equ 14
 LTYELLOW     equ 15
 
 MW           equ $e0            ;maze wall character
-SPRITES      equ 1             ;count of sprites in system 1 based
+SPRITES      equ 2             ;count of sprites in system (1 based)
 ;;
 ;;  Zero page constants
 ;;
@@ -445,7 +445,7 @@ PDOT
 ;------------------------------------
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*5+5,screen+22*5+3,0,0,0    ;new screen loc
+Sprite_loc2     DC.W screen+22*5+3,screen+22*5+5,0,0,0    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0              ;current screen background ( might include some other sprite tile that was laid down )
@@ -462,8 +462,8 @@ Sprite_offset2  dc.b 1,4,0,0,0  ;sprite bit offset in tiles
         
 ;;; S2 sprite to render
 render_sprite SUBROUTINE
-#if _debug        
         stx S2                  ;set for call to blith
+#if _debug        
         lda #SPRITES
         cmp S2
         bcs .ok
@@ -685,6 +685,7 @@ main SUBROUTINE
         bmi .loopend
         ldx SPRITEIDX
         jsr blargo
+        ldx SPRITEIDX
         jsr render_sprite
         jmp .playerloop
 
@@ -942,9 +943,6 @@ stuff1 SUBROUTINE
         sta Sprite_sback2,X
         rts
 
-tail2head SUBROUTINE
-        brk
-        rts
 head2tail SUBROUTINE
         lda Sprite_back2,X
         sta Sprite_sback,X
@@ -955,27 +953,30 @@ head2tail SUBROUTINE
 ;;; uses W1,W2,W3
 blargo SUBROUTINE
 
-SPRT_IDX equ S3                 ;loop counter.  The sprite to check against
-SPRT_CUR equ S2                 ;current sprite
+SPRT_IDX set S3                 ;loop counter.  The sprite to check against
+SPRT_CUR set S2                 ;current sprite
 
+        loadSpos1 Sprite_loc2,W1 ;current sprite head into W1
+        loadSpos2 Sprite_loc2,W2 ;current sprite tail into W2
+        
         stx SPRT_CUR            ;save current sprite idx
         lda #SPRITES
         sta SPRT_IDX            ;loop counter , start at SPRITES
 
-        loadSpos1 Sprite_loc2,W1 ;current sprite head into W1
-        loadSpos2 Sprite_loc2,W2 ;current sprite tail into W2
         jmp .loop
 .done
         rts
 .loop
         dec SPRT_IDX
-        bmi .done
+        lda SPRT_IDX
+        cmp SPRT_CUR ;(a-m)
+        bmi .done    ;do not compare sprites < SPRT_CUR for collisions
+        
         ldx SPRT_IDX
 
         loadSpos1 Sprite_loc,W3 ;SPRITE_IDX's current head position into W3
         cpx  SPRT_CUR           ;are we checking against ourselves?
         beq .ourselves          ;ok, W3 is good to go
-        brk
         loadSpos1 Sprite_loc2,W3 ;not ourselves, load W3 with S3 sprites's new position
 .ourselves        
         ;; check if we hit sprite IDX's head with our head
@@ -995,7 +996,7 @@ SPRT_CUR equ S2                 ;current sprite
 .ourselves2        
         cmp16 W1,W3
         bne .not_head2tail
-        jsr head2tail
+        jsr head2tail 
 .not_head2tail        
         cmp16 W2,W3
         bne .not_tail2tail
@@ -1003,8 +1004,26 @@ SPRT_CUR equ S2                 ;current sprite
 .not_tail2tail        
         jmp .loop
         brk
+tail2head SUBROUTINE
+        cpx SPRT_CUR
+        beq .ourselves
+        ;; composite the colliding sprites tail onto our head
+        loadTile
+        ldy SPRT_CUR
+        sta Sprite_sback2,Y     ;store colliding sprite tile as current sprite's head tile 'background'
+        rts
+.ourselves
+        brk                     ;should never happen
+        rts
         
 head2head SUBROUTINE
+        cpx SPRT_CUR
+        beq .ourselves
+        loadTile
+        ldy SPRT_CUR
+        sta Sprite_sback,Y
+        rts
+.ourselves
         lda Sprite_back,X
         sta Sprite_sback,X
         rts
