@@ -527,21 +527,31 @@ erasesprt SUBROUTINE
         ldy Sprite_dir,X
         sta (W1),Y
         rts
+        ;; 
+        ;; load the upcoming ( to be rendered ) tile
+        ;;  into A
+        ;; X = sprite in question
+        ;; Y corrupted
+        mac loadTile
+        lda Sprite_tile,X
+        ldy Sprite_page
+        beq .page0
+        clc
+        adc #2
+.page0
+        endm
+        
 ;;; TODO: the screen backing tiles needs to check to 'upcoming' sprite tile positions
 ;;; X = sprite to move
 ;;; uses W2,S2
 drwsprt1 SUBROUTINE
         move16x Sprite_loc,W1
 
-        lda Sprite_tile,X
         ;; figure out which set of tiles we should be rendering
         ;; we 'page flip' between tiles for speed
-        cpy Sprite_page
-        beq .page0
-        clc
-        adc #2
-.page0        
-        ldy #0
+        loadTile                ;upcoming tile into A
+        
+        ldy #0   
         sta (W1),Y
         clc
         adc #01                 ;inc to right side tile
@@ -931,12 +941,26 @@ stuff1 SUBROUTINE
         lda Sprite_back2,X
         sta Sprite_sback2,X
         rts
-        
+
+tail2head SUBROUTINE
+        brk
+        rts
+head2tail SUBROUTINE
+        lda Sprite_back2,X
+        sta Sprite_sback,X
+        ldy #0
+        lda (W2),Y
+        sta Sprite_sback2,X
+        rts
 ;;; uses W1,W2,W3
 blargo SUBROUTINE
-        stx S2
+
+SPRT_IDX equ S3                 ;loop counter.  The sprite to check against
+SPRT_CUR equ S2                 ;current sprite
+
+        stx SPRT_CUR            ;save current sprite idx
         lda #SPRITES
-        sta S3                  ;loop counter S3, start at SPRITES
+        sta SPRT_IDX            ;loop counter , start at SPRITES
 
         loadSpos1 Sprite_loc2,W1 ;current sprite head into W1
         loadSpos2 Sprite_loc2,W2 ;current sprite tail into W2
@@ -944,53 +968,52 @@ blargo SUBROUTINE
 .done
         rts
 .loop
-        dec S3
+        dec SPRT_IDX
         bmi .done
-        ldx S3
+        ldx SPRT_IDX
 
-        loadSpos1 Sprite_loc,W3 ;S3 sprite's current head position into W3
-        cpx S2                  ;are we checking against ourselves?
+        loadSpos1 Sprite_loc,W3 ;SPRITE_IDX's current head position into W3
+        cpx  SPRT_CUR           ;are we checking against ourselves?
         beq .ourselves          ;ok, W3 is good to go
         brk
         loadSpos1 Sprite_loc2,W3 ;not ourselves, load W3 with S3 sprites's new position
 .ourselves        
-        ;; check if we hit sprite S3's head with our head
+        ;; check if we hit sprite IDX's head with our head
         cmp16 W1,W3
-        bne .nothead2head
-        ;; head2head collision
-        lda S2                  ;cmp s2,s3
-        cmp S3
-        beq .self
-.notself
-        brk
-        jmp .nothead2head
-.self
-        ldx S3
-        jsr stuff1
-
-.nothead2head        
+        bne .not_head2head
+        jsr head2head
+.not_head2head        
         ;; check sprite S3's head for collision with our tail
         cmp16 W2,W3
-        beq .tail2head
-        
+        bne .not_tail2head
+        jsr tail2head
+.not_tail2head        
         loadSpos2 Sprite_loc,W3 ;S3 sprite's current tail position into W3
-        cpx S2
+        cpx  SPRT_CUR
         beq .ourselves2
         loadSpos2 Sprite_loc2,W3
 .ourselves2        
         cmp16 W1,W3
-        beq .head2tail
+        bne .not_head2tail
+        jsr head2tail
+.not_head2tail        
         cmp16 W2,W3
-        beq .tail2tail
+        bne .not_tail2tail
+        jsr tail2tail
+.not_tail2tail        
         jmp .loop
-.tail2head
         brk
-        jmp .done
-.head2tail
-        brk
-        jmp .done
-.tail2tail
-        jmp .done
+        
+head2head SUBROUTINE
+        lda Sprite_back,X
+        sta Sprite_sback,X
+        rts
+        
+tail2tail SUBROUTINE
+        lda Sprite_back2,X
+        sta Sprite_sback2,X
+
+        rts
 
 ;;;
 ;;; move sprite  
@@ -1296,7 +1319,6 @@ changehoriz SUBROUTINE
 
         clc                     ;return success
         rts
-
 
 ;;; change orientation of the 2 tiles that represent pacman
 ;;; to vertical
