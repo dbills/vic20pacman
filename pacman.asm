@@ -956,6 +956,9 @@ blargo SUBROUTINE
 SPRT_IDX set S3                 ;loop counter.  The sprite to check against
 SPRT_CUR set S2                 ;current sprite
 
+        lda #255
+        sta Sprite_sback,X
+        sta Sprite_sback2,X
         loadSpos1 Sprite_loc2,W1 ;current sprite head into W1
         loadSpos2 Sprite_loc2,W2 ;current sprite tail into W2
         
@@ -1022,16 +1025,35 @@ head2head SUBROUTINE
         loadTile
         ldy SPRT_CUR
         sta Sprite_sback,Y
+        ;; ldx SPRT_CUR
+        ;; jsr dumpBack2
+        ;; brk
         rts
 .ourselves
+        lda Sprite_sback,X
+        cmp #255
+        bne .done
         lda Sprite_back,X
         sta Sprite_sback,X
+.done        
         rts
         
 tail2tail SUBROUTINE
+        cpx SPRT_CUR
+        beq .ourselves
+        loadTile
+        clc
+        adc #01
+        ldy SPRT_CUR
+        sta Sprite_sback2,Y
+        rts
+.ourselves
+        lda Sprite_sback2,X
+        cmp #255
+        bne .done
         lda Sprite_back2,X
         sta Sprite_sback2,X
-
+.done
         rts
 
 ;;;
