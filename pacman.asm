@@ -445,7 +445,7 @@ PDOT
 ;------------------------------------
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*5+3,screen+22*5+5,0,0,0    ;new screen loc
+Sprite_loc2     DC.W screen+22*5+4,screen+22*5+5,0,0,0    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0              ;current screen background ( might include some other sprite tile that was laid down )
@@ -572,10 +572,16 @@ drwsprt1 SUBROUTINE
         rts
 
  INCLUDE "audio.asm"
+
+blargg SUBROUTINE
+        lda #05
+        lda #06
+        rts
 ;-------------------------------------------
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
+        jsr blargg
     cli                         ; enable interrupts so jiffy clock works
     lda #8
     sta 36879                   ; border and screen colors
@@ -936,20 +942,6 @@ scroll_right SUBROUTINE
 .done        
         endm
         
-stuff1 SUBROUTINE
-        lda Sprite_back,X       ; transfer playfield tile to compositing tile
-        sta Sprite_sback,X
-        lda Sprite_back2,X
-        sta Sprite_sback2,X
-        rts
-
-head2tail SUBROUTINE
-        lda Sprite_back2,X
-        sta Sprite_sback,X
-        ldy #0
-        lda (W2),Y
-        sta Sprite_sback2,X
-        rts
 ;;; uses W1,W2,W3
 blargo SUBROUTINE
 
@@ -967,8 +959,25 @@ SPRT_CUR set S2                 ;current sprite
         sta SPRT_IDX            ;loop counter , start at SPRITES
 
         jmp .loop
+;;; before we leave, put screen background tiles into any compositing backgrounds
+;;; that weren't already filled in
 .done
+        ldy #0
+        ldx SPRT_CUR          
+        lda Sprite_sback,X
+        cmp #255                ;is head tile filled in?
+        bne .checktail
+        lda (W1),Y              ;nope, fill it with screen
+        sta Sprite_sback,X
+.checktail
+        lda Sprite_sback2,X
+        cmp #255                ;is tail tile filled in?
+        bne .alldone
+        lda (W2),Y              ;nope, fill it with screen
+        sta Sprite_sback2,X
+.alldone        
         rts
+        
 .loop
         dec SPRT_IDX
         lda SPRT_IDX
@@ -1023,11 +1032,10 @@ head2head SUBROUTINE
         cpx SPRT_CUR
         beq .ourselves
         loadTile
-        ldy SPRT_CUR
+ ldy SPRT_CUR
         sta Sprite_sback,Y
         ;; ldx SPRT_CUR
         ;; jsr dumpBack2
-        ;; brk
         rts
 .ourselves
         lda Sprite_sback,X
@@ -1038,6 +1046,23 @@ head2head SUBROUTINE
 .done        
         rts
         
+head2tail SUBROUTINE
+        cpx SPRT_CUR
+        beq .ourselves
+        loadTile
+        clc
+        adc #01
+        ldy SPRT_CUR
+        sta Sprite_sback,Y
+        rts
+.ourselves
+        lda Sprite_sback,X
+        cmp #255
+        bne .done
+        lda Sprite_back2,X
+        sta Sprite_sback,X
+.done        
+        rts
 tail2tail SUBROUTINE
         cpx SPRT_CUR
         beq .ourselves
@@ -1494,4 +1519,16 @@ rotatehighbyte:
 done:
         sta W5
         rts
-        
+
+;;; scratch text for debugging thoughts
+;; 0 @
+;; 1 a
+;; 2 b
+;; 3 c
+;; 4 d
+;; 5 e
+;; 6 f
+;; 7 g
+;; 8 h
+;; 9 i
+;; a j
