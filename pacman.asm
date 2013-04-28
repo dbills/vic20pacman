@@ -390,14 +390,6 @@ PAC4                ; wide open
     ds 1,248
     ds 1,126
     ds 1,60
-#else
-
-PAC1 ds 8,$01
-PAC2 ds 8,$01
-PAC3 ds 8,$01
-PAC4 ds 8,$01
-#endif
-
 GHOST
     ds 1,126
     ds 1,195
@@ -407,6 +399,24 @@ GHOST
     ds 1,227
     ds 1,255
     ds 1,170
+#else
+
+GHOST
+    ds 1,1
+    ds 1,2
+    ds 1,4
+    ds 1,8
+    ds 1,16
+    ds 1,32
+    ds 1,64
+    ds 1,128
+
+PAC1 ds 8,$01
+PAC2 ds 8,$01
+PAC3 ds 8,$01
+PAC4 ds 8,$01
+#endif
+
 PPWR
     ds 1,0,
     ds 1,24
@@ -445,7 +455,7 @@ PDOT
 ;------------------------------------
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*5+3,screen+22*5+5,0,0,0    ;new screen loc
+Sprite_loc2     DC.W screen+22*5+3,screen+22*5+6,0,0,0    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0              ;current screen background ( might include some other sprite tile that was laid down )
@@ -837,6 +847,8 @@ WaitFire SUBROUTINE
 Pacman SUBROUTINE
         ldx #0                  ;work with sprite 0
         jsr scroll_right
+        ldx #1                  ;work with sprite 0
+        jsr scroll_left
         rts
         
         lda JOY0                ; read joy register
@@ -902,24 +914,19 @@ scroll_right SUBROUTINE
         ldy #0
         inc16 W2
         move16x2 W2,Sprite_loc2
-        lda Sprite_back2,X
-        sta Sprite_sback,X
         iny                     ;reset scroll offset to 1
-        lda (W2),Y
-        sta Sprite_sback2,X
-;;; W2 = screen position to check if another sprite will occupy;        jsr blargo
 .draw
         tya                     ;note, if we just course scrolled, we've already set Y = 0
         sta Sprite_offset2,X
 .done
         clc
         rts
-        ;; load sprite head tile
+        ;; load sprite head tile screen position pointer into {2}
         ;; X = sprite
         mac loadSpos1
         move16x {1},{2}
         endm
-        ;; load sprite tail tile
+        ;; load sprite tail tile screen position opinter into {1}
         mac loadSpos2
         move16x {1},{2}
         lda Sprite_dir,X
@@ -1028,6 +1035,8 @@ SPRT_CUR set S2                 ;current sprite
 .not_tail2tail        
         jmp .loop
         brk
+;;; handle tail to head collisions
+;;; X is the indexed sprite
 tail2head SUBROUTINE
         cpx SPRT_CUR
         beq .ourselves
@@ -1037,7 +1046,15 @@ tail2head SUBROUTINE
         sta Sprite_sback2,Y     ;store colliding sprite tile as current sprite's head tile 'background'
         rts
 .ourselves
-        brk                     ;should never happen
+        ;; this would happen when scrolling left, for example
+        lda Sprite_sback2,X     ;load tail background
+        cmp #255                ;is it still 'unset'
+        bne .done               ;no, it's been set already, we are done
+        ;; tail hasn't been set, let's copy our head 'playfied' background into it
+        lda Sprite_back,X       ;load head playfield background
+        sta Sprite_sback2,X     ;save into tail 'compositor' tile
+;        brk
+.done        
         rts
         
 head2head SUBROUTINE
@@ -1120,7 +1137,7 @@ scroll_left SUBROUTINE
         lda #MW
         ldy #0
         cmp (W2),Y
-        sec
+        sec                     ; set return code
         beq .done               ; we hit a wall
         
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
