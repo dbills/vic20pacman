@@ -103,6 +103,7 @@ _emacs
 .bashrc
 # dasm stuff
 *.lst
+*~
 *.p00
 
 # Others
