@@ -353,7 +353,7 @@ pacframes  equ #3            ; total number of pacman animation frames
 ;;; 
 ;;; define some 8x8 characters
 ;;; 
-#if 1
+#if 0
 PAC1                            ; closed
     ds 1,60
     ds 1,126
@@ -392,10 +392,10 @@ PAC4                ; wide open
     ds 1,60
 #else
 
-PAC1 ds 8,$ff
-PAC2 ds 8,$ff
-PAC3 ds 8,$ff
-PAC4 ds 8,$ff
+PAC1 ds 8,$01
+PAC2 ds 8,$01
+PAC3 ds 8,$01
+PAC4 ds 8,$01
 #endif
 
 GHOST
@@ -445,7 +445,7 @@ PDOT
 ;------------------------------------
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*5+4,screen+22*5+5,0,0,0    ;new screen loc
+Sprite_loc2     DC.W screen+22*5+3,screen+22*5+5,0,0,0    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0              ;current screen background ( might include some other sprite tile that was laid down )
@@ -540,6 +540,14 @@ erasesprt SUBROUTINE
         adc #2
 .page0
         endm
+        mac loadTile2
+        lda Sprite_tile,X
+        ldy Sprite_page
+        bne .page0
+        clc
+        adc #2
+.page0
+        endm
         
 ;;; TODO: the screen backing tiles needs to check to 'upcoming' sprite tile positions
 ;;; X = sprite to move
@@ -619,9 +627,9 @@ main SUBROUTINE
 .2
         dex
         bne .iloop
-        lda #1
-        eor Sprite_page
-        sta Sprite_page
+       lda #1
+       eor Sprite_page 
+       sta Sprite_page
 ;    ldx #1                     ; service voice VV
 ;    jsr VoiceTrack_svc         ; run sound engine
 ;    ldx #2
@@ -681,6 +689,10 @@ main SUBROUTINE
 .player
 ;;; this is the beginning of non-time critical stuff
 ;;; everything before this, we hoped had been completed on the vertical blank
+        ;; lda #01
+        ;; eor Sprite_page         ;let everyone know we are on the other tile page
+        ;; sta Sprite_page
+        
         jsr WaitFire
         jsr Pacman
         jsr Ghost
@@ -1020,7 +1032,7 @@ tail2head SUBROUTINE
         cpx SPRT_CUR
         beq .ourselves
         ;; composite the colliding sprites tail onto our head
-        loadTile
+        loadTile2
         ldy SPRT_CUR
         sta Sprite_sback2,Y     ;store colliding sprite tile as current sprite's head tile 'background'
         rts
@@ -1031,8 +1043,8 @@ tail2head SUBROUTINE
 head2head SUBROUTINE
         cpx SPRT_CUR
         beq .ourselves
-        loadTile
- ldy SPRT_CUR
+        loadTile2
+        ldy SPRT_CUR
         sta Sprite_sback,Y
         ;; ldx SPRT_CUR
         ;; jsr dumpBack2
@@ -1045,13 +1057,17 @@ head2head SUBROUTINE
         sta Sprite_sback,X
 .done        
         rts
-        
+        ;; rendering 0 and had a collision with 1
+        ;; ( the ghost is moving over pacman )
+        ;; X the indexing sprite we are checking against
 head2tail SUBROUTINE
         cpx SPRT_CUR
         beq .ourselves
-        loadTile
+
+        loadTile2
         clc
         adc #01
+
         ldy SPRT_CUR
         sta Sprite_sback,Y
         rts
@@ -1066,7 +1082,7 @@ head2tail SUBROUTINE
 tail2tail SUBROUTINE
         cpx SPRT_CUR
         beq .ourselves
-        loadTile
+        loadTile2
         clc
         adc #01
         ldy SPRT_CUR
@@ -1531,4 +1547,5 @@ done:
 ;; 7 g
 ;; 8 h
 ;; 9 i
-;; a j
+;; a jp
+;; b k

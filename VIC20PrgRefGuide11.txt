@@ -1,4 +1,4 @@
-VIC20PrgRefGuide.txt
+bVIC20PrgRefGuide.txt
 --------------------------
 Version 1.1, 15 March 1999
 
