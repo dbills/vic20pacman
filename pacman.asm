@@ -76,7 +76,15 @@ S6              equ $31
 W5              equ $32
 S7              equ $43
 W6              equ $44
-S3              equ $46        
+S3              equ $46
+;;;offset for normalizing a 9x9 sprite movement block to the upper left block
+;;; used by the sprite orientation changing routines
+SPRT_LOCATOR    equ $47
+;value that indicates end of smooth scrolling
+END_SCRL_VAL    equ $48
+;;;amount to increase or decrease sprite offset
+;;; used by scroll_horiz
+SCRL_VAL        equ $49       
 VV              equ $02         ;testing, voice 2
 ;;
 ;; misc constants
@@ -848,7 +856,14 @@ Pacman SUBROUTINE
         ldx #0                  ;work with sprite 0
         jsr scroll_right
         ldx #1                  ;work with sprite 0
-        jsr scroll_left
+;        jsr scroll_left
+        lda #22
+        sta SPRT_LOCATOR
+        lda #0
+        sta END_SCRL_VAL
+        lda #$ff
+        sta SCRL_VAL
+        jsr scroll_horiz
         rts
         
         lda JOY0                ; read joy register
@@ -1149,6 +1164,8 @@ scroll_left SUBROUTINE
         clc
 .done
         rts
+
+        INCLUDE "scroll_horiz.asm"
 ;;
 ;; set zero flag if move is forbidden
 ;; proposed pacman leftmost position is in W1
