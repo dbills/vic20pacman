@@ -18,22 +18,26 @@ scroll_horiz SUBROUTINE
         lda SCRL_VAL
         bmi .left
         ;; going right
-        brk
         lda #0
         pha
         inc16 W2
-        inc16 W2
-        jmp .continue
+        ldy #01       
+        lda #MW
+        cmp (W2),Y              ;check for wall at pos + 2
+        bne .continue
+.cantmove        
+        sec                     ;can't move, return false
+        pla                     ;pop the single arg we pushed for our own use
+        rts
 .left
         lda #8
         pha
         dec16 W2                ;check to the left for wall
-.continue
         lda #MW
         ldy #0
         cmp (W2),Y
-        sec                     ; set return code
-        beq .done               ; we hit a wall
+        beq .cantmove
+.continue
         
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla                      ;pull new sprite offset from the stack
@@ -45,6 +49,4 @@ scroll_horiz SUBROUTINE
         sta Sprite_offset2,X
         clc
         rts
-.done
-        pla                     ;clear stack of byte we pushed since we didn't use it
-        rts
+

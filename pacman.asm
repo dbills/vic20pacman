@@ -463,7 +463,7 @@ PDOT
 ;------------------------------------
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*5+3,screen+22*5+6,0,0,0    ;new screen loc
+Sprite_loc2     DC.W screen+22*5+6,screen+22*5+3,0,0,0    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0              ;current screen background ( might include some other sprite tile that was laid down )
@@ -810,7 +810,7 @@ Ghost SUBROUTINE
 ;;; Service ghosts
         lda S7
         beq .sr
-        jsr scroll_left        ;
+;        jsr scroll_left        ;
         bcs .reverse2
         bcc .0
 .reverse2
@@ -818,7 +818,7 @@ Ghost SUBROUTINE
         sta S7
         jmp .0
 .sr
-        jsr scroll_right        ;
+;        jsr scroll_right        ;
         bcs .reverse
         bcc .0
 .reverse
@@ -849,21 +849,38 @@ WaitFire SUBROUTINE
         jmp .loop1
 .fire
         rts
+
+        MAC scroll_left
+
+        lda #22
+        sta SPRT_LOCATOR
+        lda #0
+        sta END_SCRL_VAL
+        lda #$ff                ;-1 into A
+        sta SCRL_VAL
+        jsr scroll_horiz
+        
+        ENDM
+
+        MAC scroll_right
+        
+        lda #24
+        sta SPRT_LOCATOR
+        lda #8
+        sta END_SCRL_VAL
+        lda #$01
+        sta SCRL_VAL
+        jsr scroll_horiz
+        
+        ENDM
 ;;; 
 ;;; Service PACMAN, read joystick and move
 ;;; 
 Pacman SUBROUTINE
         ldx #0                  ;work with sprite 0
-        jsr scroll_right
+        scroll_left
         ldx #1                  ;work with sprite 0
-;        jsr scroll_left
-        lda #22
-        sta SPRT_LOCATOR
-        lda #0
-        sta END_SCRL_VAL
-        lda #$ff
-        sta SCRL_VAL
-        jsr scroll_horiz
+        scroll_right
         rts
         
         lda JOY0                ; read joy register
@@ -889,11 +906,11 @@ Pacman SUBROUTINE
         rts
 .right
         ldx #0
-        jsr scroll_right
+;        jsr scroll_right
         rts
 .left
         brk
-        jsr scroll_left
+;        jsr scroll_left
         rts
 .up
         jsr scroll_up
@@ -901,6 +918,8 @@ Pacman SUBROUTINE
 .fire
 ;        brk
         rts
+
+#if 0
 ;;;
 ;;; move sprite  right
 ;;; X = sprite to move
@@ -936,6 +955,7 @@ scroll_right SUBROUTINE
 .done
         clc
         rts
+#endif        
         ;; load sprite head tile screen position pointer into {2}
         ;; X = sprite
         mac loadSpos1
@@ -975,7 +995,6 @@ scroll_right SUBROUTINE
         sec
 .done        
         endm
-        
 ;;; uses W1,W2,W3
 blargo SUBROUTINE
 
@@ -1128,7 +1147,7 @@ tail2tail SUBROUTINE
         sta Sprite_sback2,X
 .done
         rts
-
+#if 0
 ;;;
 ;;; move sprite  
 ;;; X = sprite to move
@@ -1164,7 +1183,7 @@ scroll_left SUBROUTINE
         clc
 .done
         rts
-
+#endif
         INCLUDE "scroll_horiz.asm"
 ;;
 ;; set zero flag if move is forbidden
