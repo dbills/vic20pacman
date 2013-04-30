@@ -472,7 +472,8 @@ Sprite_tile     dc.b PACL,GHL,0,0,0         ;foreground char
 Sprite_src      dc.w PAC2,GHOST,0,0,0       ;sprite source bitmap
 ;;; sprite chargen ram ( where to put the source bmap )
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,0,0,0    
-Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16),0,0,0    
+Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16),0,0,0
+Sprite_motion   dc.b 1,1,1,1,1        
 Sprite_dir      dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 1,4,0,0,0  ;sprite bit offset in tiles
@@ -636,7 +637,7 @@ main SUBROUTINE
 
     jmp .background
 .loop
-        ldx #125
+        ldx #3
 .iloop        
         lda $9004
         beq .2
@@ -645,9 +646,9 @@ main SUBROUTINE
 .2
         dex
         bne .iloop
-       lda #1
-       eor Sprite_page 
-       sta Sprite_page
+        lda #1
+        eor Sprite_page 
+        sta Sprite_page
 ;    ldx #1                     ; service voice VV
 ;    jsr VoiceTrack_svc         ; run sound engine
 ;    ldx #2
@@ -711,7 +712,7 @@ main SUBROUTINE
         ;; eor Sprite_page         ;let everyone know we are on the other tile page
         ;; sta Sprite_page
         
-        jsr WaitFire
+;        jsr WaitFire
         jsr Pacman
         jsr Ghost
         lda #SPRITES            ;for i = sprites to 0, i--
@@ -873,14 +874,46 @@ WaitFire SUBROUTINE
         jsr scroll_horiz
         
         ENDM
+
+        MAC moveS
+        lda Sprite_motion,X
+        cmp #01
+        beq .right
+        scroll_left
+        bcs .reverse
+        bcc .done
+.right
+        scroll_right
+        bcs .reverse
+        bcc .done
+.reverse
+        lda Sprite_motion,X
+        bmi .add
+        lda #$fd
+.add
+        clc
+        adc #$02
+;        brk
+        sta Sprite_motion,X
+.done        
+        ENDM
 ;;; 
 ;;; Service PACMAN, read joystick and move
 ;;; 
 Pacman SUBROUTINE
+        inc S7
+        lda S7
+        clc
+        ror
+        bcs .skip
+
         ldx #0                  ;work with sprite 0
-        scroll_left
+        moveS
+;        scroll_left
+.skip        
         ldx #1                  ;work with sprite 0
-        scroll_right
+;        scroll_right
+        moveS
         rts
         
         lda JOY0                ; read joy register
@@ -919,43 +952,6 @@ Pacman SUBROUTINE
 ;        brk
         rts
 
-#if 0
-;;;
-;;; move sprite  right
-;;; X = sprite to move
-scroll_right SUBROUTINE
-        lda Sprite_dir,X
-        cmp #1
-        beq .ok
-        lda #24
-        sta S1
-        jsr changehoriz
-        bcc .ok
-        rts
-.ok
-        ldy Sprite_offset,X
-        cpy #8
-        beq .course             ; exhauted smooth scroll?
-        iny                     ; increment smooth scroll
-        bne .draw
-.course                         ;course scroll
-        move16x Sprite_loc,W2;        brk
-        addxx W2,W1,#$02        ;check 2 places to the right for wall
-        jsr move_ok
-        bne .00
-        rts
-.00
-        ldy #0
-        inc16 W2
-        move16x2 W2,Sprite_loc2
-        iny                     ;reset scroll offset to 1
-.draw
-        tya                     ;note, if we just course scrolled, we've already set Y = 0
-        sta Sprite_offset2,X
-.done
-        clc
-        rts
-#endif        
         ;; load sprite head tile screen position pointer into {2}
         ;; X = sprite
         mac loadSpos1
@@ -1147,43 +1143,7 @@ tail2tail SUBROUTINE
         sta Sprite_sback2,X
 .done
         rts
-#if 0
-;;;
-;;; move sprite  
-;;; X = sprite to move
-scroll_left SUBROUTINE
-        lda Sprite_dir,X
-        cmp #1
-        beq .ok                 ;ok to move horizontal
-        ;; switch to horiz order
-        lda #22
-        sta S1
-        jsr changehoriz
-        bcc .ok
-        rts
-.ok
-        ldy Sprite_offset,X
-        beq .course             ; exhauted smooth scroll?
-        bne .draw
-.course                         ;course scroll
-        move16x Sprite_loc,W2   ;
-        dec16 W2                ;check to the left for wall
-        lda #MW
-        ldy #0
-        cmp (W2),Y
-        sec                     ; set return code
-        beq .done               ; we hit a wall
-        
-        move16x2 W2,Sprite_loc2  ;save the new sprite screen location
-        ldy #8                   ;reset sprite offset to 8
-.draw
-        dey                     ; increment smooth scroll
-        tya
-        sta Sprite_offset2,X
-        clc
-.done
-        rts
-#endif
+
         INCLUDE "scroll_horiz.asm"
 ;;
 ;; set zero flag if move is forbidden
