@@ -50,7 +50,7 @@ LTBLUE       equ 14
 LTYELLOW     equ 15
 
 MW           equ $e0            ;maze wall character
-SPRITES      equ 2             ;count of sprites in system (1 based)
+SPRITES      equ 1             ;count of sprites in system (1 based)
 ;;
 ;;  Zero page constants
 ;;
@@ -460,10 +460,13 @@ PDOT
 ;;; was still busy rendering
 ;;; sprite_page control which set of tiles we draw , it alternates
 ;;; between 0 and 1
+;;;
+;;; debugging notes: 22*5+5 is at an intersection
+;;; for testing up/down/left/right transitions
 ;------------------------------------
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*5+6,screen+22*5+3,0,0,0    ;new screen loc
+Sprite_loc2     DC.W screen+22*5+5 ,screen+22*5+3,0,0,0    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0              ;current screen background ( might include some other sprite tile that was laid down )
@@ -474,8 +477,8 @@ Sprite_src      dc.w PAC2,GHOST,0,0,0       ;sprite source bitmap
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,0,0,0    
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16),0,0,0
 Sprite_motion   dc.b 1,1,1,1,1        
-Sprite_dir      dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)
-Sprite_dir2     dc.b 1,1,1,1,1  ;sprite direction 1(horiz),22(vert)    
+Sprite_dir      dc.b 22,1,1,1,1  ;sprite direction 1(horiz),22(vert)
+Sprite_dir2     dc.b 22,1,1,1,1  ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 1,4,0,0,0  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 1,4,0,0,0  ;sprite bit offset in tiles
         
@@ -637,7 +640,7 @@ main SUBROUTINE
 
     jmp .background
 .loop
-        ldx #3
+        ldx #125
 .iloop        
         lda $9004
         beq .2
@@ -901,21 +904,24 @@ WaitFire SUBROUTINE
 ;;; Service PACMAN, read joystick and move
 ;;; 
 Pacman SUBROUTINE
-        inc S7
-        lda S7
-        clc
-        ror
-        bcs .skip
+#if 0
+        ;; inc S7
+        ;; lda S7
+        ;; clc
+        ;; ror
+        ;; bcs .skip
 
         ldx #0                  ;work with sprite 0
-        moveS
+;        moveS
+        jsr scroll_down
 ;        scroll_left
 .skip        
         ldx #1                  ;work with sprite 0
 ;        scroll_right
         moveS
         rts
-        
+#endif        
+        ldx #0
         lda JOY0                ; read joy register
         sta $1001               ; debug char on screen
         tay                   
@@ -938,12 +944,11 @@ Pacman SUBROUTINE
         jsr scroll_down
         rts
 .right
-        ldx #0
-;        jsr scroll_right
+        scroll_right
         rts
 .left
         brk
-;        jsr scroll_left
+        scroll_left
         rts
 .up
         jsr scroll_up
