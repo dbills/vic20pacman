@@ -717,7 +717,7 @@ main SUBROUTINE
         
 ;        jsr WaitFire
         jsr Pacman
-        jsr Ghost
+;        jsr Ghost
         lda #SPRITES            ;for i = sprites to 0, i--
         sta SPRITEIDX
 .playerloop
@@ -875,7 +875,6 @@ WaitFire SUBROUTINE
         lda #$01
         sta SCRL_VAL
         jsr scroll_horiz
-        
         ENDM
 
         MAC moveS
@@ -944,10 +943,21 @@ Pacman SUBROUTINE
         jsr scroll_down
         rts
 .right
+        tsx
+        stx 251
+        ldx #0
+        
         scroll_right
+
+        tsx
+        cpx 251
+        beq .ok
+        brk
+.ok        
+        
         rts
 .left
-        brk
+;        brk
         scroll_left
         rts
 .up
@@ -956,7 +966,7 @@ Pacman SUBROUTINE
 .fire
 ;        brk
         rts
-
+        brk
         ;; load sprite head tile screen position pointer into {2}
         ;; X = sprite
         mac loadSpos1
@@ -1149,7 +1159,57 @@ tail2tail SUBROUTINE
 .done
         rts
 
-        INCLUDE "scroll_horiz.asm"
+scroll_horiz SUBROUTINE
+        lda Sprite_dir,X
+        cmp #1
+        beq .ok                 ;ok to move horizontal
+        ;; switch to horiz order
+        jsr changehoriz
+        bcc .ok
+        rts
+.ok
+        ldy Sprite_offset,X
+        cpy END_SCRL_VAL
+        bne .draw
+        brk
+.course                         ;course scroll
+        move16x Sprite_loc,W2   ;
+        lda SCRL_VAL
+        bmi .left
+        ;; going right
+        lda #0
+        pha
+        inc16 W2
+        ldy #01       
+        lda #MW
+        cmp (W2),Y              ;check for wall at pos + 2
+        bne .continue
+.cantmove
+        brk
+        sec                     ;can't move, return false
+        pla                     ;pop the single arg we pushed for our own use
+        rts
+.left
+        lda #8
+        pha
+        dec16 W2                ;check to the left for wall
+        lda #MW
+        ldy #0
+        cmp (W2),Y
+        beq .cantmove
+.continue
+        
+        move16x2 W2,Sprite_loc2  ;save the new sprite screen location
+        pla                      ;pull new sprite offset from the stack
+        tay
+.draw
+        tya
+        clc
+        adc SCRL_VAL
+        sta Sprite_offset2,X
+        clc
+        rts
+
 ;;
 ;; set zero flag if move is forbidden
 ;; proposed pacman leftmost position is in W1
@@ -1390,7 +1450,7 @@ changehoriz SUBROUTINE
 .endtile                        ;end of tiles branch
         subxx W1,W2,S3          ;generate ORG address in W2
         
-        ldy S1
+        ldy SPRT_LOCATOR
         lda (W2),Y
         cmp #MW                 ;is it a wall
         beq .failed             ;we hit a wall, abort move
@@ -1404,7 +1464,7 @@ changehoriz SUBROUTINE
         lda #23                 ;offset from ORG for new sprite pos
         sta S3                  ;if moving right
 
-        lda S1                  ;moving right?
+        lda SPRT_LOCATOR        ;moving right?
         cmp #24
         beq .isright            ;branch moving right
 
