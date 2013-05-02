@@ -644,7 +644,7 @@ main SUBROUTINE
 
     jmp .background
 .loop
-        ldx #125
+        ldx #50
 .iloop        
         lda $9004
         beq .2
@@ -719,7 +719,7 @@ main SUBROUTINE
         ;; eor Sprite_page         ;let everyone know we are on the other tile page
         ;; sta Sprite_page
         
-        jsr WaitFire
+;        jsr WaitFire
         jsr Pacman
 ;        jsr Ghost
         lda #SPRITES            ;for i = sprites to 0, i--
@@ -845,8 +845,8 @@ WaitFire SUBROUTINE
         and #JOYT               ;was trigger pressed?
         beq .loop1
         tya
-         and #JOYDWN
-         beq .lbrk
+         ;; and #JOYDWN
+         ;; beq .lbrk
         jmp .loop
 .lbrk
         brk
@@ -903,11 +903,12 @@ WaitFire SUBROUTINE
         sta Sprite_motion,X
 .done        
         ENDM
+
 ;;; 
 ;;; Service PACMAN, read joystick and move
 ;;; 
 Pacman SUBROUTINE
-#if 1
+#if 0
         ;; inc S7
         ;; lda S7
         ;; clc
@@ -973,14 +974,17 @@ Pacman SUBROUTINE
         brk
         ;; load sprite head tile screen position pointer into {2}
         ;; X = sprite
-        mac loadSpos1
+        mac ldSprtHeadPos
         move16x {1},{2}
         endm
-        ;; load sprite tail tile screen position opinter into {1}
-        mac loadSpos2
+        ;; load sprite's tail tile screen position opinter into {2}
+        mac ldSprtTailPos
         move16x {1},{2}
-;        lda Sprite_dir,X
+#if {1}=Sprite_loc
+        lda Sprite_dir,X
+#else 
         lda Sprite_dir2,X
+#endif        
         clc                     ;16 bit add the sprite_dir
         adc {2}
         sta {2}
@@ -1020,8 +1024,8 @@ SPRT_CUR set S2                 ;current sprite
         lda #NOTCOPY
         sta Sprite_sback,X
         sta Sprite_sback2,X
-        loadSpos1 Sprite_loc2,W1 ;current sprite head into W1
-        loadSpos2 Sprite_loc2,W2 ;current sprite tail into W2
+        ldSprtHeadPos Sprite_loc2,W1 ;current sprite head into W1
+        ldSprtTailPos Sprite_loc2,W2 ;current sprite tail into W2
         
         stx SPRT_CUR            ;save current sprite idx
         lda #SPRITES
@@ -1067,10 +1071,10 @@ SPRT_CUR set S2                 ;current sprite
         
         ldx SPRT_IDX
 
-        loadSpos1 Sprite_loc,W3 ;SPRITE_IDX's current head position into W3
+        ldSprtHeadPos Sprite_loc,W3 ;SPRITE_IDX's current head position into W3
         cpx  SPRT_CUR           ;are we checking against ourselves?
         beq .ourselves          ;ok, W3 is good to go
-        loadSpos1 Sprite_loc2,W3 ;not ourselves, load W3 with S3 sprites's new position
+        ldSprtHeadPos Sprite_loc2,W3 ;not ourselves, load W3 with S3 sprites's new position
 .ourselves        
         ;; check if we hit sprite IDX's head with our head
         cmp16 W1,W3
@@ -1082,10 +1086,10 @@ SPRT_CUR set S2                 ;current sprite
         bne .not_tail2head
         jsr tail2head
 .not_tail2head        
-        loadSpos2 Sprite_loc,W3 ;S3 sprite's current tail position into W3
-        cpx  SPRT_CUR
-        beq .ourselves2
-        loadSpos2 Sprite_loc2,W3
+x        ldSprtTailPos Sprite_loc,W3 ;S3 sprite's current tail position into W3
+        cpx  SPRT_CUR           ;are we checking against ourselves
+        beq .ourselves2         ;ok, W3 is good to go
+        ldSprtTailPos Sprite_loc2,W3 ;not ourselves, load W3 with S3 sprites's new position
 .ourselves2        
         cmp16 W1,W3
         bne .not_head2tail
@@ -1120,7 +1124,6 @@ tail2head SUBROUTINE
         rts
         
 head2head SUBROUTINE
-        brk
         cpx SPRT_CUR
         beq .ourselves
         loadTile2
