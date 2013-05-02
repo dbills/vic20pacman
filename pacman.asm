@@ -470,7 +470,7 @@ PDOT
 ;------------------------------------
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*5+5 ,screen+22*5+3,0,0,0    ;new screen loc
+Sprite_loc2     DC.W screen+22*2+5 ,screen+22*5+3,0,0,0    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0              ;current screen background ( might include some other sprite tile that was laid down )
@@ -917,7 +917,7 @@ Pacman SUBROUTINE
         ldx #0                  ;work with sprite 0
 ;        moveS
 ;        jsr scroll_down
-        scroll_left
+        scroll_right
 .skip        
         ldx #1                  ;work with sprite 0
 ;        scroll_right
@@ -1120,6 +1120,7 @@ tail2head SUBROUTINE
         rts
         
 head2head SUBROUTINE
+        brk
         cpx SPRT_CUR
         beq .ourselves
         loadTile2
@@ -1177,12 +1178,18 @@ tail2tail SUBROUTINE
         rts
 
 scroll_horiz SUBROUTINE
+#if _debug        
+        lda #0
+        sta S7
+#endif        
         lda Sprite_dir,X
         cmp #1
         beq .ok                 ;ok to move horizontal
         ;; switch to horiz order
+#if _debug        
         lda #42
         sta S7
+#endif        
         jsr changehoriz
         bcc .ok
         rts
@@ -1210,7 +1217,6 @@ scroll_horiz SUBROUTINE
         cmp (W2),Y              ;check for wall at pos + 2
         bne .continue
 .cantmove
-        brk
         sec                     ;can't move, return false
         pla                     ;pop the single arg we pushed for our own use
         rts
