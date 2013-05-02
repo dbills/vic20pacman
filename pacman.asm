@@ -77,6 +77,10 @@ W5              equ $32
 S7              equ $43
 W6              equ $44
 S3              equ $46
+;;; sentinal character, used in tile background routine
+;;; to indicate tile background hasn't been copied into _sback yet
+NOTCOPY         equ $fd      
+        
 ;;;offset for normalizing a 9x9 sprite movement block to the upper left block
 ;;; used by the sprite orientation changing routines
 SPRT_LOCATOR    equ $47
@@ -479,8 +483,8 @@ Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16),0,0,0
 Sprite_motion   dc.b 1,1,1,1,1        
 Sprite_dir      dc.b 22,1,1,1,1  ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 22,1,1,1,1  ;sprite direction 1(horiz),22(vert)    
-Sprite_offset   dc.b 1,4,0,0,0  ;sprite bit offset in tiles
-Sprite_offset2  dc.b 1,4,0,0,0  ;sprite bit offset in tiles
+Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
+Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
         
 ;;; S2 sprite to render
 render_sprite SUBROUTINE
@@ -715,7 +719,7 @@ main SUBROUTINE
         ;; eor Sprite_page         ;let everyone know we are on the other tile page
         ;; sta Sprite_page
         
-;        jsr WaitFire
+        jsr WaitFire
         jsr Pacman
 ;        jsr Ghost
         lda #SPRITES            ;for i = sprites to 0, i--
@@ -841,8 +845,8 @@ WaitFire SUBROUTINE
         and #JOYT               ;was trigger pressed?
         beq .loop1
         tya
-        and #JOYL
-        beq .lbrk
+         and #JOYDWN
+         beq .lbrk
         jmp .loop
 .lbrk
         brk
@@ -903,7 +907,7 @@ WaitFire SUBROUTINE
 ;;; Service PACMAN, read joystick and move
 ;;; 
 Pacman SUBROUTINE
-#if 0
+#if 1
         ;; inc S7
         ;; lda S7
         ;; clc
@@ -912,8 +916,8 @@ Pacman SUBROUTINE
 
         ldx #0                  ;work with sprite 0
 ;        moveS
-        jsr scroll_down
-;        scroll_left
+;        jsr scroll_down
+        scroll_left
 .skip        
         ldx #1                  ;work with sprite 0
 ;        scroll_right
@@ -975,7 +979,8 @@ Pacman SUBROUTINE
         ;; load sprite tail tile screen position opinter into {1}
         mac loadSpos2
         move16x {1},{2}
-        lda Sprite_dir,X
+;        lda Sprite_dir,X
+        lda Sprite_dir2,X
         clc                     ;16 bit add the sprite_dir
         adc {2}
         sta {2}
@@ -1012,7 +1017,7 @@ blargo SUBROUTINE
 SPRT_IDX set S3                 ;loop counter.  The sprite to check against
 SPRT_CUR set S2                 ;current sprite
 
-        lda #255
+        lda #NOTCOPY
         sta Sprite_sback,X
         sta Sprite_sback2,X
         loadSpos1 Sprite_loc2,W1 ;current sprite head into W1
@@ -1029,15 +1034,27 @@ SPRT_CUR set S2                 ;current sprite
         ldy #0
         ldx SPRT_CUR          
         lda Sprite_sback,X
-        cmp #255                ;is head tile filled in?
+        cmp #NOTCOPY            ;is head tile filled in?
         bne .checktail
         lda (W1),Y              ;nope, fill it with screen
+#if _debug        
+        cmp #MW
+        bne .ok
+        brk                     ;we just loaded a mazewall, something is wrong
+.ok        
+#endif
         sta Sprite_sback,X
 .checktail
         lda Sprite_sback2,X
-        cmp #255                ;is tail tile filled in?
+        cmp #NOTCOPY            ;is tail tile filled in?
         bne .alldone
         lda (W2),Y              ;nope, fill it with screen
+#if _debug        
+        cmp #MW
+        bne .ok2
+        brk                     ;we just loaded a mazewall, something is wrong
+.ok2        
+#endif
         sta Sprite_sback2,X
 .alldone        
         rts
@@ -1093,7 +1110,7 @@ tail2head SUBROUTINE
 .ourselves
         ;; this would happen when scrolling left, for example
         lda Sprite_sback2,X     ;load tail background
-        cmp #255                ;is it still 'unset'
+        cmp #NOTCOPY                ;is it still 'unset'
         bne .done               ;no, it's been set already, we are done
         ;; tail hasn't been set, let's copy our head 'playfied' background into it
         lda Sprite_back,X       ;load head playfield background
@@ -1113,7 +1130,7 @@ head2head SUBROUTINE
         rts
 .ourselves
         lda Sprite_sback,X
-        cmp #255
+        cmp #NOTCOPY
         bne .done
         lda Sprite_back,X
         sta Sprite_sback,X
@@ -1135,7 +1152,7 @@ head2tail SUBROUTINE
         rts
 .ourselves
         lda Sprite_sback,X
-        cmp #255
+        cmp #NOTCOPY
         bne .done
         lda Sprite_back2,X
         sta Sprite_sback,X
@@ -1152,7 +1169,7 @@ tail2tail SUBROUTINE
         rts
 .ourselves
         lda Sprite_sback2,X
-        cmp #255
+        cmp #NOTCOPY
         bne .done
         lda Sprite_back2,X
         sta Sprite_sback2,X
@@ -1164,6 +1181,8 @@ scroll_horiz SUBROUTINE
         cmp #1
         beq .ok                 ;ok to move horizontal
         ;; switch to horiz order
+        lda #42
+        sta S7
         jsr changehoriz
         bcc .ok
         rts
@@ -1171,8 +1190,14 @@ scroll_horiz SUBROUTINE
         ldy Sprite_offset,X
         cpy END_SCRL_VAL
         bne .draw
-        brk
 .course                         ;course scroll
+#if  _debug        
+        lda #42
+        cmp S7
+        bne .ok1
+        brk                     ;shouldn't be course scrolling if we changed orientation
+.ok1
+#endif        
         move16x Sprite_loc,W2   ;
         lda SCRL_VAL
         bmi .left
@@ -1418,11 +1443,13 @@ scroll_up SUBROUTINE
         rts
 
 ;;; change orientation to horizontal
+;;; X sprite to attempt change on
 ;;; S1 direction to change to ( 22=left 24=right)
 ;;; S2 offset from W2 of erase tile
+;;; output: sprite_loc2 contains new head position if successful
 ;;; -------------------------------------------------------
 ;; let L,H be left tile and right tile of pacman, let O be the origin
-;;  
+;; start                   start
 ;;   #.#     #.#     #.#   ##O###  ######  ######
 ;; ##OL##  ###.##  ###.##  #..L..  #.LH..  #..LH.
 ;; ...H.   ..LH.   ...LH   ###H##  ###.##  ###.##
@@ -1458,7 +1485,7 @@ changehoriz SUBROUTINE
         lda #1                  ;change direction to horiz
         sta Sprite_dir2,X
 
-        lda #0                  ;assume going right
+        lda #0                  ;assume moving right
         sta Sprite_offset,X     ;sprite offset = 0
 
         lda #23                 ;offset from ORG for new sprite pos
