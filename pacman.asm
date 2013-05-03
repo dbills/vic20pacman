@@ -9,6 +9,7 @@ volume    equ 36878
 screen    equ $1e00        
 ;clrram    equ $9400        ; color ram for screen
 clrram    equ $9600        ; color ram for screen
+clroffset equ $78          ;offset from screen to color ram
 
 VIA1DDR equ $9113
 VIA2DDR equ $9122          ; ?
@@ -70,9 +71,8 @@ W4              equ 6           ;2 byte work var
 W3              equ $12        ; 16 bit work 3
 S1              equ $14        ; 1 byte scratch reg
 S2              equ $15        ; 1 byte scratch reg
-PACFRAME        equ $16        ; pointer to current pacman bitimage ( changes for animation )
 PACFRAMEN       equ $18        ; byte: index of pac frame
-PACFRAMEDIR     equ $19        ; the direction pacman is facing
+PACFRAMED       equ $19        ;pacframe dir
 S5              equ $30
 S6              equ $31        
 W5              equ $32
@@ -93,6 +93,7 @@ END_SCRL_VAL    equ $48
 SCRL_VAL        equ $49
 LASTJOY         equ $4a
 LASTJOYDIR      equ $4b         ;last joy reading that had a switch thrown
+MOVEMADE        equ $4c         ;true if last pacman move was successful
 VV              equ $02         ;testing, voice 2
 ;;
 ;; misc constants
@@ -378,11 +379,11 @@ Maze1C
     HEX  01 06 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 06
     HEX  01 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06
 
-pacframes  equ #3            ; total number of pacman animation frames
+pacframes  equ #4            ; total number of pacman animation frames ( 1 based )
 ;;; 
 ;;; define some 8x8 characters
 ;;; 
-#if 0
+#if 1
 PAC1                            ; closed
     ds 1,60
     ds 1,126
@@ -490,10 +491,11 @@ Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
 Sprite_loc2     DC.W screen+22*2+5 ,screen+22*5+3,0,0,0    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
-Sprite_sback    dc.b 0,0,0,0,0              ;current screen background ( might include some other sprite tile that was laid down )
+Sprite_sback    dc.b 0,0,0,0,0 ;current screen background ( might include some other sprite tile that was laid down )
 Sprite_sback2   dc.b 0,0,0,0,0        
 Sprite_tile     dc.b PACL,GHL,0,0,0         ;foreground char
-Sprite_src      dc.w PAC2,GHOST,0,0,0       ;sprite source bitmap
+Sprite_src      dc.w PAC1,GHOST,0,0,0       ;sprite source bitmap
+Sprite_frame    dc.b 0,0,0,0,0              ;animation frame of sprite as offset from _src
 ;;; sprite chargen ram ( where to put the source bmap )
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,0,0,0    
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16),0,0,0
@@ -515,6 +517,17 @@ render_sprite SUBROUTINE
 #endif
         jsr dumpBack2
         move16x Sprite_src,W1   ;bitmap source -> W1
+        lda Sprite_frame,X
+        asl                     ;mul by 8
+        asl
+        asl
+        clc
+        adc W1
+        sta W1
+        lda #0
+        adc W1+1
+        sta W1+1
+        
         ;; assume tile pair 0
         ;; if we are currently on tile pair 0 , then render into pair 1
         move16x Sprite_bmap2,W2  ;left tile chargen ram
@@ -561,7 +574,7 @@ erasesprt SUBROUTINE
         sta (W1),Y              ;save char under right tile
 
         clc
-        lda #$84                ;W1 now = color ram location
+        lda #clroffset          ;W1 now = color ram location
         adc W1+1
         sta W1+1
         lda #WHITE
@@ -612,7 +625,7 @@ drwsprt1 SUBROUTINE
 .skip        
         sta (W1),Y              ;lay down the tile
         clc
-        lda #$78                ;W1 now = color ram location
+        lda #clroffset          ;W1 now = color ram location
         adc W1+1
         sta W1+1
         lda #YELLOW
@@ -628,6 +641,10 @@ drwsprt1 SUBROUTINE
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
+        lda #pacframes
+        sta PACFRAMEN
+        lda #1
+        sta PACFRAMED
         lda #$ff
         sta LASTJOYDIR
     cli                         ; enable interrupts so jiffy clock works
@@ -658,7 +675,7 @@ main SUBROUTINE
 
     jmp .background
 .loop
-        ldx #50
+        ldx #25
 .iloop        
         lda $9004
         beq .2
@@ -938,18 +955,25 @@ Pacman SUBROUTINE
 ;        scroll_right
         moveS
         rts
-#endif        
+#endif
         ldx #0
+        stx MOVEMADE
         readJoy
+        cmp LASTJOYDIR
+        beq .uselast
         and #$bc
         eor #$bc
         beq .uselast
         lda LASTJOY
-        sta LASTJOYDIR
         jmp .process
 .uselast
-
+        ldy MOVEMADE
+        bne .done
+        ldy #1
+        sty MOVEMADE
         lda LASTJOYDIR
+        sta LASTJOY
+        
 .process        
         sta screen+1            ; debug char on screen
         tay                   
@@ -970,19 +994,52 @@ Pacman SUBROUTINE
         rts
 .down                           ;
         jsr scroll_down
+        bcc .moveok
+        bcs .uselast
         rts
 .right
         scroll_right
+        bcc .moveok
+        bcs .uselast
         rts
 .left
         scroll_left
+        bcc .moveok
+        bcs .uselast
         rts
 .up
         jsr scroll_up
+        bcc .moveok
+        bcs .uselast
         rts
 .fire
         rts
-
+.moveok
+        lda LASTJOY
+        sta LASTJOYDIR
+#if 1
+        jsr Animate
+#endif        
+.done        
+        rts
+;;; animate a sprite by changing its source frames
+Animate SUBROUTINE
+        lda PACFRAMED
+.start        
+        clc
+        adc Sprite_frame
+        bmi .reverse
+        cmp #4
+        beq .reverse
+        sta Sprite_frame
+        rts
+.reverse
+        lda #$ff
+        eor PACFRAMED
+        ora #1
+        sta PACFRAMED
+        jmp .start
+        
         ;; load sprite head tile screen position pointer into {2}
         ;; X = sprite
         mac ldSprtHeadPos
@@ -1600,6 +1657,7 @@ changevert SUBROUTINE
         clc                     ;return success
         rts
 ;;; X = sprite to scroll down
+;;; carry is set on return if move is not possible
 scroll_down SUBROUTINE
         lda Sprite_dir,X
         cmp #22                 ;check if already vertical
@@ -1630,8 +1688,6 @@ scroll_down SUBROUTINE
 .done
         clc
         rts
-.dbg
-        brk
 ;;; Y is clobbered
 ;;; S5 * S6 output ( 16 bit ) W5
 multxx SUBROUTINE
