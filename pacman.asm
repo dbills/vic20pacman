@@ -90,7 +90,8 @@ SPRT_LOCATOR    equ $47
 END_SCRL_VAL    equ $48
 ;;;amount to increase or decrease sprite offset
 ;;; used by scroll_horiz
-SCRL_VAL        equ $49       
+SCRL_VAL        equ $49
+LASTJOY         equ $4a        
 VV              equ $02         ;testing, voice 2
 ;;
 ;; misc constants
@@ -289,14 +290,29 @@ PWR             equ $C0
         sta W4+1
         endm
 ;; set N on joystick right
-  mac onjoyr
+        MAC onjoyr
         lda #127
         sta VIA2DDR
         lda JOY0B
-        ldx #$ff
-        stx VIA2DDR
+        sta LASTJOY
+        lda #$ff
+        sta VIA2DDR
+        lda LASTJOY
         and #JOYR
-  endm
+        ENDM
+        
+        MAC readJoy
+        
+        lda JOY0
+        ora #$80                ;turn on bit 7, assume right joy active
+        sta LASTJOY
+        onjoyr                  ;read joystick right pos
+        bne .done
+        lda #$7f
+        and LASTJOY             ;clear bit 7, since right wasn't active
+        sta LASTJOY
+.done        
+        ENDM
         ;; test code for multxx routine
         ;; lda #131
         ;; sta S5
@@ -928,6 +944,7 @@ Pacman SUBROUTINE
         rts
 #endif        
         ldx #0
+;        readJoy
         lda JOY0                ; read joy register
         sta screen+1            ; debug char on screen
         tay                   
@@ -950,30 +967,17 @@ Pacman SUBROUTINE
         jsr scroll_down
         rts
 .right
-        tsx
-        stx 251
-        ldx #0
-        
         scroll_right
-
-        tsx
-        cpx 251
-        beq .ok
-        brk
-.ok        
-        
         rts
 .left
-;        brk
         scroll_left
         rts
 .up
         jsr scroll_up
         rts
 .fire
-;        brk
         rts
-        brk
+
         ;; load sprite head tile screen position pointer into {2}
         ;; X = sprite
         mac ldSprtHeadPos
