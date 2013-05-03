@@ -1,12 +1,14 @@
-    org $4000
+    org $0400
     processor 6502
 _debug    equ 1            ; true for debugging
 voice1    equ 36874        ; sound registers
 voice2    equ 36875
 voice3    equ 36876
 volume    equ 36878
-screen    equ $1000        ; screen ram
-clrram    equ $9400        ; color ram for screen
+;screen    equ $1000        ; screen ram
+screen    equ $1e00        
+;clrram    equ $9400        ; color ram for screen
+clrram    equ $9600        ; color ram for screen
 
 VIA1DDR equ $9113
 VIA2DDR equ $9122          ; ?
@@ -595,7 +597,7 @@ drwsprt1 SUBROUTINE
 .skip        
         sta (W1),Y              ;lay down the tile
         clc
-        lda #$84                ;W1 now = color ram location
+        lda #$78                ;W1 now = color ram location
         adc W1+1
         sta W1+1
         lda #YELLOW
@@ -927,7 +929,7 @@ Pacman SUBROUTINE
 #endif        
         ldx #0
         lda JOY0                ; read joy register
-        sta $1001               ; debug char on screen
+        sta screen+1            ; debug char on screen
         tay                   
         and #JOYL               ; check for left bit
         beq .left
@@ -1341,18 +1343,18 @@ dumpBack SUBROUTINE
         asl
         tay
         lda Sprite_back,X      ;input to mergeTile
-        sta $1004,Y
+        sta screen+4,Y
         lda Sprite_back2,X
-        sta $1005,Y
+        sta screen+5,Y
         rts
 dumpBack2 SUBROUTINE
         txa
         asl
         tay
         lda Sprite_sback,X      ;input to mergeTile
-        sta $1009,Y
+        sta screen+9,Y
         lda Sprite_sback2,X
-        sta $100A,Y
+        sta screen+$A,Y
         rts
 #endif        
 ;;; horizontal blit
@@ -1378,14 +1380,14 @@ blith SUBROUTINE
         pha
         tay
         lda Sprite_sback,X      ;input to mergeTile
-        sta $1009,Y
+        sta screen+9,Y
         mergeTile               ;font address of underneath tile into W4
         move16 W4,W6
 
         pla
         tay
         lda Sprite_sback2,X
-        sta $100A,Y
+        sta screen+$A,Y
         mergeTile
 #endif        
         ldy #7
