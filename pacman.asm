@@ -91,7 +91,8 @@ END_SCRL_VAL    equ $48
 ;;;amount to increase or decrease sprite offset
 ;;; used by scroll_horiz
 SCRL_VAL        equ $49
-LASTJOY         equ $4a        
+LASTJOY         equ $4a
+LASTJOYDIR      equ $4b         ;last joy reading that had a switch thrown
 VV              equ $02         ;testing, voice 2
 ;;
 ;; misc constants
@@ -289,28 +290,26 @@ PWR             equ $C0
         adc #mychars >> 8
         sta W4+1
         endm
-;; set N on joystick right
+;; beq on joy right A has bit 7 of last reading from JOY0B
         MAC onjoyr
         lda #127
+        sta VIA2DDR             ;setup VIA for joystick read
+        lda JOY0B               
+        pha
+        lda #$ff                ;restore VIA2 so keyboard can be read
         sta VIA2DDR
-        lda JOY0B
-        sta LASTJOY
-        lda #$ff
-        sta VIA2DDR
-        lda LASTJOY
+        pla                     ;pull out  our joystick reading
         and #JOYR
         ENDM
         
         MAC readJoy
         
         lda JOY0
-        ora #$80                ;turn on bit 7, assume right joy active
+        and #$7f                ;clear bit 7 ( joy right )
         sta LASTJOY
         onjoyr                  ;read joystick right pos
-        bne .done
-        lda #$7f
-        and LASTJOY             ;clear bit 7, since right wasn't active
-        sta LASTJOY
+        ora LASTJOY             ;or in bit 7 from that read
+        sta LASTJOY             ;store it
 .done        
         ENDM
         ;; test code for multxx routine
@@ -625,15 +624,12 @@ drwsprt1 SUBROUTINE
 
  INCLUDE "audio.asm"
 
-blargg SUBROUTINE
-        lda #05
-        lda #06
-        rts
 ;-------------------------------------------
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
-        jsr blargg
+        lda #$ff
+        sta LASTJOYDIR
     cli                         ; enable interrupts so jiffy clock works
     lda #8
     sta 36879                   ; border and screen colors
@@ -944,8 +940,17 @@ Pacman SUBROUTINE
         rts
 #endif        
         ldx #0
-;        readJoy
-        lda JOY0                ; read joy register
+        readJoy
+        and #$bc
+        eor #$bc
+        beq .uselast
+        lda LASTJOY
+        sta LASTJOYDIR
+        jmp .process
+.uselast
+
+        lda LASTJOYDIR
+.process        
         sta screen+1            ; debug char on screen
         tay                   
         and #JOYL               ; check for left bit
@@ -960,7 +965,7 @@ Pacman SUBROUTINE
         and #JOYT
         beq .fire
         tya
-        onjoyr
+        and #JOYR
         beq .right
         rts
 .down                           ;
