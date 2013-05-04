@@ -53,7 +53,7 @@ LTBLUE       equ 14
 LTYELLOW     equ 15
 
 MW           equ $e0            ;maze wall character
-SPRITES      equ 1             ;count of sprites in system (1 based)
+SPRITES      equ 2             ;count of sprites in system (1 based)
 ;;
 ;;  Zero page constants
 ;;
@@ -384,51 +384,68 @@ pacframes  equ #4            ; total number of pacman animation frames ( 1 based
 ;;; define some 8x8 characters
 ;;; 
 #if 1
-PAC1                            ; closed
-    ds 1,60
-    ds 1,126
-    ds 1,255
-    ds 1,255
-    ds 1,255
-    ds 1,255
-    ds 1,126
-    ds 1,60
+PAC1
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
 PAC2
-    ds 1,60
-    ds 1,126
-    ds 1,255
-    ds 1,240
-    ds 1,240
-    ds 1,255
-    ds 1,126
-    ds 1,60
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11100000
+    ds 1,%11100000
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
 PAC3
-    ds 1,60
-    ds 1,126
-    ds 1,248
-    ds 1,240
-    ds 1,240
-    ds 1,248
-    ds 1,126
-    ds 1,60
-PAC4                ; wide open
-    ds 1,60
-    ds 1,126
-    ds 1,248
-    ds 1,240
-    ds 1,240
-    ds 1,248
-    ds 1,126
-    ds 1,60
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111000
+    ds 1,%11100000
+    ds 1,%11100000
+    ds 1,%11111000
+    ds 1,%01111110
+    ds 1,%00111100
+PAC4
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11110000
+    ds 1,%11100000
+    ds 1,%11100000
+    ds 1,%11110000
+    ds 1,%01111110
+    ds 1,%00111100
 GHOST
-    ds 1,126
-    ds 1,195
-    ds 1,215
-    ds 1,255
-    ds 1,255
-    ds 1,227
-    ds 1,255
-    ds 1,170
+    ds 1,%01111110
+    ds 1,%11000011
+    ds 1,%11010111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11100011
+    ds 1,%11111111
+    ds 1,%10101010
+GHOST2        
+    ds 1,%01111110
+    ds 1,%11000011
+    ds 1,%11010111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11100011
+    ds 1,%11111111
+    ds 1,%01010101
+    ;; ds 1,126
+    ;; ds 1,195
+    ;; ds 1,215
+    ;; ds 1,255
+    ;; ds 1,255
+    ;; ds 1,227
+    ;; ds 1,255
+    ;; ds 1,170
 #else
 
 GHOST
@@ -752,7 +769,7 @@ main SUBROUTINE
         
 ;        jsr WaitFire
         jsr Pacman
-;        jsr Ghost
+        jsr Ghost
         lda #SPRITES            ;for i = sprites to 0, i--
         sta SPRITEIDX
 .playerloop
@@ -841,31 +858,6 @@ md3
 md4
         RTS
 
-;;; animate a ghost back and forth
-Ghost SUBROUTINE
-        rts
-        ldx #1
-#if 1
-;;; Service ghosts
-        lda S7
-        beq .sr
-;        jsr scroll_left        ;
-        bcs .reverse2
-        bcc .0
-.reverse2
-        lda #0
-        sta S7
-        jmp .0
-.sr
-;        jsr scroll_right        ;
-        bcs .reverse
-        bcc .0
-.reverse
-        lda #1
-        sta S7                ;
-#endif
-.0
-        rts
 
 ;;; waits for joystick to be pressed
 ;;; and released
@@ -934,6 +926,12 @@ WaitFire SUBROUTINE
         sta Sprite_motion,X
 .done        
         ENDM
+;;; animate a ghost back and forth
+Ghost SUBROUTINE
+        ldx #1                  ;work with sprite 0
+;        scroll_right
+        moveS
+        rts
 
 ;;; 
 ;;; Service PACMAN, read joystick and move
@@ -1038,7 +1036,8 @@ Animate SUBROUTINE
         eor PACFRAMED
         ora #1
         sta PACFRAMED
-        jmp .start
+;        jmp .start
+        rts
         
         ;; load sprite head tile screen position pointer into {2}
         ;; X = sprite
