@@ -11,6 +11,7 @@ screen    equ $1e00
 clrram    equ $9600        ; color ram for screen
 clroffset equ $78          ;offset from screen to color ram
 
+VICSCRN equ $9005               ;vic chip character generator pointer
 VIA1DDR equ $9113
 VIA2DDR equ $9122          ; ?
 JOY0    equ $9111
@@ -32,7 +33,8 @@ chrom4    equ $8800        ; upper lower
 
 ;; vic-I chip registers
 chrst           equ $9003        ; font map pointer
-mychars         equ $1400        ; my font map
+;mychars         equ $1400        ; my font map
+mychars         equ $1c00        
 charcnt         equ $800
 
 BLACK        equ 0
@@ -52,7 +54,6 @@ LTGREEN      equ 13
 LTBLUE       equ 14
 LTYELLOW     equ 15
 
-MW           equ $e0            ;maze wall character
 SPRITES      equ 2             ;count of sprites in system (1 based)
 ;;
 ;;  Zero page constants
@@ -64,15 +65,18 @@ W1_l            equ 0
 W1_h            equ 1
 W2              equ 2
 W2_l            equ 2
-W2_h            equ 3        
+ppW2_h            equ 3        
 SPRITEIDX       equ 4           ;sprite index for main loop
 S4              equ 5
 W4              equ 6           ;2 byte work var
 W3              equ $12        ; 16 bit work 3
 S1              equ $14        ; 1 byte scratch reg
 S2              equ $15        ; 1 byte scratch reg
+CSPRTFRM        equ $16        ; number of frames in the currently processing sprite
 PACFRAMEN       equ $18        ; byte: index of pac frame
 PACFRAMED       equ $19        ;pacframe dir
+NXTSPRTSRC      equ $1a        ;when moving a sprite, the next 'set' of source bitmaps
+;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
 S6              equ $31        
 W5              equ $32
@@ -103,7 +107,9 @@ PACL            equ $00            ; pacman char number
 GHL             equ $08            ; ghost char number
 
 DOT             equ $04
-PWR             equ $C0
+WALLCH          equ $05
+MW              equ $05            ;maze wall character
+PWR             equ $06
 ;
 ;
 ;------------------------------------
@@ -142,7 +148,7 @@ PWR             equ $C0
     ;; ABORT instruction
     mac abort
     lda #$c0
-    sta $9005
+    sta VICSCRN
     brk
     endm
     ;; MOVE instruction
@@ -331,28 +337,28 @@ PWR             equ $C0
 ;;; screen map for maze
 Maze1
     HEX  20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20
-    HEX  20 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0
-    HEX  20 E0 04 04 04 04 C0 04 04 04 04 E0 04 04 04 04 04 04 04 04 04 E0
-    HEX  20 E0 C0 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 C0 E0
-    HEX  20 E0 04 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 04 E0
-    HEX  20 E0 04 04 04 04 04 C0 04 04 04 04 04 04 04 04 04 04 04 04 04 E0
-    HEX  20 E0 04 E0 E0 04 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0 04 E0 E0 04 E0
-    HEX  20 E0 04 04 04 04 E0 04 04 04 04 E0 04 04 04 04 E0 04 04 04 04 E0
-    HEX  20 E0 E0 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 E0 E0
-    HEX  20 20 20 20 E0 04 E0 20 20 20 20 20 20 20 20 20 E0 04 E0 20 20 20
-    HEX  20 E0 E0 E0 E0 04 E0 20 E0 E0 E0 E0 E0 E0 E0 20 E0 04 E0 E0 E0 E0
-    HEX  20 20 20 20 21 04 20 20 E0 20 20 20 20 20 E0 20 20 04 20 20 20 20
-    HEX  20 E0 E0 E0 E0 04 E0 20 E0 E0 E0 E0 E0 E0 E0 20 E0 04 E0 E0 E0 E0
-    HEX  20 20 20 20 E0 04 E0 20 20 20 20 20 20 20 20 20 E0 04 E0 20 20 20
-    HEX  20 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0
-    HEX  20 E0 25 29 27 28 04 04 04 04 04 E0 04 04 04 04 04 04 04 04 04 E0
-    HEX  20 E0 04 E0 E0 04 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 04 E0 E0 04 E0
-    HEX  20 E0 04 04 E0 04 04 04 04 04 04 04 04 04 04 04 04 04 E0 04 04 E0
-    HEX  20 E0 E0 04 E0 04 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0 04 E0 04 E0 E0
-    HEX  20 E0 C0 04 04 04 E0 04 04 04 04 E0 04 04 04 04 E0 04 04 04 C0 E0
-    HEX  20 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0 04 E0 E0 E0 E0 E0 E0 E0 04 E0
-    HEX  20 E0 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 E0
-    HEX  20 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0 E0
+    HEX  20 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05
+    HEX  20 05 04 04 04 04 C0 04 04 04 04 05 04 04 04 04 04 04 04 04 04 05
+    HEX  20 05 C0 05 05 04 05 05 05 05 04 05 04 05 05 05 05 04 05 05 C0 05
+    HEX  20 05 04 05 05 04 05 05 05 05 04 05 04 05 05 05 05 04 05 05 04 05
+    HEX  20 05 04 04 04 04 04 C0 04 04 04 04 04 04 04 04 04 04 04 04 04 05
+    HEX  20 05 04 05 05 04 05 04 05 05 05 05 05 05 05 04 05 04 05 05 04 05
+    HEX  20 05 04 04 04 04 05 04 04 04 04 05 04 04 04 04 05 04 04 04 04 05
+    HEX  20 05 05 05 05 04 05 05 05 05 04 05 04 05 05 05 05 04 05 05 05 05
+    HEX  20 20 20 20 05 04 05 20 20 20 20 20 20 20 20 20 05 04 05 20 20 20
+    HEX  20 05 05 05 05 04 05 20 05 05 05 05 05 05 05 20 05 04 05 05 05 05
+    HEX  20 20 20 20 21 04 20 20 05 20 20 20 20 20 05 20 20 04 20 20 20 20
+    HEX  20 05 05 05 05 04 05 20 05 05 05 05 05 05 05 20 05 04 05 05 05 05
+    HEX  20 20 20 20 05 04 05 20 20 20 20 20 20 20 20 20 05 04 05 20 20 20
+    HEX  20 05 05 05 05 04 05 04 05 05 05 05 05 05 05 04 05 04 05 05 05 05
+    HEX  20 05 25 29 27 28 04 04 04 04 04 05 04 04 04 04 04 04 04 04 04 05
+    HEX  20 05 04 05 05 04 05 05 05 05 04 05 04 05 05 05 05 04 05 05 04 05
+    HEX  20 05 04 04 05 04 04 04 04 04 04 04 04 04 04 04 04 04 05 04 04 05
+    HEX  20 05 05 04 05 04 05 04 05 05 05 05 05 05 05 04 05 04 05 04 05 05
+    HEX  20 05 C0 04 04 04 05 04 04 04 04 05 04 04 04 04 05 04 04 04 C0 05
+    HEX  20 05 04 05 05 05 05 05 05 05 04 05 04 05 05 05 05 05 05 05 04 05
+    HEX  20 05 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 04 05
+    HEX  20 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05 05
 ;;; color map for maze
 Maze1C
     HEX  01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
@@ -384,6 +390,16 @@ pacframes  equ #4            ; total number of pacman animation frames ( 1 based
 ;;; define some 8x8 characters
 ;;; 
 #if 1
+WALL
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+
 PAC1
     ds 1,%00111100
     ds 1,%01111110
@@ -397,8 +413,8 @@ PAC2
     ds 1,%00111100
     ds 1,%01111110
     ds 1,%11111111
-    ds 1,%11100000
-    ds 1,%11100000
+    ds 1,%11110000
+    ds 1,%11110000
     ds 1,%11111111
     ds 1,%01111110
     ds 1,%00111100
@@ -406,8 +422,8 @@ PAC3
     ds 1,%00111100
     ds 1,%01111110
     ds 1,%11111000
-    ds 1,%11100000
-    ds 1,%11100000
+    ds 1,%11110000
+    ds 1,%11110000
     ds 1,%11111000
     ds 1,%01111110
     ds 1,%00111100
@@ -420,6 +436,118 @@ PAC4
     ds 1,%11110000
     ds 1,%01111110
     ds 1,%00111100
+;;; --------------
+PAC1D
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC2D
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11100111
+    ds 1,%11100111
+    ds 1,%01100110
+    ds 1,%00100100
+PAC3D
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11100111
+    ds 1,%11000011
+    ds 1,%01000010
+    ds 1,%00000000
+PAC4D
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11100111
+    ds 1,%11000011
+    ds 1,%11000011
+    ds 1,%01000010
+    ds 1,%00000000
+;;; -------------
+PAC_UP1
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC_UP2
+    ds 1,%00100100
+    ds 1,%01100110
+    ds 1,%11100111
+    ds 1,%11100111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC_UP3
+    ds 1,%00000000
+    ds 1,%01000010
+    ds 1,%11000011
+    ds 1,%11100111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC_UP4
+    ds 1,%00000000
+    ds 1,%01000010
+    ds 1,%11000011
+    ds 1,%11000011
+    ds 1,%11100111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+;;; --------------------------
+PAC_L1
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC_L2
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%00001111
+    ds 1,%00001111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC_L3
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%00011111
+    ds 1,%00001111
+    ds 1,%00001111
+    ds 1,%00011111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC_L4
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%00001111
+    ds 1,%00000111
+    ds 1,%00000111
+    ds 1,%00001111
+    ds 1,%01111110
+    ds 1,%00111100
+        
 GHOST
     ds 1,%01111110
     ds 1,%11000011
@@ -438,8 +566,6 @@ GHOST2
     ds 1,%11100011
     ds 1,%11111111
     ds 1,%01010101
-    ;; ds 1,126
-    ;; ds 1,195
     ;; ds 1,215
     ;; ds 1,255
     ;; ds 1,255
@@ -500,6 +626,10 @@ PDOT
 ;;; sprite_page control which set of tiles we draw , it alternates
 ;;; between 0 and 1
 ;;;
+;;; there are 4 sets of frames
+;;; for each sprite
+;;; the order of sets is left,right,top,bottom
+;;; 
 ;;; debugging notes: 22*5+5 is at an intersection
 ;;; for testing up/down/left/right transitions
 ;------------------------------------
@@ -678,7 +808,9 @@ main SUBROUTINE
     store16 PPWR,W1             ; copy(power,charcters[2]);
     store16 mychars+[8*PWR],W2  ;
     jsr loadch                  ;
-
+    store16 WALL,W1
+    store16 mychars+[8*WALLCH],W2
+    jsr loadch
     jsr mkmaze
 
     ldx #1                      ; turn on voice track
@@ -808,10 +940,10 @@ copychar    SUBROUTINE
 
     jsr movedown
 
-    lda $9005
+    lda VICSCRN
     and #$f0
-    ora #$0d
-    sta $9005
+    ora #$0f                    ;char ram pointer is lower 4 bits
+    sta VICSCRN
 
     rts
 
@@ -931,6 +1063,18 @@ Ghost SUBROUTINE
         ldx #1                  ;work with sprite 0
 ;        scroll_right
         moveS
+
+        ;; animate the ghost by changing frames
+        lda #1                  ;add one to current frame
+        clc
+        adc Sprite_frame,X
+        sta Sprite_frame,X
+        cmp #2                  ;time to wrap around?
+        beq .reset
+        rts
+.reset
+        lda #0                  ;reset frame counter
+        sta Sprite_frame,X
         rts
 
 ;;; 
@@ -957,18 +1101,20 @@ Pacman SUBROUTINE
         ldx #0
         stx MOVEMADE
         readJoy
-        cmp LASTJOYDIR
-        beq .uselast
+        cmp LASTJOYDIR          ;same as last joystick reading
+        beq .uselast            ;then use last reading
         and #$bc
         eor #$bc
         beq .uselast
         lda LASTJOY
         jmp .process
 .uselast
-        ldy MOVEMADE
-        bne .done
+        ldy MOVEMADE            ;if we made a move already then exit
+        beq .cont
+        rts
+.cont        
         ldy #1
-        sty MOVEMADE
+        sty MOVEMADE            ;indicate we made a move
         lda LASTJOYDIR
         sta LASTJOY
         
@@ -990,36 +1136,44 @@ Pacman SUBROUTINE
         and #JOYR
         beq .right
         rts
-.down                           ;
+.down
+        store16 PAC1D,W3
+        nop
+        nop
         jsr scroll_down
         bcc .moveok
         bcs .uselast
         rts
 .right
+       store16 PAC1,W3    ;
         scroll_right
         bcc .moveok
         bcs .uselast
         rts
 .left
+       store16 PAC_L1,W3
         scroll_left
         bcc .moveok
         bcs .uselast
         rts
 .up
+       store16 PAC_UP1,W3
         jsr scroll_up
         bcc .moveok
-        bcs .uselast
+        jmp .uselast
         rts
 .fire
         rts
 .moveok
         lda LASTJOY
         sta LASTJOYDIR
+        move16 W3,Sprite_src
 #if 1
         jsr Animate
 #endif        
 .done        
         rts
+
 ;;; animate a sprite by changing its source frames
 Animate SUBROUTINE
         lda PACFRAMED
@@ -1515,6 +1669,8 @@ scroll_up SUBROUTINE
         tya
         sta Sprite_offset2,X
 .done
+;        store16 PAC_UP1,W1
+;        move16x2 W1,Sprite_src
         clc
         rts
 
@@ -1685,6 +1841,7 @@ scroll_down SUBROUTINE
         tya
         sta Sprite_offset2,X
 .done
+        store16 PAC1D,W1
         clc
         rts
 ;;; Y is clobbered

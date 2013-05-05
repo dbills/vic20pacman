@@ -21,7 +21,7 @@ while(<STDIN>)
 #        print "processing $_\n";
         $comment=$_;
         chop($comment);
-        $type=3;
+        $type=2;
         $i=0;
         while($i<8) 
         {
@@ -29,9 +29,9 @@ while(<STDIN>)
             $foo  == 8 || die("not 8 bites, only $foo :$byte[$i]\n");
             for($j=0;$j<8;$j++) {
                 $bit=substr($byte[$i],$j,1);
-                if($type ==0) {
+                if($type ==0) {#up
                     $out[7-$j][7-$i]=$bit;
-                } elsif($type ==1) {
+                } elsif($type ==1) {#flip
                     $out[7-$i][7-$j]=$bit; 
                 } elsif($type ==2) {
                     $out[$j][7-$i]=$bit; 
