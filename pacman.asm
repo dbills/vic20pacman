@@ -11,16 +11,17 @@ screen    equ $1e00
 clrram    equ $9600        ; color ram for screen
 clroffset equ $78          ;offset from screen to color ram
 
-VICSCRN equ $9005               ;vic chip character generator pointer
-VIA1DDR equ $9113
-VIA2DDR equ $9122          ; ?
-JOY0    equ $9111
-JOY0B   equ $9120          ; output register B VIA #2
-JOYUP   equ $4             ; joy up bit
-JOYDWN  equ $8             ; joy down
-JOYL    equ $10            ; joy left
-JOYT    equ $20            ; joy fire
-JOYR    equ $80            ; joy right bit
+VICRASTER equ $9004        
+VICSCRN   equ $9005               ;vic chip character generator pointer
+VIA1DDR   equ $9113
+VIA2DDR   equ $9122          ; ?
+JOY0      equ $9111
+JOY0B     equ $9120          ; output register B VIA #2
+JOYUP     equ $4             ; joy up bit
+JOYDWN    equ $8             ; joy down
+JOYL      equ $10            ; joy left
+JOYT      equ $20            ; joy fire
+JOYR      equ $80            ; joy right bit
 
 jiffyh    equ $a0          ; jiffy clock lsb - msb
 jiffym    equ $a1
@@ -54,7 +55,7 @@ LTGREEN      equ 13
 LTBLUE       equ 14
 LTYELLOW     equ 15
 
-SPRITES      equ 2             ;count of sprites in system (1 based)
+SPRITES      equ 3             ;count of sprites in system (1 based)
 ;;
 ;;  Zero page constants
 ;;
@@ -105,7 +106,7 @@ VV              equ $02         ;testing, voice 2
 PACL            equ $00            ; pacman char number
 
 GHL             equ $08            ; ghost char number
-
+GH1L            equ $0c
 DOT             equ $04
 WALLCH          equ $05
 MW              equ $05            ;maze wall character
@@ -635,20 +636,20 @@ PDOT
 ;------------------------------------
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*2+5 ,screen+22*5+3,0,0,0    ;new screen loc
+Sprite_loc2     DC.W screen+22*2+8 ,screen+22*5+3,screen+22*7+5,0,0    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0 ;current screen background ( might include some other sprite tile that was laid down )
 Sprite_sback2   dc.b 0,0,0,0,0        
-Sprite_tile     dc.b PACL,GHL,0,0,0         ;foreground char
-Sprite_src      dc.w PAC1,GHOST,0,0,0       ;sprite source bitmap
+Sprite_tile     dc.b PACL,GHL,GH1L,0,0         ;foreground char
+Sprite_src      dc.w PAC1,GHOST,GHOST,0,0       ;sprite source bitmap
 Sprite_frame    dc.b 0,0,0,0,0              ;animation frame of sprite as offset from _src
 ;;; sprite chargen ram ( where to put the source bmap )
-Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,0,0,0    
-Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16),0,0,0
-Sprite_motion   dc.b 1,1,1,1,1        
-Sprite_dir      dc.b 22,1,1,1,1  ;sprite direction 1(horiz),22(vert)
-Sprite_dir2     dc.b 22,1,1,1,1  ;sprite direction 1(horiz),22(vert)    
+Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8),0,0    
+Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16),0,0
+Sprite_motion   dc.b 1,1,$EA,1,1        
+Sprite_dir      dc.b 1,1,22,1,1  ;sprite direction 1(horiz),22(vert)
+Sprite_dir2     dc.b 1,1,22,1,1  ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
         
@@ -788,6 +789,10 @@ drwsprt1 SUBROUTINE
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
+        ;; lda #21
+        ;; jsr Stuff
+        ;; brk
+        
         lda #pacframes
         sta PACFRAMEN
         lda #1
@@ -824,9 +829,9 @@ main SUBROUTINE
 
     jmp .background
 .loop
-        ldx #25
+        ldx #255
 .iloop        
-        lda $9004
+        lda VICRASTER           ;load raster line
         beq .2
         bne .iloop
 
@@ -1058,11 +1063,39 @@ WaitFire SUBROUTINE
         sta Sprite_motion,X
 .done        
         ENDM
+        
+        MAC moveD
+        lda Sprite_motion,X
+        cmp #22
+        beq .down
+        jsr scroll_up
+        bcs .reverse
+        bcc .done
+.down
+        jsr scroll_down
+        bcs .reverse
+        bcc .done
+.reverse
+        lda Sprite_motion,X
+        cmp #22
+        beq .0
+        bne .1
+.0
+        lda #$EA                 ;-22
+        jmp .store
+.1
+        lda #22
+.store        
+        sta Sprite_motion,X
+.done
+        ENDM
 ;;; animate a ghost back and forth
 Ghost SUBROUTINE
         ldx #1                  ;work with sprite 0
 ;        scroll_right
         moveS
+        ldx #2
+        moveD
 
         ;; animate the ghost by changing frames
         lda #1                  ;add one to current frame
@@ -1075,29 +1108,38 @@ Ghost SUBROUTINE
 .reset
         lda #0                  ;reset frame counter
         sta Sprite_frame,X
+
         rts
 
+Divisor equ 22
+Stuff SUBROUTINE
+;Division by 14
+      pha
+      lda #$00
+      sta S1      ;Init the res varialbe (needed because we're doing less than 8 shifts)
+      pla
+      cmp #[Divisor*8]
+      bcc .1
+      sbc #[Divisor*8]
+.1     rol S1
+      cmp #[Divisor*4]
+      bcc .2 
+      sbc #[Divisor*4]
+.2     rol S1
+      cmp #[Divisor*2]
+      bcc .3 
+      sbc #[Divisor*2]
+.3     rol S1
+      cmp #[Divisor]
+      bcc .4 
+      sbc #[Divisor]
+.4     rol S1      ;A = remainder, Res = quotient
+        
+        rts
 ;;; 
 ;;; Service PACMAN, read joystick and move
 ;;; 
 Pacman SUBROUTINE
-#if 0
-        ;; inc S7
-        ;; lda S7
-        ;; clc
-        ;; ror
-        ;; bcs .skip
-
-        ldx #0                  ;work with sprite 0
-;        moveS
-;        jsr scroll_down
-        scroll_right
-.skip        
-        ldx #1                  ;work with sprite 0
-;        scroll_right
-        moveS
-        rts
-#endif
         ldx #0
         stx MOVEMADE
         readJoy
@@ -1138,8 +1180,6 @@ Pacman SUBROUTINE
         rts
 .down
         store16 PAC1D,W3
-        nop
-        nop
         jsr scroll_down
         bcc .moveok
         bcs .uselast
