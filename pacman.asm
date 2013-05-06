@@ -130,6 +130,15 @@ PWR             equ $06
    mac checkYDir
    endm
 #endif        
+        ;; compare word in {1} with immediate mode {2}
+        MAC cmp16
+        lda {1}+1
+        cmp {2}+1
+        bne .done
+        lda {1}
+        cmp {2}
+.done        
+        ENDM
 ; write a 16 bit address to a destination
 ; indexed by X
 ; store16x(source_label,dest[X])
@@ -280,6 +289,19 @@ PWR             equ $06
         SBC #0
         STA [{2}]+1
     endm
+        ;; substract byte from word
+        ;; {1} input, also contains result
+        ;; 
+        MAC sub16
+        sec
+        lda {1}
+        sbc {2}
+        sta {1}
+        lda {1}+1
+        sbc {2}+1
+        sta {1}+1
+        ENDM
+        
 ;;; find the character font address of the tile
 ;;; underneath a sprite
 ;;; on entry: A = tile in question
@@ -652,7 +674,9 @@ Sprite_dir      dc.b 1,1,22,1,1  ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,22,1,1  ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
-        
+;;; 
+;;; division table for division by 22
+Div22Table dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
 ;;; S2 sprite to render
 render_sprite SUBROUTINE
         stx S2                  ;set for call to blith
@@ -789,6 +813,9 @@ drwsprt1 SUBROUTINE
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
+        store16 #399,W1
+        jsr Divide22_16
+        brk
         ;; lda #21
         ;; jsr Stuff
         ;; brk
@@ -1111,9 +1138,13 @@ Ghost SUBROUTINE
 
         rts
 
+GhostAI SUBROUTINE
+        move16 Sprite_loc2,W1
+        
+        rts
+
 Divisor equ 22
-Stuff SUBROUTINE
-;Division by 14
+Divide22 SUBROUTINE
       pha
       lda #$00
       sta S1      ;Init the res varialbe (needed because we're doing less than 8 shifts)
@@ -1136,6 +1167,28 @@ Stuff SUBROUTINE
 .4     rol S1      ;A = remainder, Res = quotient
         
         rts
+        
+
+;;; W1 contains dividen ( word )
+Divide22_16 SUBROUTINE
+        lda #$00
+        sta S1      ;Init the result variable
+        ldx #0
+.loop
+        move16x Div22Table,W2
+        cmp16 W1,W2
+        bcc .1
+        sub16 W1,W2
+.1
+        rol S1
+        inx
+        cpx #5
+        beq .done
+        bne .loop
+.done
+        rts
+        
+
 ;;; 
 ;;; Service PACMAN, read joystick and move
 ;;; 

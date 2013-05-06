@@ -49,7 +49,8 @@ Track21
     ds 1,240
     ds 1,1
     ds 1,2            ; repeat
-
+        
+#if 0
 table1                ; multiple of 22 table for screen
     ds 1,44
     ds 1,66
@@ -72,7 +73,7 @@ table1                ; multiple of 22 table for screen
     ds 1,440
     ds 1,462
     ds 1,484
-
+#endif
 TrackBass
 	ds 1,1
 	ds 1,214
