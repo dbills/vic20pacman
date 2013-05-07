@@ -1,3 +1,13 @@
+;; DOT
+;; POWER
+;; LEFT
+;; RIGHT
+;; TOP
+;; BOTTOM
+;; H WALL
+;; V WALL
+;;; enums for reading the compressed maze
+
     org $0400
     processor 6502
 _debug    equ 1            ; true for debugging
@@ -356,7 +366,199 @@ PWR             equ $06
         sta S7
     jmp main
 
-    INCLUDE "music.asm"        
+    INCLUDE "music.asm"
+
+MazeB
+    dc.b 1,%00000000
+    dc.b 1,%00000000
+    dc.b 1,%00000000
+    dc.b 1,%00000000
+    dc.b 1,%00000000
+    dc.b 1,%00000000
+    dc.b 1,%00000000
+    dc.b 1,%00000000
+    dc.b 1,%00000001
+    dc.b 1,%00100100
+    dc.b 1,%10010010
+    dc.b 1,%01001001
+    dc.b 1,%00100100
+    dc.b 1,%10010010
+    dc.b 1,%01001001
+    dc.b 1,%00100100
+    dc.b 1,%10010000
+    dc.b 1,%01010010
+    dc.b 1,%01001001
+    dc.b 1,%00100100
+    dc.b 1,%10010001
+    dc.b 1,%01001001
+    dc.b 1,%00100100
+    dc.b 1,%10010010
+    dc.b 1,%01000100
+    dc.b 1,%00010010
+    dc.b 1,%01010001
+    dc.b 1,%00100100
+    dc.b 1,%10100010
+    dc.b 1,%10001001
+    dc.b 1,%00100101
+    dc.b 1,%00010010
+    dc.b 1,%01000001
+    dc.b 1,%01000100
+    dc.b 1,%10100010
+    dc.b 1,%01001001
+    dc.b 1,%01000101
+    dc.b 1,%00010010
+    dc.b 1,%01001010
+    dc.b 1,%00100101
+    dc.b 1,%00010000
+    dc.b 1,%01010010
+    dc.b 1,%01001001
+    dc.b 1,%00100100
+    dc.b 1,%10010010
+    dc.b 1,%01001001
+    dc.b 1,%00100100
+    dc.b 1,%10010010
+    dc.b 1,%00100000
+    dc.b 1,%10100010
+    dc.b 1,%01010001
+    dc.b 1,%01000100
+    dc.b 1,%10010010
+    dc.b 1,%01001001
+    dc.b 1,%01000101
+    dc.b 1,%00010010
+    dc.b 1,%10001000
+    dc.b 1,%00101001
+    dc.b 1,%00100100
+    dc.b 1,%01010010
+    dc.b 1,%01001000
+    dc.b 1,%10100100
+    dc.b 1,%10010001
+    dc.b 1,%01001001
+    dc.b 1,%00100010
+    dc.b 1,%00001001
+    dc.b 1,%00100101
+    dc.b 1,%00010010
+    dc.b 1,%01001010
+    dc.b 1,%00101000
+    dc.b 1,%10010010
+    dc.b 1,%01010001
+    dc.b 1,%00100100
+    dc.b 1,%10000000
+    dc.b 1,%00000001
+    dc.b 1,%01000100
+    dc.b 1,%00000000
+    dc.b 1,%00000000
+    dc.b 1,%00000000
+    dc.b 1,%00010100
+    dc.b 1,%01000000
+    dc.b 1,%00000000
+    dc.b 1,%10010010
+    dc.b 1,%01010001
+    dc.b 1,%00000100
+    dc.b 1,%10010010
+    dc.b 1,%01001001
+    dc.b 1,%00000101
+    dc.b 1,%00010010
+    dc.b 1,%01001000
+    dc.b 1,%00000000
+    dc.b 1,%00000100
+    dc.b 1,%00000001
+    dc.b 1,%00000000
+    dc.b 1,%00000000
+    dc.b 1,%01000000
+    dc.b 1,%01000000
+    dc.b 1,%00000000
+    dc.b 1,%00001001
+    dc.b 1,%00100101
+    dc.b 1,%00010000
+    dc.b 1,%01001001
+    dc.b 1,%00100100
+    dc.b 1,%10010000
+    dc.b 1,%01010001
+    dc.b 1,%00100100
+    dc.b 1,%10000000
+    dc.b 1,%00000001
+    dc.b 1,%01000100
+    dc.b 1,%00000000
+    dc.b 1,%00000000
+    dc.b 1,%00000000
+    dc.b 1,%00010100
+    dc.b 1,%01000000
+    dc.b 1,%00000000
+    dc.b 1,%10010010
+    dc.b 1,%01010001
+    dc.b 1,%01000100
+    dc.b 1,%10010010
+    dc.b 1,%01001001
+    dc.b 1,%01000101
+    dc.b 1,%00010010
+    dc.b 1,%01001000
+    dc.b 1,%00101001
+    dc.b 1,%00100100
+    dc.b 1,%10010010
+    dc.b 1,%01001000
+    dc.b 1,%10100100
+    dc.b 1,%10010010
+    dc.b 1,%01001001
+    dc.b 1,%00100010
+    dc.b 1,%00001010
+    dc.b 1,%00100101
+    dc.b 1,%00010010
+    dc.b 1,%01001010
+    dc.b 1,%00101000
+    dc.b 1,%10010010
+    dc.b 1,%01010001
+    dc.b 1,%00101000
+    dc.b 1,%10000010
+    dc.b 1,%10010001
+    dc.b 1,%01001001
+    dc.b 1,%00100100
+    dc.b 1,%10010010
+    dc.b 1,%01001001
+    dc.b 1,%00100100
+    dc.b 1,%01010010
+    dc.b 1,%00100000
+    dc.b 1,%10010100
+    dc.b 1,%01010001
+    dc.b 1,%01000100
+    dc.b 1,%10010010
+    dc.b 1,%01001001
+    dc.b 1,%01000101
+    dc.b 1,%00010100
+    dc.b 1,%01001000
+    dc.b 1,%00101001
+    dc.b 1,%00100010
+    dc.b 1,%10010010
+    dc.b 1,%01000101
+    dc.b 1,%00100100
+    dc.b 1,%10001010
+    dc.b 1,%01001000
+    dc.b 1,%10000010
+    dc.b 1,%10001001
+    dc.b 1,%00100100
+    dc.b 1,%10010010
+    dc.b 1,%10001010
+    dc.b 1,%00100100
+    dc.b 1,%10010010
+    dc.b 1,%01001010
+    dc.b 1,%00100000
+    dc.b 1,%10100100
+    dc.b 1,%10010010
+    dc.b 1,%01001001
+    dc.b 1,%00100100
+    dc.b 1,%10010010
+    dc.b 1,%01001001
+    dc.b 1,%00100100
+    dc.b 1,%10001000
+    dc.b 1,%00100100
+    dc.b 1,%10010010
+    dc.b 1,%01001001
+    dc.b 1,%00100100
+    dc.b 1,%10010010
+    dc.b 1,%01001001
+    dc.b 1,%00100100
+    dc.b 1,%1001001
+
+
 ;;; screen map for maze
 Maze1
     HEX  20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20
@@ -978,7 +1180,10 @@ copychar    SUBROUTINE
     sta VICSCRN
 
     rts
-
+;;; 
+;;; Create the maze
+;;; 
+#if 1
 mkmaze SUBROUTINE
     store16 Maze1,W2
     store16 screen,W3
@@ -991,6 +1196,63 @@ mkmaze SUBROUTINE
     store16 clrram,W3
     jsr movedown
     rts
+#else
+mkmaze SUBROUTINE
+        ldy #0
+        store16 MazeB,W1
+        store16 screen,W2
+        jmp .begin              ;
+.fetch_byte
+        brk
+        inc16 W1
+.begin        
+        ldy #0                  ;8 bit counter to 0
+        lda (W1),Y              ;load compressed byte
+        pha                     ;push on stack
+
+        ldx #0                  ;3 bit counter to 0
+        stx S1                  ;3 bit accumulator start at 0
+.loop        
+        pla                     ;pull compressed byte 
+        asl                     ;strip off leading bit
+        pha                     ;push back on stack
+        lda S1                  ;load 3 bit accumulator
+        rol                     ;rotate in the new bit
+        sta S1                  ;save 3 bit accumulator
+        inx                     ;increment 3 bit counter
+        cpx #3                  ;have we read all three bits?
+        beq .process_code       ;yes, process the compressed code
+.continue        
+        iny                     ;increment the 8 bit counter
+        cpy #8                  ;have we process 8 bits?
+        beq .fetch_byte         ;yes, fetch the next byte
+        jmp .loop               ;no, read another bit
+
+.process_code
+        tya
+        pha
+        jsr process_code
+        pla
+        tay
+        inc16 W2
+        jmp .continue
+        
+process_code SUBROUTINE
+        tya
+        pha
+        lda S1                  ;pull 3 bit code
+        beq .space
+        cmp #%010
+        beq .dot
+.dot
+        lda #DOT
+        sta (W2),Y
+        rts
+.space
+        lda #$20
+        sta (W2),Y
+        rts
+#endif        
 ; Move memory down
 ;
 ; W2 = source start address
@@ -1169,7 +1431,9 @@ Divide22 SUBROUTINE
         rts
         
 
-;;; W1 contains dividen ( word )
+;;; W1 contains dividend ( word )
+;;; A contains remainder on exit
+;;; S1 contains result up to 5 bits of precision
 Divide22_16 SUBROUTINE
         lda #$00
         sta S1      ;Init the result variable
