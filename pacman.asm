@@ -377,7 +377,7 @@ PWR             equ $06
     INCLUDE "music.asm"
 
 MazeB
-    dc.b %00000000
+    dc.b %00100100
     dc.b %00000000
     dc.b %00000000
     dc.b %00000000
@@ -1185,7 +1185,7 @@ copychar    SUBROUTINE
     lda VICSCRN
     and #$f0
     ora #$0f                    ;char ram pointer is lower 4 bits
-    sta VICSCRN
+;    sta VICSCRN
 
     rts
 ;;; 
@@ -1206,29 +1206,25 @@ mkmaze SUBROUTINE
     rts
 #else
 mkmaze SUBROUTINE
+        
         store16 MazeB,W1
         store16 screen,W2
         jmp .begin              ;
 .fetch_byte
-        pla                     ;discard old byte
         inc16 W1                ;move pointer forward
-        cmp16Im W1,MazeX
+        cmp16Im W1,MazeB+66
         bne .begin
         brk
 .begin        
         ldy #0                  ;8 bit counter to 0
         lda (W1),Y              ;load compressed byte
-        pha                     ;push on stack
+        sta S2                  ;save working byte
 
         ldx #0                  ;3 bit counter to 0
         stx S1                  ;3 bit accumulator start at 0
-.loop        
-        pla                     ;pull compressed byte 
-        asl                     ;strip off leading bit
-        pha                     ;push back on stack
-        lda S1                  ;load 3 bit accumulator
-        rol                     ;rotate in the new bit
-        sta S1                  ;save 3 bit accumulator
+.loop
+        asl S2                  ;strip off leading bit
+        rol S1                  ;rotate in the new bit
         inx                     ;increment 3 bit counter
         cpx #3                  ;have we read all three bits?
         beq .process_code       ;yes, process the compressed code
@@ -1236,17 +1232,18 @@ mkmaze SUBROUTINE
         iny                     ;increment the 8 bit counter
         cpy #8                  ;have we process 8 bits?
         beq .fetch_byte         ;yes, fetch the next byte
-        jmp .loop               ;no, read another bit
+        bne .loop               ;no, read another bit
 
 .process_code
-        tya
+        tya                     ;save Y
         pha
         ldy #0
-        jsr process_code
-        sta (W2),Y
-        pla
+        jsr process_code        ;dcode the char
+        sta (W2),Y              ;store decoded char to screen
+        sty S1                  ;reset 3  bit accumulator to 0
+        pla                     ;restore Y
         tay
-        inc16 W2
+        inc16 W2                ;increment screen pos pointer
         jmp .continue
         
 process_code SUBROUTINE
@@ -1256,6 +1253,7 @@ process_code SUBROUTINE
         beq .dot
         cmp #%001
         beq .wall
+        lda #$20
         rts
 .wall
         lda #MW
