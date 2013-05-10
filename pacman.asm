@@ -47,6 +47,7 @@ chrst           equ $9003        ; font map pointer
 ;mychars         equ $1400        ; my font map
 mychars         equ $1c00        
 charcnt         equ $800
+zeroDigit       equ 48 | $80     ;zero digit character
 
 BLACK        equ 0
 WHITE        equ 1
@@ -72,28 +73,27 @@ SPRITES      equ 3             ;count of sprites in system (1 based)
 ;;; W prefix vars are WORD width
 ;;; S or byte, short for 'scratch'
 W1              equ 0
-W1_l            equ 0
-W1_h            equ 1
 W2              equ 2
-W2_l            equ 2
-ppW2_h            equ 3        
-SPRITEIDX       equ 4           ;sprite index for main loop
-S4              equ 5
+W3              equ 4        ; 16 bit work 3
 W4              equ 6           ;2 byte work var
-W3              equ $12        ; 16 bit work 3
-S1              equ $14        ; 1 byte scratch reg
-S2              equ $15        ; 1 byte scratch reg
-CSPRTFRM        equ $16        ; number of frames in the currently processing sprite
-PACFRAMEN       equ $18        ; byte: index of pac frame
-PACFRAMED       equ $19        ;pacframe dir
-NXTSPRTSRC      equ $1a        ;when moving a sprite, the next 'set' of source bitmaps
+S0              equ 7        
+S1              equ 8        ; 1 byte scratch reg
+S2              equ 9        ; 1 byte scratch reg
+S3              equ 10
+S4              equ 11
+SPRITEIDX       equ 15        ;sprite index for main loop
+CSPRTFRM        equ 16        ; number of frames in the currently processing sprite
+PACFRAMEN       equ 18        ; byte: index of pac frame
+PACFRAMED       equ 19        ;pacframe dir
+NXTSPRTSRC      equ 20        ;when moving a sprite, the next 'set' of source bitmaps
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
 S6              equ $31        
-W5              equ $32
 S7              equ $43
+W5              equ $32
 W6              equ $44
-S3              equ $46
+PACROW          equ $47         ;current pacman row
+PACCOL          equ $48         ;current pacman column
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
 NOTCOPY         equ $fd      
@@ -297,7 +297,8 @@ PWR             equ $06
         ADC #0             ;... and any propagated carry bit
         STA [{2}]+1        ;... and store the result    clc
     endm
-;; subtract 16 bit numbers
+        
+;;; subtract 8 bit {3} from 16 bit number {1}, output in {2}
     mac subxx
         SEC
         LDA [{1}]+0
@@ -319,7 +320,7 @@ PWR             equ $06
         sbc {2}+1
         sta {1}+1
         ENDM
-        
+
 ;;; find the character font address of the tile
 ;;; underneath a sprite
 ;;; on entry: A = tile in question
@@ -976,7 +977,10 @@ drwsprt1 SUBROUTINE
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
-l        store16 #399,W1
+        lda #255
+        jsr DisplayNum
+        brk
+;        store16 #399,W1
 ;        jsr Divide22_16
 ;        brk
         ;; lda #21
@@ -1131,7 +1135,7 @@ loadch SUBROUTINE
 copychar    SUBROUTINE
     store16 chrom1 ,W2
     store16 mychars,W3
-    store16 charcnt,W1_l
+    store16 charcnt,W1
 
     jsr movedown
 
@@ -1221,7 +1225,7 @@ process_code SUBROUTINE
 ;
 movedown SUBROUTINE
         LDY #0
-        LDX W1_h
+        LDX W1+1
         BEQ md2
 md1
         LDA ( W2 ),Y ; move a page at a time
@@ -1233,7 +1237,7 @@ md1
         DEX
         BNE md1
 md2
-        LDX W1_l
+        LDX W1
         BEQ md4
 md3
         LDA ( W2 ),Y ; move the remaining bytes
@@ -1360,6 +1364,91 @@ Ghost SUBROUTINE
 
         rts
 
+	;;  pseudo logic for ghosts
+	;; if at intersection
+	;; determine possible moves positions
+	;; noting that you can't ever reverse direction
+	;; calculate distance to pacman-target-tile for each possible move
+	;; pick minimum distance
+	;; make move
+	;; return true if charcter in A is a wall
+IsWall SUBROUTINE
+        cmp #MW
+        rts
+;;; display a number in A on screen
+;;; bit 7 on will call to reverse characters
+DisplayNum SUBROUTINE
+        sta S3
+        lda #zeroDigit
+        sta S1
+        sta S2
+        
+        lda S3
+.hundreds
+        sta S3
+        sec
+        sbc #100
+        bcc .tens
+        inc S1
+        jmp .hundreds
+.tens
+        lda S3
+tensloop:
+        sta S3
+        sec
+        sbc #10
+        bcc ones
+        inc S2
+        jmp tensloop
+ones:
+        lda #zeroDigit
+        clc
+        adc S3
+        sta S3
+        ;; ones is now in S4
+        lda S1
+        sta screen
+        lda S2
+        sta screen+1
+        lda S3
+        sta screen+2
+        rts
+;;; X ghost to check
+PossibleMoves SUBROUTINE
+        move16x Sprite_loc,W1
+        jsr Divide22_16         ;find ghost row/column
+        subxx W1,W2,#23         ;normalize W2 to upper left of 9 point square
+        
+        ldy #1                  ;check up
+        lda (W2),Y
+        jsr IsWall
+        pha                     ;push column
+        lda S1
+        sec
+        sbc PACROW
+        sta S2                  ;distance to pacman Y
+        pla                     ;pull column
+        sec
+        sbc PACCOL
+        sta S3                  ;distance to pacman X
+        beq .left
+.left        
+        ldy #22
+        lda (W2),Y
+        jsr IsWall
+        beq .right
+.right        
+        ldy #24
+        lda (W2),Y
+        jsr IsWall
+        beq .down
+.down        
+        ldy #46
+        lda (W2),Y
+        beq .nomove
+.nomove        
+        rts
+        
 GhostAI SUBROUTINE
         move16 Sprite_loc2,W1
         
@@ -1368,6 +1457,8 @@ GhostAI SUBROUTINE
 ;;; W1 contains dividend ( word )
 ;;; A contains remainder on exit
 ;;; S1 contains result up to 5 bits of precision
+;;; this, in the context of the game screen
+;;; S1 is the row, and A is the column
 Divide22_16 SUBROUTINE
         lda #$00
         sta S1      ;Init the result variable
