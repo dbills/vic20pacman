@@ -1138,7 +1138,7 @@ copychar    SUBROUTINE
     lda VICSCRN
     and #$f0
     ora #$0f                    ;char ram pointer is lower 4 bits
-;    sta VICSCRN
+    sta VICSCRN
 
     rts
 ;;; 
@@ -1157,7 +1157,7 @@ mkmaze SUBROUTINE
         inc16 W1                ;move pointer forward
         cmp16Im W1,MazeX
         bne .begin
-        brk
+        rts
 .begin        
         ldy #0                  ;8 bit counter to 0
         lda (W1),Y              ;load compressed byte
@@ -1168,14 +1168,15 @@ mkmaze SUBROUTINE
         rol S1                  ;rotate in the new bit
         inx                     ;increment 3 bit counter
         cpx #3                  ;have we read all three bits?
-        beq .process_code       ;yes, process the compressed code
-.continue        
+        bne .continue           ;no, keep reading
+        jsr process_code0       ;yes, process the compressed code
+.continue                       
         iny                     ;increment the 8 bit counter
         cpy #8                  ;have we process 8 bits?
         beq .fetch_byte         ;yes, fetch the next byte
         bne .loop               ;no, read another bit
 
-.process_code
+process_code0 SUBROUTINE
         tya                     ;save Y
         pha
         ldy #0
@@ -1189,7 +1190,7 @@ mkmaze SUBROUTINE
         tay
         inc16 W2                ;increment screen pos pointer
         inc16 W3
-        jmp .continue
+        rts
         
 process_code SUBROUTINE
         lda S1                  ;pull 3 bit code
@@ -1363,32 +1364,6 @@ GhostAI SUBROUTINE
         move16 Sprite_loc2,W1
         
         rts
-
-Divisor equ 22
-Divide22 SUBROUTINE
-      pha
-      lda #$00
-      sta S1      ;Init the res varialbe (needed because we're doing less than 8 shifts)
-      pla
-      cmp #[Divisor*8]
-      bcc .1
-      sbc #[Divisor*8]
-.1     rol S1
-      cmp #[Divisor*4]
-      bcc .2 
-      sbc #[Divisor*4]
-.2     rol S1
-      cmp #[Divisor*2]
-      bcc .3 
-      sbc #[Divisor*2]
-.3     rol S1
-      cmp #[Divisor]
-      bcc .4 
-      sbc #[Divisor]
-.4     rol S1      ;A = remainder, Res = quotient
-        
-        rts
-        
 
 ;;; W1 contains dividend ( word )
 ;;; A contains remainder on exit
@@ -2189,7 +2164,9 @@ rotatehighbyte:
 done:
         sta W5
         rts
-
+;;; BEGIN custom character set
+;    org mychars                 ;
+;        dc.b $ff
 ;;; scratch text for debugging thoughts
 ;; 0 @
 ;; 1 a
