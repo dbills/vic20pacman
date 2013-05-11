@@ -83,6 +83,7 @@ S3              equ 10
 S4              equ 11
 DIV22_WORK      equ 12          ;word
 ;;;                 13
+DIV22_RSLT      equ 14          ;div22 result
 SPRITEIDX       equ 15        ;sprite index for main loop
 CSPRTFRM        equ 16        ; number of frames in the currently processing sprite
 PACFRAMEN       equ 18        ; byte: index of pac frame
@@ -90,7 +91,9 @@ PACFRAMED       equ 19        ;pacframe dir
 NXTSPRTSRC      equ 20        ;when moving a sprite, the next 'set' of source bitmaps
 DSPL_1          equ 21        ;used by DisplayNum routine
 DSPL_2          equ 22
-DSPL_3          equ 23        
+DSPL_3          equ 23
+GHOST_DIST      equ 24          ;best distance for current ghost AI calcs
+GHOST_DIR       equ 25          ;best move matching GHOST_DIST
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
 S6              equ $31        
@@ -1477,14 +1480,28 @@ ones:
         lda #PURPLE
         sta clrram,X
         rts
+;;; update {1} with min of A or {1} store Y, which is the considered 'move'
+;;; in {2} if it was the best move so far
+        MAC UpdateMinDist
+        cmp {1}
+        bpl .done
+        sta {1}                  ;update min
+        lda SPRT_LOCATOR
+        sta {2}
+.done        
+        ENDM
 ;;; 
-;;; S1 ghost row
-;;; S0 ghost column
+;;; DIV22_RSLT ghost row
+;;; W1 ghost column
+;;; W2 ORG tile of 'source' sprite to use in distance calculation
+;;; Y = offset from W2
 ;;; output:
 ;;; S2: Y dist
 ;;; S3: X dist
 CalcDistance SUBROUTINE
-        lda S1
+        sub16Im W1,screen       ;w1 = offset from screen start, input to divide
+        jsr Divide22_16         ;calc row/column by division
+        lda DIV22_RSLT
         sec
         sbc PACROW
         sta S2                  ;distance to pacman Y
@@ -1494,30 +1511,71 @@ CalcDistance SUBROUTINE
         ;; add row + columns
         clc
         adc S2
+
+        UpdateMinDist GHOST_DIST,GHOST_DIR
         rts
-;;; update {1} with min of A or {1} store Y, which is the considered 'move'
-;;; in {2} if it was the best move so far
-        MAC UpdateMinDist
-        cmp {1}
-        bpl .done
-        sta {1}                  ;update min
-        sty {2}
-.done        
+        ;; figure out the ORG offset of a 9x9 tile for a sprite
+        ;; depending on it's current orientation ( horiz, or vertical )
+        ;; X sprite
+        MAC OrgOffsetByDir
+        lda #1
+        cmp Sprite_dir,X
+        beq .done
+        lda #22                 ;it's vertical then
+.done
         ENDM
 ;;; X ghost to check
-;;; locals: S3 current min distance
+;;; locals: S3,S4,S0 current min distance
 PossibleMoves SUBROUTINE
+        lda $ff
+        sta GHOST_DIST                  ;initialize least distance to a big number
+        sta GHOST_DIR                  ;initialize best move to an invalid move
+        
+        lda Sprite_offset,X     ;save sprite offset
+        sta Sprite_offset2,X
+
+        lda #24
+        sta SPRT_LOCATOR
+        ;; check if we can go right
+        jsr changehoriz
+        bcs .checkleft
+        ;; we could go right
+        move16x Sprite_loc2,W1
+        jsr CalcDistance
+
+        lda Sprite_offset2,X                  ;restore sprite offset
+        sta Sprite_offset,X
+        move16xx Sprite_loc,Sprite_loc2
+        lda Sprite_dir,X
+        sta Sprite_dir2,X
+.checkleft
+        lda #22
+        sta SPRT_LOCATOR
+        ;; check if we can go right
+        jsr changehoriz
+        bcs .done
+        ;; we could go left
+        move16x Sprite_loc2,W1
+        jsr CalcDistance
+
+        lda Sprite_offset2,X                  ;restore sprite offset
+        sta Sprite_offset,X
+        move16xx Sprite_loc,Sprite_loc2
+        lda Sprite_dir,X
+        sta Sprite_dir2,X
+.done
+        rts
+#if 0        
+        ;; calculate W2: the sprite ORG tile
+        move16x Sprite_loc,W1   ;
+        OrgOffsetByDir          ;figure out org offset
+        sta S3                  ;
+        subxx W1,W2,S3          ;normalize W2 to upper left 
+
         lda $ff
         sta S3                  ;initialize least distance to a big number
         sta S4                  ;initialize best move to an invalid move
-        
-        move16x Sprite_loc,W1
-        subxx W1,W2,#23         ;normalize W2 to upper left of 9 point square
-        sub16Im W1,screen       ;w1 = screen offset, input to divide
-        jsr Divide22_16         ;find ghost row/column
-        ;; S1 now has row
-        lda W1
-        sta S0                  ;S0 has column
+
         ldy #1                  ;check up
         lda (W2),Y
         jsr IsWall
@@ -1547,6 +1605,7 @@ PossibleMoves SUBROUTINE
         jsr CalcDistance
         UpdateMinDist S3,S4
 .nomove
+#endif        
         rts
         
 GhostAI SUBROUTINE
@@ -1584,8 +1643,11 @@ GhostAI SUBROUTINE
 ;;; this, in the context of the game screen
 ;;; S1 is the row, and A is the column
 Divide22_16 SUBROUTINE
+        txa
+        pha
+        
         lda #$00
-        sta S1      ;Init the result variable
+        sta DIV22_RSLT      ;Init the result variable
         ldx #0
 .loop
         move16x Div22Table,DIV22_WORK
@@ -1593,12 +1655,16 @@ Divide22_16 SUBROUTINE
         bcc .1
         sub16 W1,DIV22_WORK
 .1
-        rol S1
+        rol DIV22_RSLT
         inx
         cpx #5
         beq .done
         bne .loop
 .done
+
+        pla
+        tax
+        
         rts
         
 
@@ -2184,9 +2250,11 @@ scroll_up SUBROUTINE
 
 ;;; change orientation to horizontal
 ;;; X sprite to attempt change on
-;;; S1 direction to change to ( 22=left 24=right)
+;;; SPRT_LOCATOR direction to change to ( 22=left 24=right)
 ;;; S2 offset from W2 of erase tile
 ;;; output: sprite_loc2 contains new head position if successful
+;;; 
+;;; destruction S2,S3,W2,W1
 ;;; -------------------------------------------------------
 ;; let L,H be left tile and right tile of pacman, let O be the origin
 ;; start                   start
