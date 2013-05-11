@@ -1401,6 +1401,16 @@ Ghost SUBROUTINE
         beq .down
         cmp #9
         beq .up
+        cmp #17
+        beq .left
+        cmp #18
+        beq .right
+        jmp .continue
+.left
+        scroll_left
+        jmp .continue
+.right
+        scroll_right
         jmp .continue
 .up
         jsr scroll_up
@@ -1483,21 +1493,11 @@ ones:
         lda #PURPLE
         sta clrram,X
         rts
-;;; update {1} with min of A or {1} store Y, which is the considered 'move'
-;;; in {2} if it was the best move so far
-        MAC UpdateMinDist
-        cmp {1}
-        bpl .done
-        sta {1}                  ;update min
-        lda SPRT_LOCATOR
-        sta {2}
-.done        
-        ENDM
         ;; display result from division routine in upper left
         ;; col,row
         ;; or remainder,result
         MAC Display2
-        pha
+        pha                     ;save A
         txa
         pha
         
@@ -1512,7 +1512,7 @@ ones:
         pla
         tax
 
-        pla
+        pla                     ;restore A
 
         ENDM
         ;; abs of number in A
@@ -1521,6 +1521,16 @@ ones:
         eor #$ff
         clc
         adc #1
+.done        
+        ENDM
+;;; update {1} with min of A or {1} store Y, which is the considered 'move'
+;;; in {2} if it was the best move so far
+        MAC UpdateMinDist
+        cmp {1}
+        bpl .done
+        sta {1}                  ;update min
+        lda SPRT_LOCATOR
+        sta {2}
 .done        
         ENDM
 ;;; 
@@ -1538,21 +1548,33 @@ CalcDistance SUBROUTINE
         lda DIV22_RSLT
         sec
         sbc PACROW
-        Abs
+        Abs                     ;absolute value of A
         sta S2                  ;distance to pacman Y
         lda W1                  ;load ghost column
         sec
         sbc PACCOL              ;subtract pac column
-        Abs
-        sta S3
+        Abs                     ;absolute value of A
+        sta S3                  ;todo: not needed
         
-        Display2 S3,S2
         ;; add row + columns
         lda S3
         clc
         adc S2
-
+        sta S2                  ;todo: not needed
+        
+        Display2 S2,S2
+        
         UpdateMinDist GHOST_DIST,GHOST_DIR
+        rts
+;;; restore some damaged properties of a ghost sprite
+;;; after doing the AI calcs
+RestoreSprite SUBROUTINE
+        lda Sprite_offset2,X                  ;restore sprite offset
+        sta Sprite_offset,X
+        move16xx Sprite_loc,Sprite_loc2
+        lda Sprite_dir,X
+        sta Sprite_dir2,X
+        
         rts
         ;; figure out the ORG offset of a 9x9 tile for a sprite
         ;; depending on it's current orientation ( horiz, or vertical )
@@ -1567,7 +1589,7 @@ CalcDistance SUBROUTINE
 ;;; X ghost to check
 ;;; locals: S3,S4,S0 current min distance
 PossibleMoves SUBROUTINE
-        lda #$ff
+        lda #$80
         sta GHOST_DIST                  ;initialize least distance to a big number
         sta GHOST_DIR                  ;initialize best move to an invalid move
 
@@ -1582,29 +1604,39 @@ PossibleMoves SUBROUTINE
         ;; we could go right
         move16x Sprite_loc2,W1
         jsr CalcDistance
-
-        lda Sprite_offset2,X                  ;restore sprite offset
-        sta Sprite_offset,X
-        move16xx Sprite_loc,Sprite_loc2
-        lda Sprite_dir,X
-        sta Sprite_dir2,X
+        jsr RestoreSprite
 .checkleft
         lda #22
         sta SPRT_LOCATOR
         ;; check if we can go right
         jsr changehoriz
+        bcs .checkup
+        ;; we could go left
+        move16x Sprite_loc2,W1
+        jsr CalcDistance
+        jsr RestoreSprite
+.checkup
+        lda #1
+        sta S1
+        sta SPRT_LOCATOR
+        ;; check if we can go right
+        jsr changevert
+        bcs .checkdown
+        ;; we could go left
+        move16x Sprite_loc2,W1
+        jsr CalcDistance
+        jsr RestoreSprite
+.checkdown
+        lda #45
+        sta S1
+        sta SPRT_LOCATOR
+        ;; check if we can go right
+        jsr changevert
         bcs .done
         ;; we could go left
         move16x Sprite_loc2,W1
         jsr CalcDistance
-
-        lda Sprite_offset2,X                  ;restore sprite offset
-        sta Sprite_offset,X
-        move16xx Sprite_loc,Sprite_loc2
-        lda Sprite_dir,X
-        sta Sprite_dir2,X
-        lda #5
-;        sta GHOST_DIST
+        jsr RestoreSprite
 .done
         rts
 #if 0        
