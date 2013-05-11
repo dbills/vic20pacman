@@ -119,6 +119,12 @@ SCRL_VAL        equ $49
 LASTJOY         equ $4a
 LASTJOYDIR      equ $4b         ;last joy reading that had a switch thrown
 MOVEMADE        equ $4c         ;true if last pacman move was successful
+#if 0        
+SAVE_OFFSET     equ $ab
+SAVE_OFFSET2    equ $ac
+SAVE_DIR        equ $ad
+SAVE_DIR2       equ $ae
+#endif        
 VV              equ $02         ;testing, voice 2
 ;;
 ;; misc constants
@@ -166,6 +172,34 @@ PWR             equ $06
         lda {1}
         cmp {2}
 .done        
+        ENDM
+;;; display a single byte {3} at offset {2} on top line prefixed by char {1}
+        MAC Display1
+        pha                     ;save A
+        txa
+        pha
+        
+        lda #[{1}-"A"+1 | $80]
+        ldx #{2}
+        sta screen,X
+        lda clrram,X
+        and #%00000111
+        clc
+        adc #1
+        cmp #8
+        bne .storeit
+        lda #WHITE
+.storeit        
+        sta clrram,X
+        inx
+        lda {2}
+        jsr DisplayNum
+
+        pla
+        tax
+
+        pla                     ;restore A
+
         ENDM
 ; write a 16 bit address to a destination
 ; indexed by X
@@ -853,11 +887,15 @@ Sprite_frame    dc.b 0,0,0,0,0              ;animation frame of sprite as offset
 ;;; sprite chargen ram ( where to put the source bmap )
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8),0,0    
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16),0,0
-Sprite_motion   dc.b 1,1,$EA,1,1        
+Sprite_motion   dc.b 1,1,$EA,1,1 ;1,-1 or 22,-22
 Sprite_dir      dc.b 1,1,22,1,1  ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,22,1,1  ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
+SAVE_OFFSET     dc.b 0
+SAVE_OFFSET2    dc.b 0
+SAVE_DIR        dc.b 0
+SAVE_DIR2       dc.b 0
 ;;; 
 ;;; division table for division by 22
 Div22Table dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
@@ -1322,7 +1360,33 @@ WaitFire SUBROUTINE
         sta SCRL_VAL
         jsr scroll_horiz
         ENDM
-
+#if 1
+;;; move ghost in its currently indicated direction
+MoveGhost SUBROUTINE
+        lda Sprite_motion,X
+        cmp #01
+        beq .right
+        cmp #22
+        beq .down
+        cmp #-1
+        beq .left
+        cmp #-22
+        beq .up
+        brk
+.left
+        scroll_left
+        rts
+.right
+        scroll_right
+        rts
+.up
+        jsr scroll_up
+        rts
+.down
+        jsr scroll_down
+        rts
+#endif
+;;; move sprite side to side
         MAC moveS
         lda Sprite_motion,X
         cmp #01
@@ -1346,6 +1410,7 @@ WaitFire SUBROUTINE
 .done        
         ENDM
         
+;;; move sprite up and down
         MAC moveD
         lda Sprite_motion,X
         cmp #22
@@ -1371,6 +1436,32 @@ WaitFire SUBROUTINE
         sta Sprite_motion,X
 .done
         ENDM
+#if 1    
+;;; move a ghost using the keyboard
+GhostAsPlayer SUBROUTINE
+        lda 197
+        cmp #26
+        beq .down
+        cmp #9
+        beq .up
+        cmp #17
+        beq .left
+        cmp #18
+        beq .right
+        rts
+.left
+        scroll_left
+        rts
+.right
+        scroll_right
+        rts
+.up
+        jsr scroll_up
+        rts
+.down
+        jsr scroll_down         ;
+        rts
+#endif        
 ;;; animate a ghost back and forth
 Ghost SUBROUTINE
 ;        rts
@@ -1386,39 +1477,14 @@ Ghost SUBROUTINE
         jsr GhostAI
         jsr PossibleMoves
 
-        ldx #10
-        lda GHOST_DIST
-        jsr DisplayNum
-        lda GHOST_DIR
-        ldx #14
-        jsr DisplayNum
+        Display1 "G",17,GHOST_DIR
         
         pla
         tax
 
-        lda 197
-        cmp #26
-        beq .down
-        cmp #9
-        beq .up
-        cmp #17
-        beq .left
-        cmp #18
-        beq .right
-        jmp .continue
-.left
-        scroll_left
-        jmp .continue
-.right
-        scroll_right
-        jmp .continue
-.up
-        jsr scroll_up
-        jmp .continue
-.down
-        jsr scroll_down         ;
-        jmp .continue
-;        moveD                   ;
+        jsr GhostAsPlayer
+;        jsr MoveGhost
+
 .continue
         ;; animate the ghost by changing frames
         lda #1                  ;add one to current frame
@@ -1448,7 +1514,7 @@ IsWall SUBROUTINE
         rts
 ;;; display a number in A on screen
 ;;; bit 7 on will call to reverse characters
-;;; {1} location to display
+;;; X location to display
 DisplayNum SUBROUTINE
         sta DSPL_3
         lda #zeroDigit
@@ -1562,19 +1628,34 @@ CalcDistance SUBROUTINE
         adc S2
         sta S2                  ;todo: not needed
         
-        Display2 S2,S2
+;        Display2 S2,S2
         
         UpdateMinDist GHOST_DIST,GHOST_DIR
+        rts
+;;; save some properties of a sprite that will be damaged
+;;; during AI calcs
+SaveSprite SUBROUTINE
+        lda Sprite_offset2,X
+        sta SAVE_OFFSET2
+        lda Sprite_offset,X
+        sta SAVE_OFFSET
+        lda Sprite_dir,X
+        sta SAVE_DIR
+        lda Sprite_dir2,X
+        sta SAVE_DIR2
         rts
 ;;; restore some damaged properties of a ghost sprite
 ;;; after doing the AI calcs
 RestoreSprite SUBROUTINE
-        lda Sprite_offset2,X                  ;restore sprite offset
+        lda SAVE_OFFSET2                  ;restore sprite offset
+        sta Sprite_offset2,X
+        lda SAVE_OFFSET
         sta Sprite_offset,X
         move16xx Sprite_loc,Sprite_loc2
-        lda Sprite_dir,X
+        lda SAVE_DIR
+        sta Sprite_dir,X
+        lda SAVE_DIR2
         sta Sprite_dir2,X
-        
         rts
         ;; figure out the ORG offset of a 9x9 tile for a sprite
         ;; depending on it's current orientation ( horiz, or vertical )
@@ -1593,18 +1674,21 @@ PossibleMoves SUBROUTINE
         sta GHOST_DIST                  ;initialize least distance to a big number
         sta GHOST_DIR                  ;initialize best move to an invalid move
 
-        lda Sprite_offset,X     ;save sprite offset
-        sta Sprite_offset2,X
+;        lda Sprite_offset,X     ;save sprite offset
+;        sta Sprite_offset2,X
+        jsr SaveSprite
 
         lda #24
         sta SPRT_LOCATOR
         ;; check if we can go right
-        jsr changehoriz
+;        jsr changehoriz
+        scroll_right
         bcs .checkleft
         ;; we could go right
         move16x Sprite_loc2,W1
         jsr CalcDistance
         jsr RestoreSprite
+        Display1 "R",1,S3
 .checkleft
         lda #22
         sta SPRT_LOCATOR
@@ -1615,28 +1699,30 @@ PossibleMoves SUBROUTINE
         move16x Sprite_loc2,W1
         jsr CalcDistance
         jsr RestoreSprite
+        Display1 "L",5,S3
 .checkup
         lda #1
         sta S1
         sta SPRT_LOCATOR
-        ;; check if we can go right
+        ;; check if we can go up
         jsr changevert
         bcs .checkdown
-        ;; we could go left
+        ;; we could go up
         move16x Sprite_loc2,W1
         jsr CalcDistance
         jsr RestoreSprite
+        Display1 "U",9,S3
 .checkdown
         lda #45
         sta S1
         sta SPRT_LOCATOR
-        ;; check if we can go right
         jsr changevert
         bcs .done
-        ;; we could go left
+        ;; we could go down
         move16x Sprite_loc2,W1
         jsr CalcDistance
         jsr RestoreSprite
+        Display1 "D",13,S3
 .done
         rts
 #if 0        
@@ -2163,9 +2249,6 @@ blitd SUBROUTINE
         ;; so we can or it into this new image
         ldx S2                 
         lda Sprite_sback,X      ;input to mergeTile
-        bne .00
-        brk
-.00        
 
         mergeTile               ;font address of underneath tile into W4
 
