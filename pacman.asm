@@ -100,7 +100,9 @@ PACROW          equ 28         ;current pacman row
         ;; 47 48 are toast?
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
-S6              equ $31        
+S6              equ $31
+GHOST_COL       equ $33        
+GHOST_ROW       equ $34        
 S7              equ $43
 W5              equ $32
 W6              equ $44
@@ -1612,21 +1614,21 @@ CalcDistance SUBROUTINE
         jsr Divide22_16         ;calc row/column by division
 ;        DisplayDivResults
         lda DIV22_RSLT
+        sta GHOST_ROW
         sec
         sbc PACROW
         Abs                     ;absolute value of A
         sta S2                  ;distance to pacman Y
         lda W1                  ;load ghost column
+        sta GHOST_COL
         sec
         sbc PACCOL              ;subtract pac column
         Abs                     ;absolute value of A
-        sta S3                  ;todo: not needed
-        
+
         ;; add row + columns
-        lda S3
         clc
         adc S2
-        sta S2                  ;todo: not needed
+        sta S3
         
 ;        Display2 S2,S2
         
