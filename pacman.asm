@@ -81,11 +81,16 @@ S1              equ 8        ; 1 byte scratch reg
 S2              equ 9        ; 1 byte scratch reg
 S3              equ 10
 S4              equ 11
+DIV22_WORK      equ 12          ;word
+;;;                 13
 SPRITEIDX       equ 15        ;sprite index for main loop
 CSPRTFRM        equ 16        ; number of frames in the currently processing sprite
 PACFRAMEN       equ 18        ; byte: index of pac frame
 PACFRAMED       equ 19        ;pacframe dir
 NXTSPRTSRC      equ 20        ;when moving a sprite, the next 'set' of source bitmaps
+DSPL_1          equ 21        ;used by DisplayNum routine
+DSPL_2          equ 22
+DSPL_3          equ 23        
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
 S6              equ $31        
@@ -987,6 +992,7 @@ drwsprt1 SUBROUTINE
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
+;        move16x Div22Table,DIV22_WORK
 #if 0        
         ;; lda #255
         ;; jsr DisplayNum
@@ -1362,14 +1368,42 @@ WaitFire SUBROUTINE
         ENDM
 ;;; animate a ghost back and forth
 Ghost SUBROUTINE
-        jsr GhostAI
+;        rts
         
         ldx #1                  ;work with sprite 0
 ;        scroll_right
         moveS
         ldx #2
-        moveD
 
+        txa
+        pha
+        
+        jsr GhostAI
+        jsr PossibleMoves
+        ldx #10
+        lda S3
+        jsr DisplayNum
+        lda S4
+        ldx #14
+        jsr DisplayNum
+        
+        pla
+        tax
+
+        lda 197
+        cmp #26
+        beq .down
+        cmp #9
+        beq .up
+        jmp .continue
+.up
+        jsr scroll_up
+        jmp .continue
+.down
+        jsr scroll_down         ;
+        jmp .continue
+;        moveD                   ;
+.continue
         ;; animate the ghost by changing frames
         lda #1                  ;add one to current frame
         clc
@@ -1400,44 +1434,44 @@ IsWall SUBROUTINE
 ;;; bit 7 on will call to reverse characters
 ;;; {1} location to display
 DisplayNum SUBROUTINE
-        sta S3
+        sta DSPL_3
         lda #zeroDigit
-        sta S1
-        sta S2
+        sta DSPL_1
+        sta DSPL_2
         
-        lda S3
+        lda DSPL_3
 .hundreds
-        sta S3
+        sta DSPL_3
         sec
         sbc #100
         bcc .tens
-        inc S1
+        inc DSPL_1
         jmp .hundreds
 .tens
-        lda S3
+        lda DSPL_3
 tensloop:
-        sta S3
+        sta DSPL_3
         sec
         sbc #10
         bcc ones
-        inc S2
+        inc DSPL_2
         jmp tensloop
 ones:
         lda #zeroDigit
         clc
-        adc S3
-        sta S3
+        adc DSPL_3
+        sta DSPL_3
         ;; ones is now in S4
-        lda S1
+        lda DSPL_1
         sta screen,X
         lda #PURPLE
         sta clrram,X
-        lda S2
+        lda DSPL_2
         inx
         sta screen,x
         lda #PURPLE
         sta clrram,X
-        lda S3
+        lda DSPL_3
         inx
         sta screen,x
         lda #PURPLE
@@ -1454,9 +1488,9 @@ CalcDistance SUBROUTINE
         sec
         sbc PACROW
         sta S2                  ;distance to pacman Y
-        lda S0
+        lda S0                  ;load ghost column
         sec
-        sbc PACCOL
+        sbc PACCOL              ;subtract pac column
         ;; add row + columns
         clc
         adc S2
@@ -1479,16 +1513,16 @@ PossibleMoves SUBROUTINE
         
         move16x Sprite_loc,W1
         subxx W1,W2,#23         ;normalize W2 to upper left of 9 point square
+        sub16Im W1,screen       ;w1 = screen offset, input to divide
         jsr Divide22_16         ;find ghost row/column
         ;; S1 now has row
         lda W1
         sta S0                  ;S0 has column
-        
         ldy #1                  ;check up
         lda (W2),Y
         jsr IsWall
         beq .left
-        jsr CalcDistance
+        jsr CalcDistance        ;if result of calc is < S3 then update S3
         UpdateMinDist S3,S4                  ;update least distance score
 .left        
         ldy #22
@@ -1502,25 +1536,26 @@ PossibleMoves SUBROUTINE
         lda (W2),Y
         jsr IsWall
         beq .down
+        brk
         jsr CalcDistance
         UpdateMinDist S3,S4
 .down        
-        ldy #46
+        ldy #45
         lda (W2),Y
         jsr IsWall
         beq .nomove
         jsr CalcDistance
         UpdateMinDist S3,S4
 .nomove
-        ldx #0
-        lda S3
-        jsr DisplayNum 
-        ldx #4
-        lda S4
-        jsr DisplayNum 
         rts
         
 GhostAI SUBROUTINE
+        txa
+        pha
+        ;; lda 197
+        ;; ldx #0
+        ;; jsr DisplayNum
+        ;; rts
         ;; caculate pacman row,col so ghosts can use
         ;; in their AI routines
         move16 Sprite_loc,W1
@@ -1537,6 +1572,10 @@ GhostAI SUBROUTINE
         ldx #4
         lda PACROW
         jsr DisplayNum
+
+        pla
+        tax
+        
         rts
 
 ;;; W1 contains dividend ( word )
@@ -1549,10 +1588,10 @@ Divide22_16 SUBROUTINE
         sta S1      ;Init the result variable
         ldx #0
 .loop
-        move16x Div22Table,W2
-        cmp16 W1,W2
+        move16x Div22Table,DIV22_WORK
+        cmp16 W1,DIV22_WORK
         bcc .1
-        sub16 W1,W2
+        sub16 W1,DIV22_WORK
 .1
         rol S1
         inx
@@ -1588,7 +1627,7 @@ Pacman SUBROUTINE
         sta LASTJOY
         
 .process        
-        sta screen+1            ; debug char on screen
+;        sta screen+1            ; debug char on screen
         tay                   
         and #JOYL               ; check for left bit
         beq .left
@@ -2023,7 +2062,8 @@ blitd SUBROUTINE
 
 .done
         rts
-#if _debug        
+;#if _debug
+#if 0        
 ;;; X sprite background tiles to dump
 dumpBack SUBROUTINE
         txa
@@ -2067,14 +2107,14 @@ blith SUBROUTINE
         pha
         tay
         lda Sprite_sback,X      ;input to mergeTile
-        sta screen+9,Y
+;        sta screen+9,Y
         mergeTile               ;font address of underneath tile into W4
         move16 W4,W6
 
         pla
         tay
         lda Sprite_sback2,X
-        sta screen+$A,Y
+;        sta screen+$A,Y
         mergeTile
 #endif        
         ldy #7
@@ -2363,3 +2403,5 @@ done:
 ;; inx
 ;; lda $100,X
 ;; sta $0
+;;; for debugging, here are the keyboard read codes for the ghost control
+;;; up 9,down 26,left 17,right 18 a,d w,x
