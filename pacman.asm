@@ -321,6 +321,16 @@ PWR             equ $06
         sta {1}+1
         ENDM
 
+        MAC sub16Im
+        sec
+        lda {1}
+        sbc #[{2}]&$ff
+        sta {1}
+        lda {1}+1
+        sbc #[{2}]>>8
+        sta {1}+1
+        ENDM
+
 ;;; find the character font address of the tile
 ;;; underneath a sprite
 ;;; on entry: A = tile in question
@@ -851,7 +861,7 @@ render_sprite SUBROUTINE
         brk
 .ok
 #endif
-        jsr dumpBack2
+;        jsr dumpBack2
         move16x Sprite_src,W1   ;bitmap source -> W1
         lda Sprite_frame,X
         asl                     ;mul by 8
@@ -977,16 +987,24 @@ drwsprt1 SUBROUTINE
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
-        lda #255
+#if 0        
+        ;; lda #255
+        ;; jsr DisplayNum
+        ;; brk
+        store16 screen+22*5+8,W1
+        sub16Im W1,screen
+        jsr Divide22_16
+        brk
+        ldx #0
+        jsr DisplayNum
+        ldx #4
+        lda S1
         jsr DisplayNum
         brk
-;        store16 #399,W1
-;        jsr Divide22_16
-;        brk
         ;; lda #21
         ;; jsr Stuff
         ;; brk
-        
+#endif        
         lda #pacframes
         sta PACFRAMEN
         lda #1
@@ -1087,7 +1105,7 @@ main SUBROUTINE
         bmi .player
         ldx SPRITEIDX
 #if _debug        
-        jsr dumpBack
+;        jsr dumpBack
 #endif        
         jsr drwsprt1             ;draw in new location
         jmp .drawloop
@@ -1344,6 +1362,8 @@ WaitFire SUBROUTINE
         ENDM
 ;;; animate a ghost back and forth
 Ghost SUBROUTINE
+        jsr GhostAI
+        
         ldx #1                  ;work with sprite 0
 ;        scroll_right
         moveS
@@ -1362,6 +1382,7 @@ Ghost SUBROUTINE
         lda #0                  ;reset frame counter
         sta Sprite_frame,X
 
+        ;; calll the ghost AI routine
         rts
 
 	;;  pseudo logic for ghosts
@@ -1377,6 +1398,7 @@ IsWall SUBROUTINE
         rts
 ;;; display a number in A on screen
 ;;; bit 7 on will call to reverse characters
+;;; {1} location to display
 DisplayNum SUBROUTINE
         sta S3
         lda #zeroDigit
@@ -1407,55 +1429,118 @@ ones:
         sta S3
         ;; ones is now in S4
         lda S1
-        sta screen
+        sta screen,X
+        lda #PURPLE
+        sta clrram,X
         lda S2
-        sta screen+1
+        inx
+        sta screen,x
+        lda #PURPLE
+        sta clrram,X
         lda S3
-        sta screen+2
+        inx
+        sta screen,x
+        lda #PURPLE
+        sta clrram,X
         rts
-;;; X ghost to check
-PossibleMoves SUBROUTINE
-        move16x Sprite_loc,W1
-        jsr Divide22_16         ;find ghost row/column
-        subxx W1,W2,#23         ;normalize W2 to upper left of 9 point square
-        
-        ldy #1                  ;check up
-        lda (W2),Y
-        jsr IsWall
-        pha                     ;push column
+;;; 
+;;; S1 ghost row
+;;; S0 ghost column
+;;; output:
+;;; S2: Y dist
+;;; S3: X dist
+CalcDistance SUBROUTINE
         lda S1
         sec
         sbc PACROW
         sta S2                  ;distance to pacman Y
-        pla                     ;pull column
+        lda S0
         sec
         sbc PACCOL
-        sta S3                  ;distance to pacman X
+        ;; add row + columns
+        clc
+        adc S2
+        rts
+;;; update {1} with min of A or {1} store Y, which is the considered 'move'
+;;; in {2} if it was the best move so far
+        MAC UpdateMinDist
+        cmp {1}
+        bpl .done
+        sta {1}                  ;update min
+        sty {2}
+.done        
+        ENDM
+;;; X ghost to check
+;;; locals: S3 current min distance
+PossibleMoves SUBROUTINE
+        lda $ff
+        sta S3                  ;initialize least distance to a big number
+        sta S4                  ;initialize best move to an invalid move
+        
+        move16x Sprite_loc,W1
+        subxx W1,W2,#23         ;normalize W2 to upper left of 9 point square
+        jsr Divide22_16         ;find ghost row/column
+        ;; S1 now has row
+        lda W1
+        sta S0                  ;S0 has column
+        
+        ldy #1                  ;check up
+        lda (W2),Y
+        jsr IsWall
         beq .left
+        jsr CalcDistance
+        UpdateMinDist S3,S4                  ;update least distance score
 .left        
         ldy #22
         lda (W2),Y
         jsr IsWall
         beq .right
+        jsr CalcDistance
+        UpdateMinDist S3,S4
 .right        
         ldy #24
         lda (W2),Y
         jsr IsWall
         beq .down
+        jsr CalcDistance
+        UpdateMinDist S3,S4
 .down        
         ldy #46
         lda (W2),Y
+        jsr IsWall
         beq .nomove
-.nomove        
+        jsr CalcDistance
+        UpdateMinDist S3,S4
+.nomove
+        ldx #0
+        lda S3
+        jsr DisplayNum 
+        ldx #4
+        lda S4
+        jsr DisplayNum 
         rts
         
 GhostAI SUBROUTINE
-        move16 Sprite_loc2,W1
-        
+        ;; caculate pacman row,col so ghosts can use
+        ;; in their AI routines
+        move16 Sprite_loc,W1
+        sub16Im W1,screen
+        jsr Divide22_16
+        lda W1
+        sta PACCOL
+        lda S1
+        sta PACROW
+
+        ldx #0
+        lda PACCOL
+        jsr DisplayNum
+        ldx #4
+        lda PACROW
+        jsr DisplayNum
         rts
 
 ;;; W1 contains dividend ( word )
-;;; A contains remainder on exit
+;;; w1 contains remainder on exit
 ;;; S1 contains result up to 5 bits of precision
 ;;; this, in the context of the game screen
 ;;; S1 is the row, and A is the column
@@ -2271,3 +2356,10 @@ done:
 ;; 9 i
 ;; a jp
 ;; b k
+;;; example of accessing stack local variable passed C style
+;; lda #$ab
+;; pha
+;; tsx
+;; inx
+;; lda $100,X
+;; sta $0
