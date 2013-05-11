@@ -92,16 +92,18 @@ NXTSPRTSRC      equ 20        ;when moving a sprite, the next 'set' of source bi
 DSPL_1          equ 21        ;used by DisplayNum routine
 DSPL_2          equ 22
 DSPL_3          equ 23
-GHOST_DIST      equ 24          ;best distance for current ghost AI calcs
-GHOST_DIR       equ 25          ;best move matching GHOST_DIST
+GHOST_DIST      equ 24          ; $18 best distance for current ghost AI calcs
+GHOST_DIR       equ 25          ; $19 best move matching GHOST_DIST
+DIV22_REM       equ 26        
+PACCOL          equ 27         ;current pacman column
+PACROW          equ 28         ;current pacman row
+        ;; 47 48 are toast?
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
 S6              equ $31        
 S7              equ $43
 W5              equ $32
 W6              equ $44
-PACROW          equ $47         ;current pacman row
-PACCOL          equ $48         ;current pacman column
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
 NOTCOPY         equ $fd      
@@ -1383,10 +1385,11 @@ Ghost SUBROUTINE
         
         jsr GhostAI
         jsr PossibleMoves
+
         ldx #10
-        lda S3
+        lda GHOST_DIST
         jsr DisplayNum
-        lda S4
+        lda GHOST_DIR
         ldx #14
         jsr DisplayNum
         
@@ -1490,6 +1493,36 @@ ones:
         sta {2}
 .done        
         ENDM
+        ;; display result from division routine in upper left
+        ;; col,row
+        ;; or remainder,result
+        MAC Display2
+        pha
+        txa
+        pha
+        
+        ldx #4
+        lda {1}
+        jsr DisplayNum
+
+        lda {2}
+        ldx #0
+        jsr DisplayNum
+
+        pla
+        tax
+
+        pla
+
+        ENDM
+        ;; abs of number in A
+        MAC Abs
+        bpl .done
+        eor #$ff
+        clc
+        adc #1
+.done        
+        ENDM
 ;;; 
 ;;; DIV22_RSLT ghost row
 ;;; W1 ghost column
@@ -1501,14 +1534,21 @@ ones:
 CalcDistance SUBROUTINE
         sub16Im W1,screen       ;w1 = offset from screen start, input to divide
         jsr Divide22_16         ;calc row/column by division
+;        DisplayDivResults
         lda DIV22_RSLT
         sec
         sbc PACROW
+        Abs
         sta S2                  ;distance to pacman Y
-        lda S0                  ;load ghost column
+        lda W1                  ;load ghost column
         sec
         sbc PACCOL              ;subtract pac column
+        Abs
+        sta S3
+        
+        Display2 S3,S2
         ;; add row + columns
+        lda S3
         clc
         adc S2
 
@@ -1527,10 +1567,10 @@ CalcDistance SUBROUTINE
 ;;; X ghost to check
 ;;; locals: S3,S4,S0 current min distance
 PossibleMoves SUBROUTINE
-        lda $ff
+        lda #$ff
         sta GHOST_DIST                  ;initialize least distance to a big number
         sta GHOST_DIR                  ;initialize best move to an invalid move
-        
+
         lda Sprite_offset,X     ;save sprite offset
         sta Sprite_offset2,X
 
@@ -1563,6 +1603,8 @@ PossibleMoves SUBROUTINE
         move16xx Sprite_loc,Sprite_loc2
         lda Sprite_dir,X
         sta Sprite_dir2,X
+        lda #5
+;        sta GHOST_DIST
 .done
         rts
 #if 0        
@@ -1607,6 +1649,19 @@ PossibleMoves SUBROUTINE
 .nomove
 #endif        
         rts
+
+        MAC DisplayPacPos
+        txa
+        pha
+        ldx #0
+        lda PACCOL
+        jsr DisplayNum
+        ldx #4
+        lda PACROW
+        jsr DisplayNum
+        pla
+        tax
+        ENDM
         
 GhostAI SUBROUTINE
         txa
@@ -1622,15 +1677,10 @@ GhostAI SUBROUTINE
         jsr Divide22_16
         lda W1
         sta PACCOL
-        lda S1
+        lda DIV22_RSLT
         sta PACROW
 
-        ldx #0
-        lda PACCOL
-        jsr DisplayNum
-        ldx #4
-        lda PACROW
-        jsr DisplayNum
+;        DisplayPacPos
 
         pla
         tax
@@ -1639,9 +1689,10 @@ GhostAI SUBROUTINE
 
 ;;; W1 contains dividend ( word )
 ;;; w1 contains remainder on exit
-;;; S1 contains result up to 5 bits of precision
-;;; this, in the context of the game screen
-;;; S1 is the row, and A is the column
+;;; DIV22_RSLT contains result up to 5 bits of precision
+;;; 
+;;; in the context of the game screen
+;;; DIV22_RSLT is the row, and A is the column
 Divide22_16 SUBROUTINE
         txa
         pha
@@ -1661,10 +1712,9 @@ Divide22_16 SUBROUTINE
         beq .done
         bne .loop
 .done
-
         pla
         tax
-        
+
         rts
         
 
