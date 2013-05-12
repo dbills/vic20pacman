@@ -43,7 +43,10 @@ motionRight     equ 24           ;sprite locator code for right
 motionLeft      equ 22           ;sprite locator code for left
 motionUp        equ 1            ;sprite location code for up
 motionDown      equ 45           ;" for down
-
+tunnelRow       equ 11           ;row number that tunnel lives on
+tunnelRCol      equ 20           ;column to start warp to left side
+tunnelLCol      equ 1            ;column to start warp to right side
+        
 BLACK        equ 0
 WHITE        equ 1
 RED          equ 2
@@ -897,6 +900,7 @@ Sprite_dir      dc.b 1,1,22,1,1  ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,22,1,1  ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
+Sprite_color    dc.b #YELLOW,#RED,#CYAN,#PURPLE,#ORANGE        
 #IFNCONST
 SAVE_OFFSET     dc.b 0
 SAVE_OFFSET2    dc.b 0
@@ -974,9 +978,7 @@ erasesprt SUBROUTINE
         ldy Sprite_dir,X
         checkYDir
         lda Sprite_back2,X
-        bne .ok1
-        brk
-.ok1        
+
         sta (W1),Y              ;save char under right tile
 
         clc
@@ -1034,7 +1036,7 @@ drwsprt1 SUBROUTINE
         lda #clroffset          ;W1 now = color ram location
         adc W1+1
         sta W1+1
-        lda #YELLOW
+        lda Sprite_color,X
         ldy #0
         sta (W1),Y
         ldy Sprite_dir,X
@@ -1088,7 +1090,7 @@ main SUBROUTINE
 
     jmp .background
 .loop
-        ldx #125
+        ldx #25
 .iloop        
         lda VICRASTER           ;load raster line
         beq .2
@@ -1649,6 +1651,9 @@ CalcDistance SUBROUTINE
         move16x Sprite_loc,W2
         cmp16 W2,W1
         bne .cont
+        lda Sprite_dir,X
+        cmp Sprite_dir2,X
+        bne .cont
         rts
 .cont        
         sub16Im W1,screen       ;w1 = offset from screen start, input to divide
@@ -2184,7 +2189,24 @@ tail2tail SUBROUTINE
         sta Sprite_sback2,X
 .done
         rts
-
+;;; handle tunnel left side
+DecrementPos SUBROUTINE
+        cmp16Im W2,[tunnelRow*22]+tunnelLCol+$1e00
+        bne .done
+        store16 [tunnelRow*22]+tunnelRCol+$1e00,W2
+        rts
+.done
+        Dec16 W2
+        rts
+;;; handle tunnel right side
+IncrementPos SUBROUTINE
+        cmp16Im W2,[tunnelRow*22]+tunnelRCol+$1e00
+        bne .done
+        store16 [tunnelRow*22]+tunnelLCol+$1e00,W2
+        rts
+.done
+        Inc16 W2
+        rts
 scroll_horiz SUBROUTINE
 #if _debug        
         lda #0
@@ -2217,9 +2239,10 @@ scroll_horiz SUBROUTINE
         lda SCRL_VAL
         bmi .left
         ;; going right
-        lda #0
+        lda #0                  ;push potential new sprite offset
         pha
-        inc16 W2
+;        inc16 W2
+        jsr IncrementPos
         ldy #01       
         lda #MW
         cmp (W2),Y              ;check for wall at pos + 2
@@ -2231,7 +2254,8 @@ scroll_horiz SUBROUTINE
 .left
         lda #8
         pha
-        dec16 W2                ;check to the left for wall
+        jsr DecrementPos
+;        dec16 W2                ;check to the left for wall
         lda #MW
         ldy #0
         cmp (W2),Y
@@ -2675,6 +2699,7 @@ done:
 ;;; BEGIN custom character set
 ;    org mychars                 ;
 ;        dc.b $ff
+#if 0
 ;;; scratch text for debugging thoughts
 ;; 0 @
 ;; 1 a
@@ -2697,3 +2722,24 @@ done:
 ;; sta $0
 ;;; for debugging, here are the keyboard read codes for the ghost control
 ;;; up 9,down 26,left 17,right 18 a,d w,x
+why tile scrolling works
+we allow going to 8 or 0 which always allows to make it to the end of a tile set
+so if you are heading towards a wall, you will always be able to touch it
+
+I experimented with allowing pacman to cut corner by decreasing the number
+at which we allow the changevert or horz to operate, and it seems to work
+
+ghost AI
+
+        does the tile distance logic need to be aware of where pacman the sprite is
+        withing the tiles?
+        I'm using the same routines we scroll with, scroll_left or scroll_right
+        they will take care of knowing whether the move could take place
+        if you are at the end of a range or not
+
+        lets get the tunnel working
+        
+        
+        
+        
+#endif        
