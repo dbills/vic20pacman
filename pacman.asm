@@ -1522,8 +1522,8 @@ Ghost SUBROUTINE
         pla
         tax
 
-;        jsr GhostAsPlayer
-        jsr MoveGhost           ;
+        jsr GhostAsPlayer
+;        jsr MoveGhost           ;
 
 .continue
         ;; animate the ghost by changing frames
