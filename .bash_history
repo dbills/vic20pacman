@@ -1,1 +1,2 @@
 perl fubar
+./svic.bat 
