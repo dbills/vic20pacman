@@ -3,6 +3,7 @@
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 _debug    equ 1                 ; true for debugging
+focusGhost equ 2                ;ghost to print debugging for
 voice1    equ 36874             ; sound registers
 voice2    equ 36875
 voice3    equ 36876
@@ -172,7 +173,7 @@ HWALL           equ $07
 #else        
    mac checkYDir
    endm
-#endif        
+#endif
         MAC cmp16Im
         lda {1}
         cmp #[{2}] & $ff    ; load low byte
@@ -871,15 +872,16 @@ Sprite_sback    dc.b 0,0,0,0,0 ;current screen background ( might include some o
 Sprite_sback2   dc.b 0,0,0,0,0        
 Sprite_tile     dc.b PACL,GHL,GH1L,0,0         ;foreground char
 Sprite_src      dc.w PAC1,GHOST,GHOST,0,0       ;sprite source bitmap
-Sprite_frame    dc.b 0,0,0,0,0              ;animation frame of sprite as offset from _src
+Sprite_frame    dc.b 0,1,1,1,1 ;animation frame of sprite as offset from _src
 ;;; sprite chargen ram ( where to put the source bmap )
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8),0,0    
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16),0,0
 Sprite_motion   dc.b 1,motionRight,motionUp,1,1 ; see motion defines
-Sprite_dir      dc.b 1,1,22,1,1  ;sprite direction 1(horiz),22(vert)
-Sprite_dir2     dc.b 1,1,22,1,1  ;sprite direction 1(horiz),22(vert)    
+Sprite_dir      dc.b 1,1,22,1,1 ;sprite direction 1(horiz),22(vert)
+Sprite_dir2     dc.b 1,1,22,1,1 ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
+Sprite_speed    dc.b 10,10,10,10 ; 1/10ths 1 unit = 1 pixel per game loop
 Sprite_color    dc.b #YELLOW,#RED,#CYAN,#PURPLE,#ORANGE        
 #IFNCONST
 SAVE_OFFSET     dc.b 0
@@ -1062,7 +1064,7 @@ main SUBROUTINE
 
         jmp .background
 .loop
-        ldx #55
+        ldx #15
 .iloop        
         lda VICRASTER           ;load raster line
         beq .2
@@ -1464,21 +1466,25 @@ UpdateMotion SUBROUTINE
         lda #motionRight
         cmp Sprite_motion,X
         bne .store
+        brk
         rts
 .right
         lda #motionLeft
         cmp Sprite_motion,X
         bne .store
+        brk
         rts
 .up
         lda #motionDown
         cmp Sprite_motion,X
         bne .store
+        brk
         rts
 .down
         lda #motionUp
         cmp Sprite_motion,X
         bne .store
+        brk
         rts
 .store
         lda GHOST_DIR
@@ -1487,52 +1493,37 @@ UpdateMotion SUBROUTINE
         rts
 ;;; animate a ghost back and forth
 Ghost SUBROUTINE
-;        rts
-        
-        ldx #1                  ;work with sprite 0
-;        scroll_right
-        moveS
-        ldx #2
+        lda #SPRITES
+        sta SPRITEIDX
+.loop
+        dec SPRITEIDX
+        beq .loopend            ;pacman is sprite 0, so we leave
+        ldx SPRITEIDX
 
-        txa
-        pha
-        
         jsr GhostAI
         jsr PossibleMoves
-
+        cpx #focusGhost
+        bne .notfocus
         Display1 "G",17,GHOST_DIR
+.notfocus
         jsr UpdateMotion
          
-        pla
-        tax
-
 ;        jsr GhostAsPlayer
         jsr MoveGhost           ;
 
-.continue
         ;; animate the ghost by changing frames
-        lda #1                  ;add one to current frame
-        clc
-        adc Sprite_frame,X
-        sta Sprite_frame,X
-        cmp #2                  ;time to wrap around?
-        beq .reset
-        rts
+        dec Sprite_frame,X
+        bmi .reset                   ;time to wrap around?
+        bpl .loop
 .reset
-        lda #0                  ;reset frame counter
+        lda #1                  ;reset frame counter
         sta Sprite_frame,X
-
-        ;; calll the ghost AI routine
+        bpl .loop
+        
+.loopend
         rts
 
-	;;  pseudo logic for ghosts
-	;; if at intersection
-	;; determine possible moves positions
-	;; noting that you can't ever reverse direction
-	;; calculate distance to pacman-target-tile for each possible move
-	;; pick minimum distance
-	;; make move
-	;; return true if charcter in A is a wall
+;;; return true if charcter in A is a wall
 IsWall SUBROUTINE
         cmp #MW
         rts
@@ -1741,6 +1732,13 @@ RestoreSprite SUBROUTINE
         lda #22                 ;it's vertical then
 .done
         ENDM
+        ;; debug if this is the focus ghost
+        MAC IfFocus
+        cpx #focusGhost
+        bne .not
+        Display1 {1},{2},S3            ;
+.not        
+        ENDM
 ;;; X ghost to check
 ;;; locals: S3,S4,S0 current min distance
 PossibleMoves SUBROUTINE
@@ -1749,36 +1747,32 @@ PossibleMoves SUBROUTINE
         sta GHOST_DIR       ;initialize best move to an invalid move
 
         jsr SaveSprite
-
+.checkright
         ;; don't reverse
         lda #motionLeft       
         cmp Sprite_motion,X
         beq .checkleft
         ;; check if we can go right
-        lda #motionRight
-        sta SPRT_LOCATOR
         scroll_right            ;
         bcs .checkleft          ;
         ;; we could go right
         ldSprtTailPos Sprite_loc2,W1 ;correct
         jsr CalcDistance             ;
         jsr RestoreSprite            ;
-        Display1 "R",1,S3            ;
+        IfFocus "R",1                ;
 .checkleft
         ;; don't reverse
         lda #motionRight
         cmp Sprite_motion,X
         beq .checkup
         ;; check if we can go left
-        lda #motionLeft         ;
-        sta SPRT_LOCATOR        ;
         scroll_left             ;
         bcs .checkup
         ;; we could go left
         ldSprtHeadPos Sprite_loc2,W1 ;
         jsr CalcDistance             ;
         jsr RestoreSprite            ;
-        Display1 "L",5,S3            ;
+        IfFocus "L",5                ;
 .checkup                             ;
         ;; don't reverse
         lda #motionDown
@@ -1793,8 +1787,14 @@ PossibleMoves SUBROUTINE
         ldSprtHeadPos Sprite_loc2,W1 ;
         jsr CalcDistance             ;
         jsr RestoreSprite            ;
-        Display1 "U",9,S3            ;
+        IfFocus "U",9            ;
 .checkdown
+        ;; don't reverse
+        ;; don't reverse
+        lda #motionUp
+        cmp Sprite_motion,X
+        beq .done
+        ;; check if we can go down
         lda #motionDown         ;
         sta S1                  ;
         sta SPRT_LOCATOR        ;
@@ -1804,10 +1804,47 @@ PossibleMoves SUBROUTINE
         ldSprtTailPos Sprite_loc2,W1 ;correct
         jsr CalcDistance
         jsr RestoreSprite
-        Display1 "D",13,S3
+        IfFocus "D",13
 .done
         rts
+;;; ghost 1 AI
+Ghost1 SUBROUTINE
+        lda Sprite_dir
+        ldy Sprite_motion
+        cmp #1
+        beq .horiz
+        cmp #22
+        beq .vert
+        brk
+.horiz
+        lda #2
+        cpy #motionLeft
+        bne .right
+        sec
+        sbc PACCOL
+        sta PACCOL
+        rts
+.right
+        clc
+        adc PACCOL
+        sta PACCOL
+        rts
+.vert
+        lda #2
+        cpy #motionUp
+        bne .down
+        sec
+        adc PACROW
+        sta PACROW
+        rts
+.down
+        clc
+        adc PACROW
+        sta PACROW
+        rts
+        
 ;;; GHOST AI
+;;; calculates the target tile
 GhostAI SUBROUTINE
         txa                     ;save X
         pha
@@ -1821,11 +1858,12 @@ GhostAI SUBROUTINE
         lda DIV22_RSLT
         sta PACROW
 
-        ;; ldx #0                 ;
-        ;; TileToPixels PACCOL
-        ;; TiletoPixels PACROW
-;        Display1 "P",22,PACCOL
-;        DisplayPacPos
+        cpx #2                  ;ghost 1 AI
+        bne .done
+        jsr Ghost1
+        ;; adjust to pac + 2 as target tile
+        
+.done        
 
         pla                     ;restore X
         tax
@@ -1912,24 +1950,32 @@ Pacman SUBROUTINE
         rts
 .down
         store16 PAC1D,W3
+        lda #motionDown
+        sta Sprite_motion
         jsr scroll_down
         bcc .moveok
         bcs .uselast
         rts
 .right
-       store16 PAC1,W3    ;
+        store16 PAC1,W3    ;
+        lda #motionRight
+        sta Sprite_motion
         scroll_right
         bcc .moveok
         bcs .uselast
         rts
 .left
-       store16 PAC_L1,W3
+        store16 PAC_L1,W3
+        lda #motionLeft
+        sta Sprite_motion
         scroll_left
         bcc .moveok
         bcs .uselast
         rts
 .up
-       store16 PAC_UP1,W3
+        store16 PAC_UP1,W3
+        lda #motionUp
+        sta Sprite_motion
         jsr scroll_up
         bcc .moveok
         jmp .uselast
