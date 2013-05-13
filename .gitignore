@@ -101,6 +101,8 @@ publish
 _emacs
 #bash
 .bashrc
+.emacs-places
+.bash_history
 # dasm stuff
 *.lst
 *~
