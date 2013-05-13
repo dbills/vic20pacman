@@ -14,6 +14,7 @@ foreach(@LINES) {
             case "." { $output=$output."010" }
             case "*" { $output=$output."011" }
             case " " { $output=$output."000" }
+            case "=" { $output=$output."100" }
             else { die("huh?"); }
         }
     }
@@ -29,4 +30,4 @@ for($i=0;$i<length($output);$i++) {
     print substr($output,$i,1);
         
 }
-print "\n$output\n";
+#print "\n$output\n";

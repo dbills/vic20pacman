@@ -1,51 +1,52 @@
-    org $0400
-    processor 6502
+        org $0400
+        processor 6502
 _LOCAL_SAVEDIR equ 1
-_debug    equ 1            ; true for debugging
-voice1    equ 36874        ; sound registers
+;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
+_debug    equ 1                 ; true for debugging
+voice1    equ 36874             ; sound registers
 voice2    equ 36875
 voice3    equ 36876
 volume    equ 36878
 ;screen    equ $1000        ; screen ram
 screen    equ $1e00        
 ;clrram    equ $9400        ; color ram for screen
-clrram    equ $9600        ; color ram for screen
-clroffset equ $78          ;offset from screen to color ram
+clrram    equ $9600             ; color ram for screen
+clroffset equ $78               ;offset from screen to color ram
 
 VICRASTER equ $9004        
-VICSCRN   equ $9005               ;vic chip character generator pointer
+VICSCRN   equ $9005             ;vic chip character generator pointer
 VIA1DDR   equ $9113
-VIA2DDR   equ $9122          ; ?
+VIA2DDR   equ $9122             ; ?
 JOY0      equ $9111
-JOY0B     equ $9120          ; output register B VIA #2
-JOYUP     equ $4             ; joy up bit
-JOYDWN    equ $8             ; joy down
-JOYL      equ $10            ; joy left
-JOYT      equ $20            ; joy fire
-JOYR      equ $80            ; joy right bit
+JOY0B     equ $9120             ; output register B VIA #2
+JOYUP     equ $4                ; joy up bit
+JOYDWN    equ $8                ; joy down
+JOYL      equ $10               ; joy left
+JOYT      equ $20               ; joy fire
+JOYR      equ $80               ; joy right bit
 
-jiffyh    equ $a0          ; jiffy clock lsb - msb
+jiffyh    equ $a0               ; jiffy clock lsb - msb
 jiffym    equ $a1
 jiffyl    equ $a2
 
-chrom1    equ $8000        ; upper case character rom
-chrom2    equ $8400        ; upper case reversed
-chrom3    equ $8c00        ; upper lower reversed
-chrom4    equ $8800        ; upper lower
+chrom1    equ $8000             ; upper case character rom
+chrom2    equ $8400             ; upper case reversed
+chrom3    equ $8c00             ; upper lower reversed
+chrom4    equ $8800             ; upper lower
 
 ;; vic-I chip registers
-chrst           equ $9003        ; font map pointer
+chrst           equ $9003       ; font map pointer
 ;mychars         equ $1400        ; my font map
 mychars         equ $1c00        
 charcnt         equ $800
-zeroDigit       equ 48 | $80     ;zero digit character
-motionRight     equ 24           ;sprite locator code for right
-motionLeft      equ 22           ;sprite locator code for left
-motionUp        equ 1            ;sprite location code for up
-motionDown      equ 45           ;" for down
-tunnelRow       equ 11           ;row number that tunnel lives on
-tunnelRCol      equ 20           ;column to start warp to left side
-tunnelLCol      equ 1            ;column to start warp to right side
+zeroDigit       equ 48 | $80    ;zero digit character
+motionRight     equ 24          ;sprite locator code for right
+motionLeft      equ 22          ;sprite locator code for left
+motionUp        equ 1           ;sprite location code for up
+motionDown      equ 45          ;" for down
+tunnelRow       equ 11          ;row number that tunnel lives on
+tunnelRCol      equ 20          ;column to start warp to left side
+tunnelLCol      equ 1           ;column to start warp to right side
         
 BLACK        equ 0
 WHITE        equ 1
@@ -98,6 +99,9 @@ GHOST_DIR       equ 25          ; $19 best move matching GHOST_DIST
 DIV22_REM       equ 26        
 PACCOL          equ 27         ;current pacman column
 PACROW          equ 28         ;current pacman row
+;;; sprite position used by AI from most recent call to any of the
+;;; directional changing routines ( up,left etc )
+AI_SPRTPOS      equ 29         
         ;; 47 48 are toast?
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
@@ -112,7 +116,9 @@ W5              equ $32
 W6              equ $44
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
-NOTCOPY         equ $fd      
+NOTCOPY         equ $fd
+;;; used by the AI engine to indicate the worst possible choice
+noChoice        equ $7f
         
 ;;;offset for normalizing a 9x9 sprite movement block to the upper left block
 ;;; used by the sprite orientation changing routines
@@ -120,7 +126,7 @@ SPRT_LOCATOR    equ $47
 ;value that indicates end of smooth scrolling
 END_SCRL_VAL    equ $48
 ;;;amount to increase or decrease sprite offset
-;;; used by scroll_horiz
+;;; used as input by scroll_horiz
 SCRL_VAL        equ $49
 LASTJOY         equ $4a
 LASTJOYDIR      equ $4b         ;last joy reading that had a switch thrown
@@ -140,11 +146,14 @@ VV              equ $02         ;testing, voice 2
 PACL            equ $00            ; pacman char number
 
 GHL             equ $08            ; ghost char number
-GH1L            equ $0c
+GH1L            equ [GHL+4]
+GH2L            equ [GH1L+4]
+GH3L            equ [GH2L+4]    
 DOT             equ $04
 WALLCH          equ $05
 MW              equ $05            ;maze wall character
 PWR             equ $06
+HWALL           equ $07        
 ;
 ;
 ;------------------------------------
@@ -559,9 +568,9 @@ MazeB
     dc.b %00000000
     dc.b %01001001
     dc.b %00101000
-    dc.b %10100010
-    dc.b %01001001
+    dc.b %10100011
     dc.b %00100100
+    dc.b %10010000
     dc.b %10100010
     dc.b %10001001
     dc.b %00100100
@@ -639,15 +648,6 @@ pacframes  equ #4            ; total number of pacman animation frames ( 1 based
 ;;; define some 8x8 characters
 ;;; 
 #if 1
-WALL
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
 
 PAC1
     ds 1,%00111100
@@ -838,26 +838,6 @@ PAC2 ds 8,$01
 PAC3 ds 8,$01
 PAC4 ds 8,$01
 #endif
-
-PPWR
-    ds 1,0,
-    ds 1,24
-    ds 1,60
-    ds 1,60
-    ds 1,60
-    ds 1,60
-    ds 1,24
-    ds 1,0
-;;; the dot graphic that pacman eats
-PDOT
-    ds 1,0,
-    ds 1,0
-    ds 1,0
-    ds 1,24
-    ds 1,24
-    ds 1,0
-    ds 1,0
-    ds 1,0
 
 ;------------------------------------
 ;;;
@@ -1060,37 +1040,29 @@ main SUBROUTINE
         sta PACFRAMED
         lda #$ff
         sta LASTJOYDIR
-    cli                         ; enable interrupts so jiffy clock works
-    lda #8
-    sta 36879                   ; border and screen colors
-    lda #$0f                    ; max
-    sta volume                  ; turn up the volume
-    lda #0
-    sta $9113                   ; joy VIA to input
-    jsr copychar                ; copy our custom char set
-    store16 PDOT,W1             ; copy(dot,character[1]);
-    store16 mychars+[8*DOT] ,W2 ;
-    jsr loadch                  ;
-    store16 PPWR,W1             ; copy(power,charcters[2]);
-    store16 mychars+[8*PWR],W2  ;
-    jsr loadch                  ;
-    store16 WALL,W1
-    store16 mychars+[8*WALLCH],W2
-    jsr loadch
-    jsr mkmaze
+        cli                         ; enable interrupts so jiffy clock works
+        lda #8
+        sta 36879                   ; border and screen colors
+        lda #$0f                    ; max
+        sta volume                  ; turn up the volume
+        lda #0
+        sta $9113                   ; joy VIA to input
+        jsr copychar                ; copy our custom char set
 
-    ldx #1                      ; turn on voice track
-    store16x TrackBass,VoiceTrack_data
-    store16x TrackBass,VoiceTrack_st
-    ldx #2                      ; voice 3
-    store16x TrackHigh,VoiceTrack_data
-    store16x TrackHigh,VoiceTrack_st
-;    ldx #1
-;    store16x Track1,VoiceTrack_data    ; load track 1 on voice 2
+        jsr mkmaze
 
-    jmp .background
+        ldx #1                      ; turn on voice track
+        store16x TrackBass,VoiceTrack_data
+        store16x TrackBass,VoiceTrack_st
+        ldx #2                      ; voice 3
+        store16x TrackHigh,VoiceTrack_data
+        store16x TrackHigh,VoiceTrack_st
+                                ;    ldx #1
+                                ;    store16x Track1,VoiceTrack_data    ; load track 1 on voice 2
+
+        jmp .background
 .loop
-        ldx #25
+        ldx #55
 .iloop        
         lda VICRASTER           ;load raster line
         beq .2
@@ -1200,9 +1172,9 @@ loadch SUBROUTINE
 ;;;  copy the stock character set
 ;;;
 copychar    SUBROUTINE
-    store16 chrom1 ,W2
-    store16 mychars,W3
-    store16 charcnt,W1
+    store16 chrom1+[8*8],W2
+    store16 mychars+[8*8],W3
+    store16 charcnt-[8*8],W1
 
     jsr movedown
 
@@ -1270,7 +1242,19 @@ process_code SUBROUTINE
         beq .dot
         cmp #%001
         beq .wall
+        cmp #%100
+        beq .hwall              ;horizontal wall section
+        cmp #%011
+        beq .pdot
         lda #$20                ;default to space
+        rts
+.pdot
+        lda #PWR
+        ldx #WHITE
+        rts
+.hwall
+        lda #HWALL
+        ldx #BLUE
         rts
 .wall
         lda #MW                 ;wall character
@@ -1522,8 +1506,8 @@ Ghost SUBROUTINE
         pla
         tax
 
-        jsr GhostAsPlayer
-;        jsr MoveGhost           ;
+;        jsr GhostAsPlayer
+        jsr MoveGhost           ;
 
 .continue
         ;; animate the ghost by changing frames
@@ -1639,22 +1623,64 @@ ones:
         sta {2}
 .done        
         ENDM
+;;; load sprite head tile screen position pointer into {2}
+;;; X = sprite
+        MAC ldSprtHeadPos
+        move16x {1},{2}
+        endm
+        ;; you can pick loc or loc2
+        ;; load sprite's tail tile screen position pointer into word {2}
+        ;; e.g. ldSprtTailPos Sprite_loc,W1 
+        ;; e.g. ldSprtTailPos Sprite_loc2,W1 
+        mac ldSprtTailPos
+        move16x {1},{2}
+#if {1}=Sprite_loc
+        lda Sprite_dir,X
+#else 
+        lda Sprite_dir2,X
+#endif        
+        clc                     ;16 bit add the sprite_dir
+        adc {2}
+        sta {2}
+        lda {2}+1
+        adc #0
+        sta {2}+1
+        ENDM
+;;; convert tiles to pixels
+;;; X sprite to convert
+        MAC TileToPixels
+        lda {1}
+        ;; times 8
+        asl
+        asl
+        asl
+        ;; add pixels
+        sta {1}
+        lda Sprite_offset2,X
+        clc
+        adc {1}
+        sta {1}
+        ENDM
 ;;; 
-;;; DIV22_RSLT ghost row
 ;;; W1 candidate sprite position
 ;;; output:
 ;;; S2: Y dist
 ;;; S3: X dist
 CalcDistance SUBROUTINE
-        lda #0
-        sta S3
+#if 0        
+        ;; if the head tile location is different
+        ;; or the direction is different , then we'll
+        ;; consider this move
         move16x Sprite_loc,W2
         cmp16 W2,W1
         bne .cont
         lda Sprite_dir,X
         cmp Sprite_dir2,X
         bne .cont
+        lda #noChoice
         rts
+;        jmp .update
+#endif        
 .cont        
         sub16Im W1,screen       ;w1 = offset from screen start, input to divide
         jsr Divide22_16         ;calc row/column by division
@@ -1674,10 +1700,10 @@ CalcDistance SUBROUTINE
         ;; add row + columns
         clc
         adc S2
+.update        
         sta S3
         
 ;        Display2 S2,S2
-        
         UpdateMinDist GHOST_DIST,GHOST_DIR
         rts
 ;;; save some properties of a sprite that will be damaged
@@ -1718,127 +1744,76 @@ RestoreSprite SUBROUTINE
 ;;; X ghost to check
 ;;; locals: S3,S4,S0 current min distance
 PossibleMoves SUBROUTINE
-        lda #$7f
-        sta GHOST_DIST                  ;initialize least distance to a big number
-        sta GHOST_DIR                  ;initialize best move to an invalid move
+        lda #noChoice
+        sta GHOST_DIST      ;initialize least distance to a big number
+        sta GHOST_DIR       ;initialize best move to an invalid move
 
         jsr SaveSprite
 
+        ;; don't reverse
+        lda #motionLeft       
+        cmp Sprite_motion,X
+        beq .checkleft
+        ;; check if we can go right
         lda #motionRight
         sta SPRT_LOCATOR
-        ;; check if we can go right
-;        jsr changehoriz
-        scroll_right
-        bcs .checkleft
+        scroll_right            ;
+        bcs .checkleft          ;
         ;; we could go right
-        move16x Sprite_loc2,W1
-        jsr CalcDistance
-        jsr RestoreSprite
-        Display1 "R",1,S3
+        ldSprtTailPos Sprite_loc2,W1 ;correct
+        jsr CalcDistance             ;
+        jsr RestoreSprite            ;
+        Display1 "R",1,S3            ;
 .checkleft
-        lda #motionLeft
-        sta SPRT_LOCATOR
+        ;; don't reverse
+        lda #motionRight
+        cmp Sprite_motion,X
+        beq .checkup
         ;; check if we can go left
-        scroll_left
-;        jsr changehoriz
+        lda #motionLeft         ;
+        sta SPRT_LOCATOR        ;
+        scroll_left             ;
         bcs .checkup
         ;; we could go left
-        move16x Sprite_loc2,W1
-        jsr CalcDistance
-        jsr RestoreSprite
-        Display1 "L",5,S3
-.checkup
-        lda #motionUp
-        sta SPRT_LOCATOR
-        ;; check if we can go up
-;        jsr changevert
-        jsr scroll_up
-        bcs .checkdown
-        ;; we could go up
-        move16x Sprite_loc2,W1
-        jsr CalcDistance
-        jsr RestoreSprite
-        Display1 "U",9,S3
-.checkdown
+        ldSprtHeadPos Sprite_loc2,W1 ;
+        jsr CalcDistance             ;
+        jsr RestoreSprite            ;
+        Display1 "L",5,S3            ;
+.checkup                             ;
+        ;; don't reverse
         lda #motionDown
-        sta S1
-        sta SPRT_LOCATOR
-        jsr scroll_down
-;        jsr changevert
+        cmp Sprite_motion,X
+        beq .checkdown
+        ;; check if we can go up
+        lda #motionUp                ;
+        sta SPRT_LOCATOR             ;
+        jsr scroll_up           ;
+        bcs .checkdown          ;
+        ;; we could go up;
+        ldSprtHeadPos Sprite_loc2,W1 ;
+        jsr CalcDistance             ;
+        jsr RestoreSprite            ;
+        Display1 "U",9,S3            ;
+.checkdown
+        lda #motionDown         ;
+        sta S1                  ;
+        sta SPRT_LOCATOR        ;
+        jsr scroll_down         ;
         bcs .done
         ;; we could go down
-        move16x Sprite_loc2,W1
+        ldSprtTailPos Sprite_loc2,W1 ;correct
         jsr CalcDistance
         jsr RestoreSprite
         Display1 "D",13,S3
 .done
         rts
-#if 0        
-        ;; calculate W2: the sprite ORG tile
-        move16x Sprite_loc,W1   ;
-        OrgOffsetByDir          ;figure out org offset
-        sta S3                  ;
-        subxx W1,W2,S3          ;normalize W2 to upper left 
-
-        lda $ff
-        sta S3                  ;initialize least distance to a big number
-        sta S4                  ;initialize best move to an invalid move
-
-        ldy #1                  ;check up
-        lda (W2),Y
-        jsr IsWall
-        beq .left
-        jsr CalcDistance        ;if result of calc is < S3 then update S3
-        UpdateMinDist S3,S4                  ;update least distance score
-.left        
-        ldy #22
-        lda (W2),Y
-        jsr IsWall
-        beq .right
-        jsr CalcDistance
-        UpdateMinDist S3,S4
-.right        
-        ldy #24
-        lda (W2),Y
-        jsr IsWall
-        beq .down
-        brk
-        jsr CalcDistance
-        UpdateMinDist S3,S4
-.down        
-        ldy #45
-        lda (W2),Y
-        jsr IsWall
-        beq .nomove
-        jsr CalcDistance
-        UpdateMinDist S3,S4
-.nomove
-#endif        
-        rts
-
-        MAC DisplayPacPos
-        txa
-        pha
-        ldx #0
-        lda PACCOL
-        jsr DisplayNum
-        ldx #4
-        lda PACROW
-        jsr DisplayNum
-        pla
-        tax
-        ENDM
-        
+;;; GHOST AI
 GhostAI SUBROUTINE
-        txa
+        txa                     ;save X
         pha
-        ;; lda 197
-        ;; ldx #0
-        ;; jsr DisplayNum
-        ;; rts
         ;; caculate pacman row,col so ghosts can use
         ;; in their AI routines
-        move16 Sprite_loc,W1
+        move16 Sprite_loc2,W1
         sub16Im W1,screen
         jsr Divide22_16
         lda W1
@@ -1846,9 +1821,13 @@ GhostAI SUBROUTINE
         lda DIV22_RSLT
         sta PACROW
 
+        ;; ldx #0                 ;
+        ;; TileToPixels PACCOL
+        ;; TiletoPixels PACROW
+;        Display1 "P",22,PACCOL
 ;        DisplayPacPos
 
-        pla
+        pla                     ;restore X
         tax
         
         rts
@@ -1891,14 +1870,19 @@ Pacman SUBROUTINE
         ldx #0
         stx MOVEMADE
         readJoy
+#ifnconst _SLOWPAC        
         cmp LASTJOYDIR          ;same as last joystick reading
         beq .uselast            ;then use last reading
+#endif       
         and #$bc
         eor #$bc
         beq .uselast
         lda LASTJOY
         jmp .process
 .uselast
+#ifconst _SLOWPAC        
+        rts
+#endif        
         ldy MOVEMADE            ;if we made a move already then exit
         beq .cont
         rts
@@ -1981,26 +1965,6 @@ Animate SUBROUTINE
 ;        jmp .start
         rts
         
-        ;; load sprite head tile screen position pointer into {2}
-        ;; X = sprite
-        mac ldSprtHeadPos
-        move16x {1},{2}
-        endm
-        ;; load sprite's tail tile screen position opinter into {2}
-        mac ldSprtTailPos
-        move16x {1},{2}
-#if {1}=Sprite_loc
-        lda Sprite_dir,X
-#else 
-        lda Sprite_dir2,X
-#endif        
-        clc                     ;16 bit add the sprite_dir
-        adc {2}
-        sta {2}
-        lda {2}+1
-        adc #0
-        sta {2}+1
-        endm
         ;; load the currently rendered tile for a sprite
         ;; X sprite in question
         mac loadTile
@@ -2696,6 +2660,55 @@ rotatehighbyte:
 done:
         sta W5
         rts
+
+        org $1c00
+        ds 8*4,0
+        ;; regular eating dot
+        dc.b 0
+        dc.b 0
+        dc.b 0
+        dc.b 24
+        dc.b 24
+        dc.b 0
+        dc.b 0
+        dc.b 0
+        ;; maze wall
+        dc.b $ff
+        dc.b $ff
+        dc.b $ff
+        dc.b $ff
+        dc.b $ff
+        dc.b $ff
+        dc.b $ff
+        dc.b $ff
+        ;; power pellet
+        dc.b 0
+        dc.b 24
+        dc.b 60
+        dc.b 60
+        dc.b 60
+        dc.b 60
+        dc.b 24
+        dc.b 0
+        ;; horizontal wall
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %11111111
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %11111111
+        dc.b %00000000
+        dc.b %00000000
+        ;; vertical wall
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        
 ;;; BEGIN custom character set
 ;    org mychars                 ;
 ;        dc.b $ff
