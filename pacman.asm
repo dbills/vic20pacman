@@ -66,7 +66,7 @@ LTGREEN      equ 13
 LTBLUE       equ 14
 LTYELLOW     equ 15
 
-SPRITES      equ 3             ;count of sprites in system (1 based)
+SPRITES      equ 4             ;count of sprites in system (1 based)
 ;;
 ;;  Zero page constants
 ;;
@@ -102,7 +102,10 @@ PACCOL          equ 27         ;current pacman column
 PACROW          equ 28         ;current pacman row
 ;;; sprite position used by AI from most recent call to any of the
 ;;; directional changing routines ( up,left etc )
-AI_SPRTPOS      equ 29         
+GHOST_TGTCOL    equ 29
+GHOST_TGTROW    equ 30
+GHOST1_TGTCOL   equ 31
+GHOST1_TGTROW   equ 32        
         ;; 47 48 are toast?
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
@@ -180,6 +183,34 @@ HWALL           equ $07
         bne .done
         lda {1}+1
         cmp #{2} >> 8     ; load high byte
+.done        
+        ENDM
+        ;; make a number negative ( if it isn't ) by creating the 2's complement of it
+        ;; number in A
+        MAC MakeNegative
+        bmi .done
+        eor #$ff
+        clc
+        adc #1
+.done
+        ENDM
+        ;; abs of number in A
+        MAC Abs
+        bpl .done
+        eor #$ff
+        clc
+        adc #1
+.done        
+        ENDM
+        ;; double a signed byte
+        MAC DoubleSigned
+        bpl .positive
+        Abs                     ;absolute value
+        asl                     ;times 2
+        MakeNegative            ;make negative again
+        bmi .done
+.positive
+        asl                     ;simple times 2
 .done        
         ENDM
         ;; compare word in {1} with {2}
@@ -865,20 +896,20 @@ PAC4 ds 8,$01
 ;------------------------------------
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*2+8 ,screen+22*5+3,screen+22*7+5,0,0    ;new screen loc
+Sprite_loc2     DC.W screen+22*2+8 ,screen+22*5+3,screen+22*7+5,screen+22*12+5,0    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0 ;current screen background ( might include some other sprite tile that was laid down )
 Sprite_sback2   dc.b 0,0,0,0,0        
-Sprite_tile     dc.b PACL,GHL,GH1L,0,0         ;foreground char
-Sprite_src      dc.w PAC1,GHOST,GHOST,0,0       ;sprite source bitmap
+Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,0         ;foreground char
+Sprite_src      dc.w PAC1,GHOST,GHOST,GHOST,0       ;sprite source bitmap
 Sprite_frame    dc.b 0,1,1,1,1 ;animation frame of sprite as offset from _src
 ;;; sprite chargen ram ( where to put the source bmap )
-Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8),0,0    
-Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16),0,0
-Sprite_motion   dc.b 1,motionRight,motionUp,1,1 ; see motion defines
-Sprite_dir      dc.b 1,1,22,1,1 ;sprite direction 1(horiz),22(vert)
-Sprite_dir2     dc.b 1,1,22,1,1 ;sprite direction 1(horiz),22(vert)    
+Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8)     , mychars+(GH2L*8),0    
+Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16), mychars+(GH2L*8)+(16),0
+Sprite_motion   dc.b 1,motionRight,motionUp,motionDown,1 ; see motion defines
+Sprite_dir      dc.b 1,1,22,22,1 ;sprite direction 1(horiz),22(vert)
+Sprite_dir2     dc.b 1,1,22,22,1 ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_speed    dc.b 10,10,10,10 ; 1/10ths 1 unit = 1 pixel per game loop
@@ -1032,8 +1063,8 @@ drwsprt1 SUBROUTINE
 ;-------------------------------------------
 main SUBROUTINE
 #if 0
-        store16 $73,W1
-        jsr Divide22_16
+        lda #$FB
+        DoubleSigned
         brk
 #endif        
         lda #pacframes
@@ -1141,7 +1172,7 @@ main SUBROUTINE
         
 ;        jsr WaitFire
         jsr Pacman
-        jsr Ghost
+        jsr GhostAI
         lda #SPRITES            ;for i = sprites to 0, i--
         sta SPRITEIDX
 .playerloop
@@ -1492,15 +1523,36 @@ UpdateMotion SUBROUTINE
 .done        
         rts
 ;;; animate a ghost back and forth
-Ghost SUBROUTINE
+GhostAI SUBROUTINE
+        ;; caculate pacman row,col so ghosts can use
+        ;; in their AI routines
+        move16 Sprite_loc2,W1
+        sub16Im W1,screen
+        jsr Divide22_16
+        lda W1
+        sta PACCOL
+        lda DIV22_RSLT
+        sta PACROW
+
         lda #SPRITES
         sta SPRITEIDX
 .loop
         dec SPRITEIDX
         beq .loopend            ;pacman is sprite 0, so we leave
         ldx SPRITEIDX
-
-        jsr GhostAI
+        cpx #3
+        bne .ghost2
+        jsr Ghost3AI
+.ghost2
+        cpx #2
+        bne .ghost1
+        jsr Ghost2AI
+.ghost1        
+        cpx #1
+        beq .animate
+        bne .continue
+        jsr Ghost1AI
+.continue
         jsr PossibleMoves
         cpx #focusGhost
         bne .notfocus
@@ -1510,7 +1562,7 @@ Ghost SUBROUTINE
          
 ;        jsr GhostAsPlayer
         jsr MoveGhost           ;
-
+.animate
         ;; animate the ghost by changing frames
         dec Sprite_frame,X
         bmi .reset                   ;time to wrap around?
@@ -1596,14 +1648,6 @@ ones:
         pla                     ;restore A
 
         ENDM
-        ;; abs of number in A
-        MAC Abs
-        bpl .done
-        eor #$ff
-        clc
-        adc #1
-.done        
-        ENDM
 ;;; update {1} with min of A or {1} store Y, which is the considered 'move'
 ;;; in {2} if it was the best move so far
         MAC UpdateMinDist
@@ -1679,13 +1723,13 @@ CalcDistance SUBROUTINE
         lda DIV22_RSLT
         sta GHOST_ROW
         sec
-        sbc PACROW
+        sbc GHOST_TGTROW
         Abs                     ;absolute value of A
         sta S2                  ;distance to pacman Y
         lda W1                  ;load ghost column
         sta GHOST_COL
         sec
-        sbc PACCOL              ;subtract pac column
+        sbc GHOST_TGTCOL        ;subtract pac column
         Abs                     ;absolute value of A
 
         ;; add row + columns
@@ -1807,8 +1851,65 @@ PossibleMoves SUBROUTINE
         IfFocus "D",13
 .done
         rts
-;;; ghost 1 AI
-Ghost1 SUBROUTINE
+;;;
+;;; ghost 1
+;;; draws a vector from his initial target tile ( 2 in front of pacman )
+;;; to the current position  of blink
+;;; doubles the length of the vector
+;;; and uses the result as his target tile
+Ghost1AI SUBROUTINE
+        ;; our initial target it 2 in front of pacman
+        ;; we'll leverage ghost 3's work for us
+        ;; his target tile was 4 in front of pacman
+        txa                     ;save X
+        pha
+
+        ;; blinky ( ghost 2 ) calculated just before us, so we'll use
+        ;; his position
+        ldx #2
+        lda Sprite_loc2,W1
+        sub16Im W1,screen       ;w1 = offset from screen start, input to divide
+        jsr Divide22_16
+        lda DIV22_RSLT          ;blinky's row
+        sec
+        sbc GHOST1_TGTROW       ;blinky's row distance to our target tile
+        DoubleSigned            ;double it
+        sta GHOST1_TGTROW       ;save it
+        
+        lda W1                  ;blinky's column
+        sec
+        sbc GHOST1_TGTCOL  ;blinky's column distance to our target tile
+        DoubleSigned       ;double it
+        sta GHOST1_TGTCOL  ;save it
+
+        ;; GHOST_TGTCOL,ROW should contain a vector from blinky
+        ;; to our final target tile
+
+        lda DIV22_RSLT          ;blinky's row again
+        clc
+        adc GHOST_TGTROW        ;add vector Y
+        sta GHOST_TGTROW        ;save it
+        lda W1                  ;blinky's column again
+        clc
+        adc GHOST_TGTCOL        ;add vector X
+        sta GHOST_TGTCOL        ;save it
+
+        ;; should have our final target tile
+        
+        pla
+        txa                     ;restore X
+        rts
+;;; 
+;;; simple hot porsuit ( Blinky )
+;;; 
+Ghost2AI  SUBROUTINE
+        lda PACCOL
+        sta GHOST_TGTCOL
+        lda PACROW
+        sta GHOST_TGTROW
+        rts
+;;; ghost 1 AI ( Pinky )
+Ghost3AI SUBROUTINE
         lda Sprite_dir
         ldy Sprite_motion
         cmp #1
@@ -1816,59 +1917,43 @@ Ghost1 SUBROUTINE
         cmp #22
         beq .vert
         brk
-.horiz
-        lda #2
+.horiz                          ;pacman is horizontal
+        lda #PACROW
+        sta GHOST_TGTROW
+        sta GHOST1_TGTROW
+        lda #4
         cpy #motionLeft
         bne .right
         sec
         sbc PACCOL
-        sta PACCOL
+        sta GHOST_TGTCOL
+        sbc #2
+        sta GHOST1_TGTCOL
         rts
 .right
         clc
         adc PACCOL
-        sta PACCOL
+        sta GHOST_TGTCOL
         rts
-.vert
-        lda #2
+.vert                           ; pacman is going vertical
+        lda #PACCOL
+        sta GHOST_TGTCOL
+        sta GHOST1_TGTCOL
+        lda #4
         cpy #motionUp
         bne .down
         sec
         adc PACROW
-        sta PACROW
+        sta GHOST_TGTROW
+        sbc #2
+        sta GHOST1_TGTROW
         rts
 .down
         clc
         adc PACROW
-        sta PACROW
+        sta GHOST_TGTROW
         rts
-        
-;;; GHOST AI
-;;; calculates the target tile
-GhostAI SUBROUTINE
-        txa                     ;save X
-        pha
-        ;; caculate pacman row,col so ghosts can use
-        ;; in their AI routines
-        move16 Sprite_loc2,W1
-        sub16Im W1,screen
-        jsr Divide22_16
-        lda W1
-        sta PACCOL
-        lda DIV22_RSLT
-        sta PACROW
 
-        cpx #2                  ;ghost 1 AI
-        bne .done
-        jsr Ghost1
-        ;; adjust to pac + 2 as target tile
-        
-.done        
-
-        pla                     ;restore X
-        tax
-        
-        rts
 
 ;;; W1 contains dividend ( word )
 ;;; w1 contains remainder on exit
