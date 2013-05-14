@@ -3,7 +3,7 @@
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 _debug    equ 1                 ; true for debugging
-focusGhost equ 2                ;ghost to print debugging for
+focusGhost equ 1                ;ghost to print debugging for
 voice1    equ 36874             ; sound registers
 voice2    equ 36875
 voice3    equ 36876
@@ -913,7 +913,7 @@ Sprite_dir2     dc.b 1,1,22,22,1 ;sprite direction 1(horiz),22(vert)
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_speed    dc.b 10,10,10,10 ; 1/10ths 1 unit = 1 pixel per game loop
-Sprite_color    dc.b #YELLOW,#RED,#CYAN,#PURPLE,#ORANGE        
+Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#ORANGE        
 #IFNCONST
 SAVE_OFFSET     dc.b 0
 SAVE_OFFSET2    dc.b 0
@@ -1549,7 +1549,7 @@ GhostAI SUBROUTINE
         jsr Ghost2AI
 .ghost1        
         cpx #1
-        beq .animate
+;        beq .animate
         bne .continue
         jsr Ghost1AI
 .continue
@@ -1858,6 +1858,8 @@ PossibleMoves SUBROUTINE
 ;;; doubles the length of the vector
 ;;; and uses the result as his target tile
 Ghost1AI SUBROUTINE
+        jsr Ghost2AI
+        rts
         ;; our initial target it 2 in front of pacman
         ;; we'll leverage ghost 3's work for us
         ;; his target tile was 4 in front of pacman
@@ -1867,7 +1869,7 @@ Ghost1AI SUBROUTINE
         ;; blinky ( ghost 2 ) calculated just before us, so we'll use
         ;; his position
         ldx #2
-        lda Sprite_loc2,W1
+        move16x Sprite_loc2,W1
         sub16Im W1,screen       ;w1 = offset from screen start, input to divide
         jsr Divide22_16
         lda DIV22_RSLT          ;blinky's row
@@ -1918,39 +1920,46 @@ Ghost3AI SUBROUTINE
         beq .vert
         brk
 .horiz                          ;pacman is horizontal
-        lda #PACROW
+        lda PACROW
         sta GHOST_TGTROW
         sta GHOST1_TGTROW
-        lda #4
         cpy #motionLeft
         bne .right
+        ;; left
+        lda PACCOL
         sec
-        sbc PACCOL
+        sbc #4
         sta GHOST_TGTCOL
         sbc #2
         sta GHOST1_TGTCOL
         rts
 .right
+        lda PACCOL
         clc
-        adc PACCOL
-        sta GHOST_TGTCOL
-        rts
-.vert                           ; pacman is going vertical
-        lda #PACCOL
+        adc #4
         sta GHOST_TGTCOL
         sta GHOST1_TGTCOL
-        lda #4
+        rts
+.vert                           ; pacman is going vertical
+        lda PACCOL
+        sta GHOST_TGTCOL
+        sta GHOST1_TGTCOL
         cpy #motionUp
         bne .down
+        ;;  going up
+        lda PACROW
         sec
-        adc PACROW
-        sta GHOST_TGTROW
         sbc #2
         sta GHOST1_TGTROW
+        sbc #2
+        sta GHOST_TGTROW
         rts
 .down
+        lda PACROW
         clc
-        adc PACROW
+        adc #2
+        sta GHOST1_TGTROW
+        adc #2
         sta GHOST_TGTROW
         rts
 
