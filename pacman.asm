@@ -83,29 +83,31 @@ S3              equ 10
 S4              equ 11
         
 #IFCONST _LOCAL_SAVEDIR
-DIV22_WORK      equ 12          ;word
+DIV22_WORK      equ $c          ;word
 ;;;                 13
-DIV22_RSLT      equ 14          ;div22 result
+DIV22_RSLT      equ $e          ;div22 result
 #endif        
-SPRITEIDX       equ 15        ;sprite index for main loop
-CSPRTFRM        equ 16        ; number of frames in the currently processing sprite
-PACFRAMEN       equ 18        ; byte: index of pac frame
-PACFRAMED       equ 19        ;pacframe dir
-NXTSPRTSRC      equ 20        ;when moving a sprite, the next 'set' of source bitmaps
-DSPL_1          equ 21        ;used by DisplayNum routine
-DSPL_2          equ 22
-DSPL_3          equ 23
-GHOST_DIST      equ 24          ; $18 best distance for current ghost AI calcs
-GHOST_DIR       equ 25          ; $19 best move matching GHOST_DIST
-DIV22_REM       equ 26        
-PACCOL          equ 27         ;current pacman column
-PACROW          equ 28         ;current pacman row
+SPRITEIDX       equ $f        ;sprite index for main loop
+CSPRTFRM        equ $10        ; number of frames in the currently processing sprite
+PACFRAMEN       equ $11        ; byte: index of pac frame
+PACFRAMED       equ $12        ;pacframe dir
+NXTSPRTSRC      equ $13        ;when moving a sprite, the next 'set' of source bitmaps
+DSPL_1          equ $14        ;used by DisplayNum routine
+BCD             equ $15        ;used by Bin2Hex routine
+DSPL_2          equ $16        ;
+DSPL_3          equ $17        ;
+BIN_IN          equ $18        ;binary in, used by Bin2Hex
+GHOST_DIST      equ $19  ; $18 best distance for current ghost AI calcs
+GHOST_DIR       equ $20  ; $19 best move matching GHOST_DIST
+DIV22_REM       equ $21        
+PACCOL          equ $22         ;current pacman column
+PACROW          equ $23         ;current pacman row
 ;;; sprite position used by AI from most recent call to any of the
 ;;; directional changing routines ( up,left etc )
-GHOST_TGTCOL    equ 29
-GHOST_TGTROW    equ 30
-GHOST1_TGTCOL   equ 31
-GHOST1_TGTROW   equ 32        
+GHOST_TGTCOL    equ $24
+GHOST_TGTROW    equ $25
+GHOST1_TGTCOL   equ $26
+GHOST1_TGTROW   equ $27        
         ;; 47 48 are toast?
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
@@ -113,7 +115,6 @@ S6              equ $31
 #IFCONST _LOCAL_SAVEDIR
 GHOST_COL       equ $35        
 GHOST_ROW       equ $36
-WASCOURSE       equ $37        
 #ENDIF        
 S7              equ $43
 W5              equ $32
@@ -241,9 +242,15 @@ HWALL           equ $07
 .storeit        
         sta clrram,X
         inx
+#if 0                           ;decimal
         lda {3}
         jsr DisplayNum
-
+#else                           ;hex
+        lda {3}
+        sta BIN_IN
+        jsr Bin2Hex
+        jsr DisplayBCD
+#endif        
         pla
         tax
 
@@ -1066,6 +1073,14 @@ main SUBROUTINE
         lda #$FB
         DoubleSigned
         brk
+#endif
+#if 0
+        lda #74
+        STA BIN_IN
+        jsr Bin2Hex
+        ldx #0
+        jsr DisplayBCD
+        brk
 #endif        
         lda #pacframes
         sta PACFRAMEN
@@ -1626,28 +1641,6 @@ ones:
         lda #PURPLE
         sta clrram,X
         rts
-        ;; display result from division routine in upper left
-        ;; col,row
-        ;; or remainder,result
-        MAC Display2
-        pha                     ;save A
-        txa
-        pha
-        
-        ldx #4
-        lda {1}
-        jsr DisplayNum
-
-        lda {2}
-        ldx #0
-        jsr DisplayNum
-
-        pla
-        tax
-
-        pla                     ;restore A
-
-        ENDM
 ;;; update {1} with min of A or {1} store Y, which is the considered 'move'
 ;;; in {2} if it was the best move so far
         MAC UpdateMinDist
@@ -1858,8 +1851,7 @@ PossibleMoves SUBROUTINE
 ;;; doubles the length of the vector
 ;;; and uses the result as his target tile
 Ghost1AI SUBROUTINE
-        jsr Ghost2AI
-        rts
+
         ;; our initial target it 2 in front of pacman
         ;; we'll leverage ghost 3's work for us
         ;; his target tile was 4 in front of pacman
@@ -1870,19 +1862,19 @@ Ghost1AI SUBROUTINE
         ;; his position
         ldx #2
         move16x Sprite_loc2,W1
-        sub16Im W1,screen       ;w1 = offset from screen start, input to divide
+        sub16Im W1,screen ;w1 = offset from screen start, input to divide
         jsr Divide22_16
         lda DIV22_RSLT          ;blinky's row
         sec
-        sbc GHOST1_TGTROW       ;blinky's row distance to our target tile
-        DoubleSigned            ;double it
-        sta GHOST1_TGTROW       ;save it
+        sbc GHOST1_TGTROW    ;blinky's row distance to our target tile
+        DoubleSigned         ;double it
+        sta GHOST_TGTROW     ;save it
         
         lda W1                  ;blinky's column
         sec
-        sbc GHOST1_TGTCOL  ;blinky's column distance to our target tile
-        DoubleSigned       ;double it
-        sta GHOST1_TGTCOL  ;save it
+        sbc GHOST1_TGTCOL ;blinky's column distance to our target tile
+        DoubleSigned      ;double it
+        sta GHOST_TGTCOL  ;save it
 
         ;; GHOST_TGTCOL,ROW should contain a vector from blinky
         ;; to our final target tile
@@ -1895,7 +1887,7 @@ Ghost1AI SUBROUTINE
         clc
         adc GHOST_TGTCOL        ;add vector X
         sta GHOST_TGTCOL        ;save it
-
+        Display1 "X",22,GHOST_TGTROW
         ;; should have our final target tile
         
         pla
@@ -2158,7 +2150,7 @@ SPRT_CUR set S2                 ;current sprite
 #if _debug        
         cmp #MW
         bne .ok
-        brk                     ;we just loaded a mazewall, something is wrong
+;        brk                     ;we just loaded a mazewall, something is wrong
 .ok        
 #endif
         sta Sprite_sback,X
@@ -2170,7 +2162,7 @@ SPRT_CUR set S2                 ;current sprite
 #if _debug        
         cmp #MW
         bne .ok2
-        brk                     ;we just loaded a mazewall, something is wrong
+;        brk                     ;we just loaded a mazewall, something is wrong
 .ok2        
 #endif
         sta Sprite_sback2,X
@@ -2551,8 +2543,6 @@ blith SUBROUTINE
 ;;;
 ;;; X = sprite to move
 scroll_up SUBROUTINE
-        lda #0
-        sta WASCOURSE
         lda Sprite_dir,X
         cmp #22                     ;check if already vertical
         beq .00
@@ -2577,7 +2567,6 @@ scroll_up SUBROUTINE
         rts
 .continue
         lda #1
-        sta WASCOURSE
         move16x2 W1,Sprite_loc2  ;save the new sprite screen location
         ldy #8                  ;reset fine scroll offset
 .fine
@@ -2733,8 +2722,6 @@ changevert SUBROUTINE
 ;;; X = sprite to scroll down
 ;;; carry is set on return if move is not possible
 scroll_down SUBROUTINE
-        lda #0
-        sta WASCOURSE
         lda Sprite_dir,X
         cmp #22                 ;check if already vertical
         beq .00
@@ -2758,8 +2745,6 @@ scroll_down SUBROUTINE
         sec                     ;indicate failure
         rts
 .continue        
-        lda #1
-        sta WASCOURSE
         addxx W2,W1,#22
         move16x2 W1,Sprite_loc2  ;save the new sprite screen location
         ldy #0                  ;reset fine scroll offset
@@ -2772,7 +2757,62 @@ scroll_down SUBROUTINE
         store16 PAC1D,W1
         clc
         rts
-;;; Y is clobbered
+
+        
+        MAC DisplayBCDDigit
+        cmp #11
+        bmi .numbers
+        sec
+        sbc #9
+        brk
+        jmp .onscreen
+.numbers
+        clc
+        adc #zeroDigit
+.onscreen
+        sta screen,X
+        lda #PURPLE
+        sta clrram,X
+        ENDM
+DisplayBCD SUBROUTINE
+        lda BCD
+        lsr
+        lsr
+        lsr
+        lsr
+        DisplayBCDDigit
+        lda BCD
+        and #$0f
+        inx
+        DisplayBCDDigit
+        rts
+;;; binary to bcd
+Bin2Hex SUBROUTINE        
+.BINBCD8
+        txa
+        pha
+        
+	SED                     ; Switch to decimal mode
+	LDA #0                  ; Ensure the result is clear
+	STA BCD+0
+	STA BCD+1
+	LDX #8                  ; The number of source bits
+        
+.CNVBIT
+	ASL BIN_IN		; Shift out one bit
+	LDA BCD+0               ; And add into result
+	ADC BCD+0
+	STA BCD+0
+	LDA BCD+1               ; propagating any carry
+	ADC BCD+1
+	STA BCD+1
+	DEX                     ; And repeat for next bit
+	BNE .CNVBIT
+	CLD                     ; Back to binary
+
+        pla
+        tax
+        rts
 ;;; S5 * S6 output ( 16 bit ) W5
 multxx SUBROUTINE
 ;
