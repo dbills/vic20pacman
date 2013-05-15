@@ -2,17 +2,19 @@
         processor 6502
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
-_debug    equ 1                 ; true for debugging
-focusGhost equ 1                ;ghost to print debugging for
-voice1    equ 36874             ; sound registers
-voice2    equ 36875
-voice3    equ 36876
-volume    equ 36878
-;screen    equ $1000        ; screen ram
-screen    equ $1e00        
-;clrram    equ $9400        ; color ram for screen
-clrram    equ $9600             ; color ram for screen
-clroffset equ $78               ;offset from screen to color ram
+GHOSTS_ON   equ 1
+_debug      equ 1                 ; true for debugging
+focusGhost  equ 10                ;ghost to print debugging for
+cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
+voice1      equ 36874             ; sound registers
+voice2      equ 36875
+voice3      equ 36876
+volume      equ 36878
+;screen     equ $1000        ; screen ram
+screen      equ $1e00        
+;clrram     equ $9400        ; color ram for screen
+clrram      equ $9600             ; color ram for screen
+clroffset   equ $78               ;offset from screen to color ram
 
 VICRASTER equ $9004        
 VICSCRN   equ $9005             ;vic chip character generator pointer
@@ -66,7 +68,7 @@ LTGREEN      equ 13
 LTBLUE       equ 14
 LTYELLOW     equ 15
 
-SPRITES      equ 4             ;count of sprites in system (1 based)
+SPRITES      equ 5             ;count of sprites in system (1 based)
 ;;
 ;;  Zero page constants
 ;;
@@ -107,7 +109,10 @@ PACROW          equ $23         ;current pacman row
 GHOST_TGTCOL    equ $24
 GHOST_TGTROW    equ $25
 GHOST1_TGTCOL   equ $26
-GHOST1_TGTROW   equ $27        
+GHOST1_TGTROW   equ $27
+;;amount sprite move routines can shave off during cornering
+;;; pacman get +1 on corners, ghosts get 0
+CORNER_SHAVE    equ $28        
         ;; 47 48 are toast?
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
@@ -913,24 +918,24 @@ PAC4 ds 8,$01
 ;------------------------------------
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*2+8 ,screen+22*7+2,screen+22*7+5,screen+22*12+5,0    ;new screen loc
+Sprite_loc2     DC.W screen+22*2+8 ,screen+22*7+2,screen+22*7+5,screen+22*12+5,screen+22*2+(22-5)    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0 ;current screen background ( might include some other sprite tile that was laid down )
 Sprite_sback2   dc.b 0,0,0,0,0        
-Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,0         ;foreground char
-Sprite_src      dc.w PAC1,GHOST,GHOST,GHOST,0       ;sprite source bitmap
+Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,GH3L      ;foreground char
+Sprite_src      dc.w PAC1,GHOST,GHOST,GHOST,GHOST ;sprite source bitmap
 Sprite_frame    dc.b 0,1,1,1,1 ;animation frame of sprite as offset from _src
 ;;; sprite chargen ram ( where to put the source bmap )
-Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8)     , mychars+(GH2L*8),0    
-Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16), mychars+(GH2L*8)+(16),0
-Sprite_motion   dc.b 1,motionRight,motionUp,motionDown,1 ; see motion defines
-Sprite_dir      dc.b 1,1,22,22,1 ;sprite direction 1(horiz),22(vert)
-Sprite_dir2     dc.b 1,1,22,22,1 ;sprite direction 1(horiz),22(vert)    
+Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8)     , mychars+(GH2L*8)     , mychars+(GH3L*8)    
+Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16), mychars+(GH2L*8)+(16),mychars+(GH3L*8)+(16)
+Sprite_motion   dc.b 1,motionRight,motionUp,motionDown,motionDown ; see motion defines
+Sprite_dir      dc.b 1,1,22,22,22 ;sprite direction 1(horiz),22(vert)
+Sprite_dir2     dc.b 1,1,22,22,22 ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_speed    dc.b 10,10,10,10 ; 1/10ths 1 unit = 1 pixel per game loop
-Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#ORANGE        
+Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 #IFNCONST
 SAVE_OFFSET     dc.b 0
 SAVE_OFFSET2    dc.b 0
@@ -944,7 +949,6 @@ DIV22_WORK      dc.w 0
 ;;; 
 ;;; division table for division by 22
 Div22Table dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
-MotionTable dc.b motionLeft,motionUp,motionRight,motionDown
 ;;; S2 sprite to render
 render_sprite SUBROUTINE
         stx S2                  ;set for call to blith
@@ -1119,7 +1123,7 @@ main SUBROUTINE
 
         jmp .background
 .loop
-        ldx #15
+        ldx #30
 .iloop        
         lda VICRASTER           ;load raster line
         beq .2
@@ -1196,7 +1200,9 @@ main SUBROUTINE
         
 ;        jsr WaitFire
         jsr Pacman
+#IFCONST GHOSTS_ON        
         jsr GhostAI
+#endif        
         lda #SPRITES            ;for i = sprites to 0, i--
         sta SPRITEIDX
 .playerloop
@@ -1548,6 +1554,8 @@ UpdateMotion SUBROUTINE
         rts
 ;;; animate a ghost back and forth
 GhostAI SUBROUTINE
+        lda #0
+        sta CORNER_SHAVE        ;ghosts get no cornering bonus
         ;; caculate pacman row,col so ghosts can use
         ;; in their AI routines
         move16 Sprite_loc2,W1
@@ -1564,13 +1572,20 @@ GhostAI SUBROUTINE
         dec SPRITEIDX
         beq .loopend            ;pacman is sprite 0, so we leave
         ldx SPRITEIDX
+        cpx #4
+        bne .ghost3
+        jsr Ghost4AI
+        jmp .continue
+.ghost3        
         cpx #3
         bne .ghost2
         jsr Ghost3AI
+        jmp .continue
 .ghost2
         cpx #2
         bne .ghost1
         jsr Ghost2AI
+        jmp .continue
 .ghost1        
         cpx #1
 ;        beq .animate
@@ -1580,7 +1595,7 @@ GhostAI SUBROUTINE
         jsr PossibleMoves
         cpx #focusGhost
         bne .notfocus
-        Display1 "G",17,GHOST_DIR
+;        Display1 "G",17,GHOST_DIR
 .notfocus
         jsr UpdateMotion
          
@@ -1656,7 +1671,7 @@ ones:
         cmp {1}
         bpl .done
         sta {1}                  ;update min
-        lda SPRT_LOCATOR
+        lda SPRT_LOCATOR         ;sprt_locator contained a directional indicator
         sta {2}
 .done        
         ENDM
@@ -1698,11 +1713,11 @@ ones:
         adc {1}
         sta {1}
         ENDM
-;;; 
-;;; W1 candidate sprite position
+;;; Calculate distance of W1 to target tile
+;;; input: W1 candidate sprite position
+;;; input: GHOST_COL,GHOST_ROW target tile
 ;;; output:
-;;; S2: Y dist
-;;; S3: X dist
+;;; S3: X dist + Y dist
 CalcDistance SUBROUTINE
 #if 0        
         ;; if the head tile location is different
@@ -1866,6 +1881,48 @@ PossibleMoves SUBROUTINE
         sbc {3}
         sta {3}
         ENDM
+;;; sue
+;;; opposite quadrants 
+Ghost4AI SUBROUTINE
+        ;;  determine distance to pacman
+        ;; I should care about whether I load the head or tail pos
+        ;; but who cares for this ghost's 'lazy' pursuit mode
+        ;;  doesn't seem like it makes a diff
+        move16x Sprite_loc,W1
+        ;; let blinky calc our target tile
+        jsr Ghost2AI            ;blinky's algo
+        ;; how far are we away from where blinky would like to be?
+        jsr CalcDistance        
+        Display1 "Y",0,GHOST_ROW
+        Display1 "X",3,GHOST_COL
+        lda S3
+        ;; < N and we are too close, flee
+        cmp #9
+        beq .tooclose
+        bcc .tooclose
+        ;; not too close, pursue
+        lda #PURPLE
+        sta Sprite_color,X
+        rts
+.tooclose
+        ;; run away to opposite quadrant of pacman
+        lda #WHITE
+        sta Sprite_color,X
+        lda PACCOL
+        cmp #11
+        bcs .paconright
+        ;; pac on left
+        lda #4
+        sta  GHOST_TGTROW
+        lda #22-5
+        sta GHOST_TGTCOL
+        rts
+.paconright
+        lda #4
+        sta GHOST_TGTROW
+        lda #5
+        sta GHOST_TGTCOL
+        rts
 ;;;
 ;;; ghost 1
 ;;; draws a vector from his initial target tile ( 2 in front of pacman )
@@ -1891,15 +1948,15 @@ Ghost1AI SUBROUTINE
         InkyTargetTile DIV22_RSLT,GHOST1_TGTROW,GHOST_TGTROW
         InkyTargetTile W1,GHOST1_TGTCOL,GHOST_TGTCOL
 
-        Display1 "Y",22,GHOST_TGTROW
-        Display1 "X",25,GHOST_TGTCOL
+;        Display1 "Y",22,GHOST_TGTROW
+;        Display1 "X",25,GHOST_TGTCOL
         ;; should have our final target tile
         
         resX
         
         rts
 ;;; 
-;;; simple hot porsuit ( Blinky )
+;;; simple hot pursuit ( Blinky )
 ;;; 
 Ghost2AI  SUBROUTINE
         lda PACCOL
@@ -1996,6 +2053,9 @@ Divide22_16 SUBROUTINE
 ;;; Service PACMAN, read joystick and move
 ;;; 
 Pacman SUBROUTINE
+        lda #cornerAdv
+        sta CORNER_SHAVE        ;pac get +1 bonus on corners
+        
         ldx #0
         stx MOVEMADE
         readJoy
@@ -2606,9 +2666,13 @@ changehoriz SUBROUTINE
         sta S2
         sta S3                  ;-offset to ORG in endtile case
         lda Sprite_offset,X     ;where is sprite offset
-        beq .begtile            ; at beginning of tile?
-        cmp #8                  ; at end of tile?
-        beq .endtile
+        cmp CORNER_SHAVE        ;with shave dist of beg tile?
+        bcc .begtile            ;less then shave
+        beq .begtile            ;= to shave
+        clc
+        adc CORNER_SHAVE        ;if offset >= 8-shave dist
+        cmp #8                  ;then ok to corner at end
+        bcs .endtile
 .failed                         ;can't change direction yet
         sec
         rts
@@ -2681,9 +2745,13 @@ changevert SUBROUTINE
         sty S2
         sty S3                  ;offset to ORG in endtile case
         lda Sprite_offset,X     ; where is sprite offset
-        beq .begtile            ; at beginning of tile?
-        cmp #8                  ; at end of tile?
-        beq .endtile
+        cmp CORNER_SHAVE        ; within shave dist of 0?
+        bcc .begtile
+        beq .begtile            ; at beginning of tile
+        clc
+        adc CORNER_SHAVE        ; are we within shave distance
+        cmp #8                  ; of end of tile?
+        bcs .endtile
 .failed ; we can't change directions  in middle of tile
         sec
         rts
