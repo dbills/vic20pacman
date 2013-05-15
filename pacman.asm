@@ -96,7 +96,7 @@ DSPL_1          equ $14        ;used by DisplayNum routine
 BCD             equ $15        ;used by Bin2Hex routine
 DSPL_2          equ $16        ;
 DSPL_3          equ $17        ;
-BIN_IN          equ $18        ;binary in, used by Bin2Hex
+;BIN_IN          equ $18        ;binary in, used by Bin2Hex
 GHOST_DIST      equ $19  ; $18 best distance for current ghost AI calcs
 GHOST_DIR       equ $20  ; $19 best move matching GHOST_DIST
 DIV22_REM       equ $21        
@@ -178,6 +178,17 @@ HWALL           equ $07
    mac checkYDir
    endm
 #endif
+        ;; save X
+        MAC saveX
+        txa
+        pha
+        ENDM
+        ;; restore X
+        MAC resX
+        pla
+        tax
+        ENDM
+        
         MAC cmp16Im
         lda {1}
         cmp #[{2}] & $ff    ; load low byte
@@ -247,8 +258,7 @@ HWALL           equ $07
         jsr DisplayNum
 #else                           ;hex
         lda {3}
-        sta BIN_IN
-        jsr Bin2Hex
+        sta BCD
         jsr DisplayBCD
 #endif        
         pla
@@ -903,7 +913,7 @@ PAC4 ds 8,$01
 ;------------------------------------
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*2+8 ,screen+22*5+3,screen+22*7+5,screen+22*12+5,0    ;new screen loc
+Sprite_loc2     DC.W screen+22*2+8 ,screen+22*7+2,screen+22*7+5,screen+22*12+5,0    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0 ;current screen background ( might include some other sprite tile that was laid down )
@@ -1070,14 +1080,13 @@ drwsprt1 SUBROUTINE
 ;-------------------------------------------
 main SUBROUTINE
 #if 0
-        lda #$FB
+        lda #$ea
         DoubleSigned
         brk
 #endif
 #if 0
-        lda #74
-        STA BIN_IN
-        jsr Bin2Hex
+        lda #$ea
+        STA BCD
         ldx #0
         jsr DisplayBCD
         brk
@@ -1844,6 +1853,19 @@ PossibleMoves SUBROUTINE
         IfFocus "D",13
 .done
         rts
+;;;  BlinkyRow,pacrow+2,inky target row
+;;;  e.g. foo DIV22_RESLT,GHOST1_TGTROW,GHOST_TGTROW
+        MAC InkyTargetTile
+        lda {1}
+        sec
+        sbc {2}
+        DoubleSigned
+        sta {3}
+        lda {1}
+        sec
+        sbc {3}
+        sta {3}
+        ENDM
 ;;;
 ;;; ghost 1
 ;;; draws a vector from his initial target tile ( 2 in front of pacman )
@@ -1855,8 +1877,7 @@ Ghost1AI SUBROUTINE
         ;; our initial target it 2 in front of pacman
         ;; we'll leverage ghost 3's work for us
         ;; his target tile was 4 in front of pacman
-        txa                     ;save X
-        pha
+        saveX
 
         ;; blinky ( ghost 2 ) calculated just before us, so we'll use
         ;; his position
@@ -1865,33 +1886,17 @@ Ghost1AI SUBROUTINE
         sub16Im W1,screen ;w1 = offset from screen start, input to divide
         jsr Divide22_16
         lda DIV22_RSLT          ;blinky's row
-        sec
-        sbc GHOST1_TGTROW    ;blinky's row distance to our target tile
-        DoubleSigned         ;double it
-        sta GHOST_TGTROW     ;save it
-        
-        lda W1                  ;blinky's column
-        sec
-        sbc GHOST1_TGTCOL ;blinky's column distance to our target tile
-        DoubleSigned      ;double it
-        sta GHOST_TGTCOL  ;save it
+        ;; determine the Y distance between blinky and our target tile
+        ;; then , double it
+        InkyTargetTile DIV22_RSLT,GHOST1_TGTROW,GHOST_TGTROW
+        InkyTargetTile W1,GHOST1_TGTCOL,GHOST_TGTCOL
 
-        ;; GHOST_TGTCOL,ROW should contain a vector from blinky
-        ;; to our final target tile
-
-        lda DIV22_RSLT          ;blinky's row again
-        clc
-        adc GHOST_TGTROW        ;add vector Y
-        sta GHOST_TGTROW        ;save it
-        lda W1                  ;blinky's column again
-        clc
-        adc GHOST_TGTCOL        ;add vector X
-        sta GHOST_TGTCOL        ;save it
-        Display1 "X",22,GHOST_TGTROW
+        Display1 "Y",22,GHOST_TGTROW
+        Display1 "X",25,GHOST_TGTCOL
         ;; should have our final target tile
         
-        pla
-        txa                     ;restore X
+        resX
+        
         rts
 ;;; 
 ;;; simple hot porsuit ( Blinky )
@@ -2760,11 +2765,11 @@ scroll_down SUBROUTINE
 
         
         MAC DisplayBCDDigit
-        cmp #11
+        cmp #10
         bmi .numbers
         sec
-        sbc #9
-        brk
+        sbc #9                  ;cuz 0 is the '@' char in vic
+        ora #$80
         jmp .onscreen
 .numbers
         clc
@@ -2786,6 +2791,7 @@ DisplayBCD SUBROUTINE
         inx
         DisplayBCDDigit
         rts
+#if 0        
 ;;; binary to bcd
 Bin2Hex SUBROUTINE        
 .BINBCD8
@@ -2813,6 +2819,7 @@ Bin2Hex SUBROUTINE
         pla
         tax
         rts
+#endif        
 ;;; S5 * S6 output ( 16 bit ) W5
 multxx SUBROUTINE
 ;
