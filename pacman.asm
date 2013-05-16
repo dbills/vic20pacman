@@ -934,8 +934,10 @@ Sprite_dir      dc.b 1,1,22,22,22 ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,22,22,22 ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
-Sprite_speed    dc.b 10,10,10,10 ; 1/10ths 1 unit = 1 pixel per game loop
+Sprite_speed    dc.b 5,4,24,4,4 ;
+Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
+masterSpeed     equ 1        
 #IFNCONST
 SAVE_OFFSET     dc.b 0
 SAVE_OFFSET2    dc.b 0
@@ -1123,7 +1125,7 @@ main SUBROUTINE
 
         jmp .background
 .loop
-        ldx #30
+        ldx #masterSpeed
 .iloop        
         lda VICRASTER           ;load raster line
         beq .2
@@ -1552,6 +1554,18 @@ UpdateMotion SUBROUTINE
         sta Sprite_motion,X
 .done        
         rts
+        ;; C clear, ok to move
+        ;; C true if it's this sprites turn to get skipped
+        ;; X sprite to check
+        MAC MyTurn
+        clc
+        dec Sprite_turn,X
+        bne .done
+        lda Sprite_speed,X
+        sta Sprite_turn,X
+        sec
+.done        
+        ENDM
 ;;; animate a ghost back and forth
 GhostAI SUBROUTINE
         lda #0
@@ -1572,6 +1586,9 @@ GhostAI SUBROUTINE
         dec SPRITEIDX
         beq .loopend            ;pacman is sprite 0, so we leave
         ldx SPRITEIDX
+        MyTurn                  ;does this ghost get to move this time?
+        bcs .loop
+        ;; switch on ghost # to get ai routine
         cpx #4
         bne .ghost3
         jsr Ghost4AI
@@ -2053,10 +2070,16 @@ Divide22_16 SUBROUTINE
 ;;; Service PACMAN, read joystick and move
 ;;; 
 Pacman SUBROUTINE
+        ldx #0
+        MyTurn
+
+        bcc .myturn             ;not our turn to move
+        ;jsr Animate             ;animate and leave
+        rts
+.myturn        
         lda #cornerAdv
         sta CORNER_SHAVE        ;pac get +1 bonus on corners
         
-        ldx #0
         stx MOVEMADE
         readJoy
 #ifnconst _SLOWPAC        
