@@ -9,6 +9,7 @@ cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
 voice1      equ 36874             ; sound registers
 voice2      equ 36875
 voice3      equ 36876
+voice4      equ 36877        
 volume      equ 36878
 ;screen     equ $1000        ; screen ram
 screen      equ $1e00        
@@ -934,10 +935,18 @@ Sprite_dir      dc.b 1,1,22,22,22 ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,22,22,22 ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
-Sprite_speed    dc.b 5,4,24,4,4 ;
+Sprite_speed    dc.b 5,4,24,4,4 ;your turn gets skipped every N loops of this
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
-masterSpeed     equ 1        
+wakaDelay1       equ 25        ;rest time
+wakaDelay2       equ 25        
+WakaFreq         dc.b wakaStart
+WakaTime         dc.w wakaDelay1          ;delay to next note
+phaseTop         equ 4
+wakaStart        equ 230
+wakaEnd          equ 255
+WakaPhase        dc.b 3   ; 4 rest, 3 up,2 rest,1 down
+masterSpeed      equ 5           ;master game delay
 #IFNCONST
 SAVE_OFFSET     dc.b 0
 SAVE_OFFSET2    dc.b 0
@@ -1060,23 +1069,31 @@ drwsprt1 SUBROUTINE
         loadTile                ;upcoming tile into A
         
         ldy #0   
-        sta (W1),Y
+        sta (W1),Y              ;put head tile on screen
         clc
-        adc #01                 ;inc to right side tile
+        adc #01                 ;inc to tail tile
 
 ;        jmp .skip
-        ldy Sprite_dir,X
+        ldy Sprite_dir,X        ;are we vertical or horizontal?
 .skip        
-        sta (W1),Y              ;lay down the tile
+        sta (W1),Y              ;lay down the tail tile
         clc
         lda #clroffset          ;W1 now = color ram location
         adc W1+1
         sta W1+1
         lda Sprite_color,X
         ldy #0
+        sta (W1),Y              ;write head tile to color ram
+        ;; if we are completely contained within one tile
+        ;;  there is no need to write the color for our tail
+        ;; and make a bad vic limitation even worse ;)
+        ldy Sprite_offset,X
+        beq .singletile
+        cpy #8
+        beq .singletile
+        ldy Sprite_dir,X        ;write tail tile to color ram 
         sta (W1),Y
-        ldy Sprite_dir,X
-        sta (W1),Y
+.singletile        
         rts
 
  INCLUDE "audio.asm"
@@ -1134,6 +1151,7 @@ main SUBROUTINE
 .2
         dex
         bne .iloop
+        jsr Waka
         lda #1
         eor Sprite_page 
         sta Sprite_page
@@ -2870,6 +2888,101 @@ scroll_down SUBROUTINE
         lda #PURPLE
         sta clrram,X
         ENDM
+mystep        
+        dc.b 2   
+;;; pacman munching sound
+Waka SUBROUTINE
+        lda WakaFreq
+        sta voice4
+
+        clc
+        adc mystep
+        sta WakaFreq
+        bcs .reverse
+        cmp #230
+        bcc .reverse
+        rts
+.reverse
+        lda mystep
+        bmi .makepos
+        MakeNegative
+        sta mystep
+        lda #$ff
+        sta WakaFreq
+        rts
+.makepos
+        abs
+        sta mystep
+        lda #230
+        sta WakaFreq
+        rts
+
+        
+        
+#if 0        
+Waka SUBROUTINE
+        lda WakaPhase
+        cmp #3
+        beq .up
+        lda #1
+        beq .down
+        cmp #4
+        beq .rest
+        cmp #1
+        beq .rest
+        brk
+.rest        
+        lda #0
+        sta voice4
+        dec16 WakaTime
+        beq .nextPhase
+        rts
+.nextPhase
+        ;; move to next phase
+        dec WakaPhase
+        bne .cont
+        ;; reset the phase
+        lda #phaseTop
+        sta WakaPhase
+.cont        
+        lda WakaPhase
+        cmp #3
+        beq .init_up
+        cmp #1
+        beq .init_down
+        cmp #4
+        beq .init_rest
+        cmp #2
+        beq .init_rest
+        brk
+.init_rest        
+        store16 wakaDelay1,WakaTime
+        rts
+.init_up
+        lda #wakaStart
+        sta WakaFreq
+        sta voice4
+        rts
+.init_down
+        lda #wakaEnd
+        sta WakaFreq
+        sta voice4
+        rts
+.up
+        inc WakaFreq
+        lda WakaFreq
+        cmp #wakaEnd
+        bcs .nextPhase
+        rts
+.down
+        dec WakaFreq
+        lda WakaFreq
+        cmp #wakaStart
+        bcc .nextPhase
+        rts
+#endif
+;;; 
+;;; Display a BCD number
 DisplayBCD SUBROUTINE
         lda BCD
         lsr
