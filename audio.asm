@@ -25,6 +25,8 @@ Scale_service SUBROUTINE
         lda Scale_sf,X              ; get current note
         sta voice1,X                ; play it
 
+
+
         dec Scale_rem,X             ; decrement remaining note time
         beq .done
 ;        dec Scale_rem,X             ; decrement remaining note time
@@ -125,25 +127,32 @@ VoiceTrack_svc SUBROUTINE
         jmp .loadscale
         
 .load_note
-    inc16 W1
-    lda (W1),Y                  ; get note freq
+        inc16 W1
+        lda (W1),Y                  ; get note freq
         ;; we use the same start/end freq for 'notes'
-    sta Scale_sf,X              ; save start freq
-    sta Scale_ef,X              ; save end freq
-    lda #1                      ; direction = up ( not really relevant )
-    sta Scale_st,X
-    inc16 W1
-    lda (W1),Y                  ; get note dur
-    sta Note_dur,X              ;
-    sta Note_rem,X              ; initialize remaining time
-    inc16 W1
+        sta Scale_sf,X              ; save start freq
+        sta Scale_ef,X              ; save end freq
+        bne .0
+        lda #0
+        sta volume
+.0
+        lda #8
+        sta volume
+        
+        lda #1                      ; direction = up ( not really relevant )
+        sta Scale_st,X
+        inc16 W1
+        lda (W1),Y                  ; get note dur
+        sta Note_dur,X              ;
+        sta Note_rem,X              ; initialize remaining time
+        inc16 W1
                                 ; install Scale as service handler
-    move16x2 W1,VoiceTrack_data
-
-    lda #0                      ; set done = false
-    sta VoiceTrack_done,X       ;
-    jmp Scale_service           ;
-    brk                         ; shouldn't get here
+        move16x2 W1,VoiceTrack_data
+        
+        lda #0                      ; set done = false
+        sta VoiceTrack_done,X       ;
+        jmp Scale_service           ;
+        brk                         ; shouldn't get here
 
 
 ;-------------------------------------------
