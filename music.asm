@@ -4,27 +4,33 @@
 ; scale: 0,start freq,end freq,step,dur
 ; note: 1 freq,dur
 
-Track1                ; a siren ( up,down scale )
-    ds 1,0            ; up scale
+Track1                          ; a siren ( up,down scale )
+        
+    ds 1,0                      ; up scale
     ds 1,220
     ds 1,240
-    ds 1,2            ; step
-    ds 1,1            ; duration
+    ds 1,2                      ; step
+    ds 1,1                      ; duration
 
-    ds 1,0            ; up scale
+        ds 1,1
+        ds 1,0
+        ds 1,5
+        
+    ds 1,0                      ; up scale
     ds 1,240
     ds 1,220
-    ds 1,2            ; step
-    ds 1,1            ; duration
-    ds 1,2            ; stop command
+    ds 1,-2                     ; step
+    ds 1,1                      ; duration
+;    ds 1,2                      ; stop command
+        ds 1,3                  ;repeat
 
-Track3                ; a siren ( up,down scale )
-    ds 1,0            ; up scale
+Track3                          ; a siren ( up,down scale )
+    ds 1,0                      ; up scale
     ds 1,200
     ds 1,240
-    ds 1,1            ; step
-    ds 1,1            ; duration
-    ds 1,0            ; up scale
+    ds 1,1                      ; step
+    ds 1,1                      ; duration
+    ds 1,0                      ; up scale
     ds 1,210
     ds 1,240
     ds 1,1            ; step

@@ -92,7 +92,7 @@ DIV22_RSLT      equ $e          ;div22 result
 #endif        
 SPRITEIDX       equ $f        ;sprite index for main loop
 CSPRTFRM        equ $10        ; number of frames in the currently processing sprite
-PACFRAMEN       equ $11        ; byte: index of pac frame
+unused          equ $11        ; byte: index of pac frame
 PACFRAMED       equ $12        ;pacframe dir
 NXTSPRTSRC      equ $13        ;when moving a sprite, the next 'set' of source bitmaps
 DSPL_1          equ $14        ;used by DisplayNum routine
@@ -1114,8 +1114,6 @@ main SUBROUTINE
         jsr DisplayBCD
         brk
 #endif        
-        lda #pacframes
-        sta PACFRAMEN
         lda #1
         sta PACFRAMED
         lda #$ff
@@ -1123,7 +1121,7 @@ main SUBROUTINE
         cli                         ; enable interrupts so jiffy clock works
         lda #8
         sta 36879                   ; border and screen colors
-        lda #$0f                    ; max
+        lda #$08                    ; max
         sta volume                  ; turn up the volume
         lda #0
         sta $9113                   ; joy VIA to input
@@ -1131,14 +1129,9 @@ main SUBROUTINE
 
         jsr mkmaze
 
-        ldx #1                      ; turn on voice track
-        store16x TrackBass,VoiceTrack_data
-        store16x TrackBass,VoiceTrack_st
-        ldx #2                      ; voice 3
-        store16x TrackHigh,VoiceTrack_data
-        store16x TrackHigh,VoiceTrack_st
-                                ;    ldx #1
-                                ;    store16x Track1,VoiceTrack_data    ; load track 1 on voice 2
+;        LoadTrack 1,TrackBass
+;        LoadTrack 2,TrackHigh
+        LoadTrack 3,Track1
 
         jmp .background
 .loop
@@ -1149,16 +1142,21 @@ main SUBROUTINE
         bne .iloop
 
 .2
+        txa
+        pha
+;        ldx #1                     ; service voice VV
+;        jsr VoiceTrack_svc         ; run sound engine
+        ldx #3
+        jsr VoiceTrack_svc          ; run sound engine
+        pla
+        tax
+        
         dex
         bne .iloop
-        jsr Waka
+;        jsr Waka
         lda #1
         eor Sprite_page 
         sta Sprite_page
-;    ldx #1                     ; service voice VV
-;    jsr VoiceTrack_svc         ; run sound engine
-;    ldx #2
-;    jsr VoiceTrack_svc          ; run sound engine
         lda #SPRITES
         sta SPRITEIDX
 .eraseloop
