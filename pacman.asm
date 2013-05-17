@@ -89,10 +89,14 @@ S4              equ 11
 DIV22_WORK      equ $c          ;word
 ;;;                 13
 DIV22_RSLT      equ $e          ;div22 result
-#endif        
+#endif
+;;; it's ok the next 2 use the same address
+;;; they are never used at the same time
 SPRITEIDX       equ $f        ;sprite index for main loop
+MASTERCNT       equ $f        ;countdown; see masterDelay
+;;; 
 CSPRTFRM        equ $10        ; number of frames in the currently processing sprite
-unused          equ $11        ; byte: index of pac frame
+voice3on        equ $11         ;0 = voice 
 PACFRAMED       equ $12        ;pacframe dir
 NXTSPRTSRC      equ $13        ;when moving a sprite, the next 'set' of source bitmaps
 DSPL_1          equ $14        ;used by DisplayNum routine
@@ -125,6 +129,11 @@ GHOST_ROW       equ $36
 S7              equ $43
 W5              equ $32
 W6              equ $44
+        ;; $45 has fucked me, not sure why, memmap lists it
+        ;; as current variable name, sure sounds like a basic
+        ;; interpreter thing to me 
+        ;; 
+        
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
 NOTCOPY         equ $fd
@@ -239,6 +248,11 @@ HWALL           equ $07
         lda {1}
         cmp {2}
 .done        
+        ENDM
+;;; initialize the sprite loop counter
+        MAC InitSpriteLoop
+        lda #SPRITES
+        sta SPRITEIDX
         ENDM
 ;;; display a single byte {3} at offset {2} on top line prefixed by char {1}
         MAC Display1
@@ -938,7 +952,7 @@ Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_speed    dc.b 20,20,25,20,20 ;your turn gets skipped every N loops of this
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
-masterSpeed      equ 4           ;master game delay
+masterSpeed      equ 5           ;master game delay
 #IFNCONST
 SAVE_OFFSET     dc.b 0
 SAVE_OFFSET2    dc.b 0
@@ -1004,6 +1018,12 @@ render_sprite SUBROUTINE
         rts
 ;;; X = sprite to erase
 erasesprt SUBROUTINE
+;;         cpx #0
+;;         bne .notpacman
+;;         lda #$20                ;space into playfield
+;;         sta Sprite_back,x       ;we eat dots
+;;         sta Sprite_back2,X
+;; .notpacman
         move16x Sprite_loc,W1   ;sprite location to W1
         ldy #0
         lda Sprite_back,X
@@ -1016,7 +1036,7 @@ erasesprt SUBROUTINE
         checkYDir
         lda Sprite_back2,X
 
-        sta (W1),Y              ;save char under right tile
+        sta (W1),Y              ;restore tail tile to playfied
 
         clc
         lda #clroffset          ;W1 now = color ram location
@@ -1108,16 +1128,16 @@ main SUBROUTINE
 #endif        
         lda #1
         sta PACFRAMED
+        sta voice3on            ;voice3 enabled by default
         lda #$ff
         sta LASTJOYDIR
-        cli                         ; enable interrupts so jiffy clock works
+;        cli                     ; enable interrupts for jiffy clock 
         lda #8
-        sta 36879                   ; border and screen colors
-        lda #$08                    ; max
-        sta volume                  ; turn up the volume
+        sta 36879               ; border and screen colors
+        sta volume              ; turn up the volume to 8
         lda #0
-        sta $9113                   ; joy VIA to input
-        jsr copychar                ; copy our custom char set
+        sta $9113               ; joy VIA to input
+        jsr copychar            ; copy our custom char set
 
         jsr mkmaze
 
@@ -1127,40 +1147,40 @@ main SUBROUTINE
 
         jmp .background
 .loop
-        ldx #masterSpeed
+        lda #masterSpeed
+        sta MASTERCNT
 .iloop        
         lda VICRASTER           ;load raster line
-        beq .2
         bne .iloop
 
-.2
-        txa
-        pha
+
 ;        ldx #1                     ; service voice VV
 ;        jsr VoiceTrack_svc         ; run sound engine
+        
+        dec MASTERCNT
+        bne .iloop
+        ;; ok, we are at vertical blank, on one of the frames we want to render
+        ;; here we go ...
+        lda voice3on
+        beq .skip3
         ldx #3
         jsr VoiceTrack_svc          ; run sound engine
-        pla
-        tax
-        
-        dex
-        bne .iloop
-;        jsr Waka
-        lda #1
-        eor Sprite_page 
-        sta Sprite_page
-        lda #SPRITES
-        sta SPRITEIDX
+.skip3        
+
+        lda #1                  ;dbl buffering, switch sprite tiles
+        eor Sprite_page         ; 0 = 1
+        sta Sprite_page         ; or 1 = 0
+
+        InitSpriteLoop          ;foreach sprite
 .eraseloop
         dec SPRITEIDX
         bmi .background
         ldx SPRITEIDX
         jsr erasesprt
         jmp .eraseloop
-
+        ;; loop to collect the playfield background tiles
 .background
-        lda #SPRITES
-        sta SPRITEIDX
+        InitSpriteLoop          ;foreach sprite
 .backloop        
         dec SPRITEIDX
         bmi .draw
@@ -1189,11 +1209,9 @@ main SUBROUTINE
         jmp .backloop
         
 .draw
-        ;brk
-        lda #SPRITES
-        sta SPRITEIDX
+        InitSpriteLoop          ;foreach sprite
 .drawloop
-        dec SPRITEIDX                  ;for i = sprites to 0 , i--
+        dec SPRITEIDX                
         bmi .player
         ldx SPRITEIDX
 #if _debug        
@@ -1562,17 +1580,16 @@ UpdateMotion SUBROUTINE
         sta Sprite_motion,X
 .done        
         rts
-        ;; C clear, ok to move
-        ;; C true if it's this sprites turn to get skipped
-        ;; X sprite to check
-        MAC MyTurn
-        clc
+        ;; check if sprite X get's to move this frame
+        MAC MyTurn2
         dec Sprite_turn,X
-        bne .done
+        bne {1}
+        ;; we don't get to move this turn
+        ;; reset the turn counter, and set the carry
+        ;; to indicate no soup for you
         lda Sprite_speed,X
         sta Sprite_turn,X
         sec
-.done        
         ENDM
 ;;; animate a ghost back and forth
 GhostAI SUBROUTINE
@@ -1594,8 +1611,9 @@ GhostAI SUBROUTINE
         dec SPRITEIDX
         beq .loopend            ;pacman is sprite 0, so we leave
         ldx SPRITEIDX
-        MyTurn                  ;does this ghost get to move this time?
-        bcs .loop
+        MyTurn2 GhostTurn      ;does this ghost get to move this time?
+        jmp .loop              ;no he doesn't
+GhostTurn        
         ;; switch on ghost # to get ai routine
         cpx #4
         bne .ghost3
@@ -2079,12 +2097,24 @@ Divide22_16 SUBROUTINE
 ;;; 
 Pacman SUBROUTINE
         ldx #0
-        MyTurn
 
-        bcc .myturn             ;not our turn to move
-        ;jsr Animate             ;animate and leave
+        
+        MyTurn2 PacManTurn
+        ;;not our turn to move
         rts
-.myturn        
+PacManTurn
+        lda #1
+        sta voice3on            ;waka sound off
+        lda Sprite_back,X
+        cmp #DOT
+        beq .waka
+        ;; we are not over dots
+        lda #0
+        sta voice3on
+        sta voice4
+.waka        
+
+
         lda #cornerAdv
         sta CORNER_SHAVE        ;pac get +1 bonus on corners
         
