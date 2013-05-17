@@ -103,7 +103,7 @@ DSPL_1          equ $14        ;used by DisplayNum routine
 BCD             equ $15        ;used by Bin2Hex routine
 DSPL_2          equ $16        ;
 DSPL_3          equ $17        ;
-;BIN_IN          equ $18        ;binary in, used by Bin2Hex
+WASCOURSE       equ $18        ;true if last move was course
 GHOST_DIST      equ $19  ; $18 best distance for current ghost AI calcs
 GHOST_DIR       equ $20  ; $19 best move matching GHOST_DIST
 DIV22_REM       equ $21        
@@ -117,7 +117,8 @@ GHOST1_TGTCOL   equ $26
 GHOST1_TGTROW   equ $27
 ;;amount sprite move routines can shave off during cornering
 ;;; pacman get +1 on corners, ghosts get 0
-CORNER_SHAVE    equ $28        
+CORNER_SHAVE    equ $28
+POWER_UP        equ $29         ;pacman is powered up
         ;; 47 48 are toast?
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
@@ -952,7 +953,7 @@ Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_speed    dc.b 20,20,25,20,20 ;your turn gets skipped every N loops of this
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
-masterSpeed      equ 5           ;master game delay
+masterSpeed      equ 15           ;master game delay
 #IFNCONST
 SAVE_OFFSET     dc.b 0
 SAVE_OFFSET2    dc.b 0
@@ -966,6 +967,17 @@ DIV22_WORK      dc.w 0
 ;;; 
 ;;; division table for division by 22
 Div22Table dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
+;;; swap upcoming sprite data with current sprite data
+;;; i.e. page flip the screen location
+        MAC SwapSpritePos
+        
+        move16xx Sprite_loc2,Sprite_loc
+        lda Sprite_dir2,X
+        sta Sprite_dir,X
+        lda Sprite_offset2,X
+        sta Sprite_offset,X
+
+        ENDM
 ;;; S2 sprite to render
 render_sprite SUBROUTINE
         stx S2                  ;set for call to blith
@@ -1018,18 +1030,18 @@ render_sprite SUBROUTINE
         rts
 ;;; X = sprite to erase
 erasesprt SUBROUTINE
-;;         cpx #0
-;;         bne .notpacman
-;;         lda #$20                ;space into playfield
-;;         sta Sprite_back,x       ;we eat dots
-;;         sta Sprite_back2,X
-;; .notpacman
+        cpx #0
+        bne .notpac
+        lda #4
+        cmp Sprite_offset
+        bne .notpac
+        lda #$20
+        sta Sprite_back
+        sta Sprite_back2
+.notpac        
         move16x Sprite_loc,W1   ;sprite location to W1
         ldy #0
         lda Sprite_back,X
-        bne .ok0
-        brk
-.ok0        
         sta (W1),Y
         
         ldy Sprite_dir,X
@@ -1185,24 +1197,16 @@ main SUBROUTINE
         dec SPRITEIDX
         bmi .draw
         ldx SPRITEIDX
-        ;; swap the new position to the current
-        move16xx Sprite_loc2,Sprite_loc
-        lda Sprite_dir2,X
-        sta Sprite_dir,X
-        lda Sprite_offset2,X
-        sta Sprite_offset,X
-        ;; collect background tiles so we can replace them later
+        ;; swap the upcoming position to the current    
+        SwapSpritePos    
+        ;; collect playfied background tiles so we can replace them later
         move16x Sprite_loc,W1
         ldy #0
+        sty POWER_UP
         lda (W1),Y
-#if _debug        
-        bne .ok0
-        brk
-.ok0
-#endif        
         sta Sprite_back,X
+        cmp #
         ldy Sprite_dir,X
-        checkYDir
         lda (W1),Y
         sta Sprite_back2,X
         ;; end collection of background tiles
@@ -1659,21 +1663,7 @@ GhostTurn
 
 ;;; return true if character in A is a wall
 IsWall SUBROUTINE
-        cpx #0
-        bne .notpacman
-        
-        ldy #0
-        sty voice3on
-        sty voice4
-        cmp #DOT
-        bne .noteating
-        ldy #1
-        sty voice3on
-        rts                     ;return is Z not on
-.notpacman        
-.noteating        
         cmp #MW
-        
         rts
 ;;; display a number in A on screen
 ;;; bit 7 on will call to reverse characters
@@ -2116,18 +2106,6 @@ Pacman SUBROUTINE
         ;;not our turn to move
         rts
 PacManTurn
-        lda #1
-        sta voice3on            ;waka sound off
-        lda Sprite_back,X
-        cmp #DOT
-        beq .waka
-        ;; we are not over dots
-        lda #0
-        sta voice3on
-        sta voice4
-.waka        
-
-
         lda #cornerAdv
         sta CORNER_SHAVE        ;pac get +1 bonus on corners
         
@@ -2155,7 +2133,9 @@ PacManTurn
         lda LASTJOYDIR
         sta LASTJOY
         
-.process        
+.process
+        ldy #0
+        sty S1 ;eat dots from head tile
 ;        sta screen+1            ; debug char on screen
         tay                   
         and #JOYL               ; check for left bit
@@ -2173,30 +2153,15 @@ PacManTurn
         and #JOYR
         beq .right
         rts
-.down
-        store16 PAC1D,W3
-        lda #motionDown
-        sta Sprite_motion
-        jsr scroll_down
-        bcc .moveok
-        bcs .uselast
-        rts
-.right
-        store16 PAC1,W3    ;
-        lda #motionRight
-        sta Sprite_motion
-        scroll_right
-        bcc .moveok
-        bcs .uselast
+.fire
         rts
 .left
         store16 PAC_L1,W3
         lda #motionLeft
         sta Sprite_motion
         scroll_left
-        bcc .moveok
-        bcs .uselast
-        rts
+        bcs .uselast            ;couldn't move, use last reading
+        jmp .moveok
 .up
         store16 PAC_UP1,W3
         lda #motionUp
@@ -2204,19 +2169,41 @@ PacManTurn
         jsr scroll_up
         bcc .moveok
         jmp .uselast
-        rts
-.fire
-        rts
+.down
+        lda #1
+        sta S1                  ;eat dots from tail
+        store16 PAC1D,W3
+        lda #motionDown
+        sta Sprite_motion
+        jsr scroll_down
+        bcc .moveok
+        jmp .uselast
+.right
+        lda #1
+        sta S1                  ;eat dots from tail
+        store16 PAC1,W3    ;
+        lda #motionRight
+        sta Sprite_motion
+        scroll_right
+        bcc .moveok
+        jmp .uselast
 .moveok
+        lda WASCOURSE
+        beq .smooth
+        ;; new tile occupied, let's see what was there
+        jsr PacHit
+.smooth        
         lda LASTJOY
         sta LASTJOYDIR
         move16 W3,Sprite_src
-#if 1
         jsr Animate
-#endif        
-.done        
         rts
-
+        
+;;; find out what pacman is about to eat
+;;; doesn't handle ghosts, just playfield stuff
+;;; dots,power,fruit, etc
+PacHit SUBROUTINE
+        rts
 ;;; animate a sprite by changing its source frames
 Animate SUBROUTINE
         lda PACFRAMED
@@ -2247,19 +2234,6 @@ Animate SUBROUTINE
         adc #2
 .tileSet0
         endm
-#if 0        
-        mac cmp16
-        clc
-        lda {1}
-        cmp {2}
-        bne .done
-        lda {1}+1
-        cmp {2}+1
-        bne .done
-        sec
-.done        
-        endm
-#endif        
 ;;; uses W1,W2,W3
 blargo SUBROUTINE
 
@@ -2443,18 +2417,13 @@ IncrementPos SUBROUTINE
         Inc16 W2
         rts
 scroll_horiz SUBROUTINE
-#if _debug        
         lda #0
-        sta S7
-#endif        
+        sta WASCOURSE
+        
         lda Sprite_dir,X
         cmp #1
         beq .ok                 ;ok to move horizontal
         ;; switch to horiz order
-#if _debug        
-        lda #42
-        sta S7
-#endif        
         jsr changehoriz
         bcc .ok
         rts
@@ -2463,13 +2432,8 @@ scroll_horiz SUBROUTINE
         cpy END_SCRL_VAL
         bne .draw
 .course                         ;course scroll
-#if  _debug        
-        lda #42
-        cmp S7
-        bne .ok1
-        brk                     ;shouldn't be course scrolling if we changed orientation
-.ok1
-#endif        
+        lda #1
+        sta WASCOURSE
         move16x Sprite_loc,W2   ;
         lda SCRL_VAL
         bmi .left
@@ -2494,13 +2458,6 @@ scroll_horiz SUBROUTINE
         jsr IsWall
         beq .cantmove
 .continue
-        ;; a course scroll has occurred
-        cpx #0
-        bne .notpacman
-        lda #$20
-        sta Sprite_back,X
-        ;sta Sprite_back2,X
-.notpacman
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla                      ;pull new sprite offset from the stack
         tay
@@ -2686,19 +2643,24 @@ blith SUBROUTINE
 ;;;
 ;;; X = sprite to move
 scroll_up SUBROUTINE
+        lda #0
+        sta WASCOURSE
+        
         lda Sprite_dir,X
         cmp #22                     ;check if already vertical
         beq .00
         lda #1
         sta S1
-        jsr changevert
+        jsr changevert          ;offset = 8 if we successfully change orientation
         bcc .00
         rts
 .00
         ldy Sprite_offset,X
         bne .fine               ; > 0 then fine scroll
 .course                         ; course scroll
-;        brk
+        lda #1
+        sta WASCOURSE
+
         move16x Sprite_loc,W1   ; screen location to W2
         sub16Im W1,#22            ; check up one tile
         ldy #0
@@ -2718,15 +2680,12 @@ scroll_up SUBROUTINE
         tya
         sta Sprite_offset2,X
 .done
-;        store16 PAC_UP1,W1
-;        move16x2 W1,Sprite_src
         clc
         rts
 
 ;;; change orientation to horizontal
 ;;; X sprite to attempt change on
 ;;; SPRT_LOCATOR direction to change to ( 22=left 24=right)
-;;; S2 offset from W2 of erase tile
 ;;; output: sprite_loc2 contains new head position if successful
 ;;; 
 ;;; destruction S2,S3,W2,W1
@@ -2741,7 +2700,6 @@ scroll_up SUBROUTINE
 changehoriz SUBROUTINE
         move16x Sprite_loc,W1
         lda #1                 ; offset to blank tile in endtile case
-        sta S2
         sta S3                  ;-offset to ORG in endtile case
         lda Sprite_offset,X     ;where is sprite offset
         cmp CORNER_SHAVE        ;with shave dist of beg tile?
@@ -2755,9 +2713,6 @@ changehoriz SUBROUTINE
         sec
         rts
 .begtile                        ;at beginning of tile
-        lda #45                 ;change erase tile offset
-        sta S2                  ;
-        
         lda #23                 ;update offset to ORG
         sta S3                  ;for begtile case
 
@@ -2779,7 +2734,7 @@ changehoriz SUBROUTINE
         sta S3                  ;if moving right
 
         lda SPRT_LOCATOR        ;moving right?
-        cmp #24
+        cmp #motionRight
         beq .isright            ;branch moving right
 
         lda #8                  ;going left, sprite offset = 8
@@ -2820,7 +2775,6 @@ changehoriz SUBROUTINE
 changevert SUBROUTINE
         move16x Sprite_loc,W1
         ldy #22                 ;offset of tile to erase in endtile case
-        sty S2
         sty S3                  ;offset to ORG in endtile case
         lda Sprite_offset,X     ; where is sprite offset
         cmp CORNER_SHAVE        ; within shave dist of 0?
@@ -2834,9 +2788,7 @@ changevert SUBROUTINE
         sec
         rts
 .begtile                        ;at beginning of tile
-        ldy #24                 ;change erase tile offset
-        sty S2                  ;
-        dey                     ;ldy #23
+        ldy #23
         sty S3                  ;update ORG offset
 .endtile                        ;end of tiles branch
         subxx W1,W2,S3          ;generate ORG address in W2
@@ -2873,6 +2825,9 @@ changevert SUBROUTINE
 ;;; X = sprite to scroll down
 ;;; carry is set on return if move is not possible
 scroll_down SUBROUTINE
+        lda #0
+        sta WASCOURSE
+        
         lda Sprite_dir,X
         cmp #22                 ;check if already vertical
         beq .00
@@ -2896,6 +2851,8 @@ scroll_down SUBROUTINE
         sec                     ;indicate failure
         rts
 .continue        
+        lda #1
+        sta WASCOURSE
         addxx W2,W1,#22
         move16x2 W1,Sprite_loc2  ;save the new sprite screen location
         ldy #0                  ;reset fine scroll offset
