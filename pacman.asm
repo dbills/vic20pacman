@@ -1657,9 +1657,23 @@ GhostTurn
 .loopend
         rts
 
-;;; return true if charcter in A is a wall
+;;; return true if character in A is a wall
 IsWall SUBROUTINE
+        cpx #0
+        bne .notpacman
+        
+        ldy #0
+        sty voice3on
+        sty voice4
+        cmp #DOT
+        bne .noteating
+        ldy #1
+        sty voice3on
+        rts                     ;return is Z not on
+.notpacman        
+.noteating        
         cmp #MW
+        
         rts
 ;;; display a number in A on screen
 ;;; bit 7 on will call to reverse characters
@@ -2098,7 +2112,6 @@ Divide22_16 SUBROUTINE
 Pacman SUBROUTINE
         ldx #0
 
-        
         MyTurn2 PacManTurn
         ;;not our turn to move
         rts
@@ -2463,11 +2476,10 @@ scroll_horiz SUBROUTINE
         ;; going right
         lda #0                  ;push potential new sprite offset
         pha
-;        inc16 W2
         jsr IncrementPos
-        ldy #01       
-        lda #MW
-        cmp (W2),Y              ;check for wall at pos + 2
+        ldy #01                 ;
+        lda (W2),Y              ;check for wall at pos + 2
+        jsr IsWall              ;remember we are 2 tiles wide
         bne .continue
 .cantmove
         sec                     ;can't move, return false
@@ -2477,13 +2489,18 @@ scroll_horiz SUBROUTINE
         lda #8
         pha
         jsr DecrementPos
-;        dec16 W2                ;check to the left for wall
-        lda #MW
         ldy #0
-        cmp (W2),Y
+        lda (W2),Y
+        jsr IsWall
         beq .cantmove
 .continue
-        
+        ;; a course scroll has occurred
+        cpx #0
+        bne .notpacman
+        lda #$20
+        sta Sprite_back,X
+        ;sta Sprite_back2,X
+.notpacman
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla                      ;pull new sprite offset from the stack
         tay
