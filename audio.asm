@@ -33,7 +33,7 @@ Scale_service SUBROUTINE
 ;       beq .done
         rts
 .done
-        lda #1                      ;tell voicetrack we are done
+        lda #trackDone          ;tell voicetrack we are done
         sta VoiceTrack_done,X
         rts
 Scale_service2 SUBROUTINE
@@ -47,7 +47,7 @@ Scale_service2 SUBROUTINE
         beq .done
         rts
 .done
-        lda #1                      ;tell voicetrack we are done
+        lda #trackDone                      ;tell voicetrack we are done
         sta VoiceTrack_done,X
         rts
 ;-------------------------------------------
@@ -66,8 +66,10 @@ Scale_service2 SUBROUTINE
 ;;; not doc'd yet
 ;;; 2 = repeat
 ;-------------------------------------------
+trackDone    equ 0
+trackRunning equ 1        
 VoiceTrack_data ds.w    4,0,0,0,0      ; pointer to track data
-VoiceTrack_done ds      4,1,1,1,1      ;true when last command is done
+VoiceTrack_done ds      4,trackDone,trackDone,trackDone,trackDone 
 VoiceTrack_st   ds.w    4,0,0,0,0      ;address beginning
 ;
 ; Called regularly by main loop or VBI
@@ -75,8 +77,7 @@ VoiceTrack_st   ds.w    4,0,0,0,0      ;address beginning
 ; X = voice track to service
 ;
 VoiceTrack_svc SUBROUTINE
-        lda #1                      ; IF last command done
-        cmp VoiceTrack_done,X
+        lda VoiceTrack_done,X
         beq .load_next_command
         ;; call appropriate service routine
         lda Scale_sf,X
@@ -102,10 +103,9 @@ VoiceTrack_svc SUBROUTINE
                                 ; install Scale as service handler
         move16x2 W1,VoiceTrack_data
 
-        lda #0                      ; set done = false
+        lda #trackRunning 
         sta VoiceTrack_done,X       ;
-
-        jmp Scale_service2
+        jmp Scale_service2  
         
 .load_next_command
         ;; move pointer to zero page so we can use it for indexing 
@@ -149,7 +149,7 @@ VoiceTrack_svc SUBROUTINE
                                 ; install Scale as service handler
         move16x2 W1,VoiceTrack_data
         
-        lda #0                      ; set done = false
+        lda #trackRunning
         sta VoiceTrack_done,X       ;
         jmp Scale_service           ;
         brk                         ; shouldn't get here

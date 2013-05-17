@@ -935,18 +935,10 @@ Sprite_dir      dc.b 1,1,22,22,22 ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,22,22,22 ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
-Sprite_speed    dc.b 5,4,24,4,4 ;your turn gets skipped every N loops of this
+Sprite_speed    dc.b 20,20,25,20,20 ;your turn gets skipped every N loops of this
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
-wakaDelay1       equ 25        ;rest time
-wakaDelay2       equ 25        
-WakaFreq         dc.b wakaStart
-WakaTime         dc.w wakaDelay1          ;delay to next note
-phaseTop         equ 4
-wakaStart        equ 230
-wakaEnd          equ 255
-WakaPhase        dc.b 3   ; 4 rest, 3 up,2 rest,1 down
-masterSpeed      equ 5           ;master game delay
+masterSpeed      equ 4           ;master game delay
 #IFNCONST
 SAVE_OFFSET     dc.b 0
 SAVE_OFFSET2    dc.b 0
@@ -2888,97 +2880,6 @@ scroll_down SUBROUTINE
         ENDM
 mystep        
         dc.b 2   
-;;; pacman munching sound
-Waka SUBROUTINE
-        lda WakaFreq
-        sta voice4
-
-        clc
-        adc mystep
-        sta WakaFreq
-        bcs .reverse
-        cmp #230
-        bcc .reverse
-        rts
-.reverse
-        lda mystep
-        bmi .makepos
-        MakeNegative
-        sta mystep
-        lda #$ff
-        sta WakaFreq
-        rts
-.makepos
-        abs
-        sta mystep
-        lda #230
-        sta WakaFreq
-        rts
-
-        
-        
-#if 0        
-Waka SUBROUTINE
-        lda WakaPhase
-        cmp #3
-        beq .up
-        lda #1
-        beq .down
-        cmp #4
-        beq .rest
-        cmp #1
-        beq .rest
-        brk
-.rest        
-        lda #0
-        sta voice4
-        dec16 WakaTime
-        beq .nextPhase
-        rts
-.nextPhase
-        ;; move to next phase
-        dec WakaPhase
-        bne .cont
-        ;; reset the phase
-        lda #phaseTop
-        sta WakaPhase
-.cont        
-        lda WakaPhase
-        cmp #3
-        beq .init_up
-        cmp #1
-        beq .init_down
-        cmp #4
-        beq .init_rest
-        cmp #2
-        beq .init_rest
-        brk
-.init_rest        
-        store16 wakaDelay1,WakaTime
-        rts
-.init_up
-        lda #wakaStart
-        sta WakaFreq
-        sta voice4
-        rts
-.init_down
-        lda #wakaEnd
-        sta WakaFreq
-        sta voice4
-        rts
-.up
-        inc WakaFreq
-        lda WakaFreq
-        cmp #wakaEnd
-        bcs .nextPhase
-        rts
-.down
-        dec WakaFreq
-        lda WakaFreq
-        cmp #wakaStart
-        bcc .nextPhase
-        rts
-#endif
 ;;; 
 ;;; Display a BCD number
 DisplayBCD SUBROUTINE
