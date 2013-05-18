@@ -123,6 +123,8 @@ POWER_UP        equ $29         ;pacman is powered up
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
 S6              equ $31
+PACXPIXEL       equ $32
+PACYPIXEL       equ $33        
 #IFCONST _LOCAL_SAVEDIR
 GHOST_COL       equ $35        
 GHOST_ROW       equ $36
@@ -265,10 +267,10 @@ HWALL           equ $07
         ldx #{2}
         sta screen,X
         lda clrram,X
-        and #%00000111
+        and #%00000111          ;read existing color
         clc
-        adc #1
-        cmp #8
+        adc #1                  ;add one to it
+        cmp #8                  ;wrap around
         bne .storeit
         lda #WHITE
 .storeit        
@@ -946,6 +948,8 @@ Sprite_frame    dc.b 0,1,1,1,1 ;animation frame of sprite as offset from _src
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8)     , mychars+(GH2L*8)     , mychars+(GH3L*8)    
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16), mychars+(GH2L*8)+(16),mychars+(GH3L*8)+(16)
 Sprite_motion   dc.b 1,motionRight,motionUp,motionDown,motionDown ; see motion defines
+dirVert         equ 22            ;sprite oriented vertically
+dirHoriz        equ 1             ;sprite oriented horizontally
 Sprite_dir      dc.b 1,1,22,22,22 ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,22,22,22 ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
@@ -1122,6 +1126,10 @@ drwsprt1 SUBROUTINE
 
  INCLUDE "audio.asm"
 
+PowerPill SUBROUTINE
+        lda #168
+        sta 36879
+        rts
 ;-------------------------------------------
 ; MAIN()
 ;-------------------------------------------
@@ -1205,10 +1213,20 @@ main SUBROUTINE
         sty POWER_UP
         lda (W1),Y
         sta Sprite_back,X
-        cmp #
+        cpx #0
+        bne .0
+        cmp #PWR
+        bne .0
+        jsr PowerPill
+.0        
         ldy Sprite_dir,X
         lda (W1),Y
         sta Sprite_back2,X
+        cpx #0
+        bne .backloop
+        cmp #PWR
+        bne .backloop
+        jsr PowerPill
         ;; end collection of background tiles
         jmp .backloop
         
@@ -1226,17 +1244,13 @@ main SUBROUTINE
 .player
 ;;; this is the beginning of non-time critical stuff
 ;;; everything before this, we hoped had been completed on the vertical blank
-        ;; lda #01
-        ;; eor Sprite_page         ;let everyone know we are on the other tile page
-        ;; sta Sprite_page
-        
 ;        jsr WaitFire
         jsr Pacman
 #IFCONST GHOSTS_ON        
         jsr GhostAI
-#endif        
-        lda #SPRITES            ;for i = sprites to 0, i--
-        sta SPRITEIDX
+#endif
+        jsr PixelPos
+        InitSpriteLoop
 .playerloop
         dec SPRITEIDX
         bmi .loopend
@@ -1249,6 +1263,7 @@ main SUBROUTINE
 .loopend
         jmp .loop
         brk
+        
 ;;; -------------------------------------------------------------------------------------------
 ;;; load a character image
 ;;; W1 = source data
@@ -1584,6 +1599,53 @@ UpdateMotion SUBROUTINE
         sta Sprite_motion,X
 .done        
         rts
+        ;; calculate the ghost in X's
+        ;; currently displayed row and column
+        ;; Output: GHOST_ROW,GHOST_COL
+        MAC CalcGhostRowCol
+        
+        move16x Sprite_loc,W1
+        sub16Im W1,screen
+        jsr Divide22_16
+        lda W1
+        sta GHOST_COL
+        lda DIV22_RSLT
+        sta GHOST_ROW
+        
+        ENDM
+        ;; pac upcoming row col into variables
+        ;; OUTPUT: PACCOL,PACROW
+        MAC CalcPacRowCol
+        
+        move16 Sprite_loc2,W1
+        sub16Im W1,screen
+        jsr Divide22_16
+        lda W1
+        sta PACCOL              ;store tile column
+        asl                     ;multiply by 8
+        asl
+        asl
+        ldy Sprite_dir2         ;are we oriented vertically?
+        cpy #dirVert
+        beq .vert
+        clc                     ;we are horiz
+        adc Sprite_offset2      ;add in the smooth scroll offset to pixel count
+.vert
+        sta PACXPIXEL           ;store pixel column
+        
+        lda DIV22_RSLT          ;get row result from division
+        sta PACROW              ;store tile row
+        asl                     ;multiply by 8
+        asl
+        asl
+        cpy #dirHoriz
+        beq .horiz         ;
+        clc                ;we are vertical     
+        adc Sprite_offset2 ; add in the smooth scroll offset to pixel count
+.horiz        
+        sta PACYPIXEL           ;store pixel row
+        ENDM
+        
         ;; check if sprite X get's to move this frame
         MAC MyTurn2
         dec Sprite_turn,X
@@ -1601,16 +1663,10 @@ GhostAI SUBROUTINE
         sta CORNER_SHAVE        ;ghosts get no cornering bonus
         ;; caculate pacman row,col so ghosts can use
         ;; in their AI routines
-        move16 Sprite_loc2,W1
-        sub16Im W1,screen
-        jsr Divide22_16
-        lda W1
-        sta PACCOL
-        lda DIV22_RSLT
-        sta PACROW
 
-        lda #SPRITES
-        sta SPRITEIDX
+        CalcPacRowCol
+
+        InitSpriteLoop
 .loop
         dec SPRITEIDX
         beq .loopend            ;pacman is sprite 0, so we leave
@@ -1747,40 +1803,61 @@ ones:
         ENDM
 ;;; convert tiles to pixels
 ;;; X sprite to convert
+;;; {1} source col
+;;; {2} source row
+;;; {3} output column pixels
+;;; {4} output row pixels
+;;; X sprite to convert
         MAC TileToPixels
         lda {1}
-        ;; times 8
+        asl                     ;mul by 8
         asl
         asl
+        sta {3}
+        lda {2}
+        asl                     ;mul by 8
         asl
-        ;; add pixels
-        sta {1}
+        asl
+        sta {4}
         lda Sprite_offset2,X
+        ldy Sprite_dir,X
+        cpy #dirVert
+        beq .vert
+        cpy #dirHoriz
+        beq .horiz
+        brk                     ;unknown
+.vert
         clc
-        adc {1}
-        sta {1}
+        adc {4}
+        sta {4}
+        bcc .done               ;no way carry should ever be set
+.horiz
+        clc
+        adc {3}
+        sta {3}
+.done        
         ENDM
+;;; 
+PixelPos SUBROUTINE
+#if 0
+        ldx #0
+        TileToPixels PACCOL,PACROW,S1,S2
+        Display1 "T",12,PACCOL
+        Display1 "Y",15,PACROW
+        Display1 "N",6,S1
+        Display1 "M",9,S2
+#endif
+        Display1 "T",12,PACCOL
+        Display1 "Y",15,PACROW
+        Display1 "N",6,PACXPIXEL
+        Display1 "M",9,PACYPIXEL
+        rts
 ;;; Calculate distance of W1 to target tile
 ;;; input: W1 candidate sprite position
-;;; input: GHOST_COL,GHOST_ROW target tile
+;;; output: GHOST_COL,GHOST_ROW target tile
 ;;; output:
 ;;; S3: X dist + Y dist
 CalcDistance SUBROUTINE
-#if 0        
-        ;; if the head tile location is different
-        ;; or the direction is different , then we'll
-        ;; consider this move
-        move16x Sprite_loc,W2
-        cmp16 W2,W1
-        bne .cont
-        lda Sprite_dir,X
-        cmp Sprite_dir2,X
-        bne .cont
-        lda #noChoice
-        rts
-;        jmp .update
-#endif        
-.cont        
         sub16Im W1,screen       ;w1 = offset from screen start, input to divide
         jsr Divide22_16         ;calc row/column by division
 ;        DisplayDivResults
@@ -2094,7 +2171,11 @@ Divide22_16 SUBROUTINE
         tax
 
         rts
-        
+        ;; {1}=border {2}=background
+        MAC SetBorderAndBackgroundColor
+        lda #[{1}&%11]|[{2}&%f0]
+        sta 36879
+        ENDM
 
 ;;; 
 ;;; Service PACMAN, read joystick and move
@@ -2188,11 +2269,7 @@ PacManTurn
         bcc .moveok
         jmp .uselast
 .moveok
-        lda WASCOURSE
-        beq .smooth
-        ;; new tile occupied, let's see what was there
-        jsr PacHit
-.smooth        
+
         lda LASTJOY
         sta LASTJOYDIR
         move16 W3,Sprite_src
@@ -2289,37 +2366,41 @@ SPRT_CUR set S2                 ;current sprite
         bmi .done    ;do not compare sprites < SPRT_CUR for collisions
         
         ldx SPRT_IDX
-
+        ;; if we are checking for collisions against ourselves, we use
+        ;; use current loc, and not loc2 ( I forget why , need to comment )
         ldSprtHeadPos Sprite_loc,W3 ;SPRITE_IDX's current head position into W3
         cpx  SPRT_CUR           ;are we checking against ourselves?
-        beq .ourselves          ;ok, W3 is good to go
-        ldSprtHeadPos Sprite_loc2,W3 ;not ourselves, load W3 with S3 sprites's new position
+        beq .ourselves          ;yes, then W3 is good to go
+        ldSprtHeadPos Sprite_loc2,W3 ;not ourselves, W3 =  SPRT_IDX's new position
 .ourselves        
-        ;; check if we hit sprite IDX's head with our head
-        cmp16 W1,W3
+        ;; check if we hit SPRT_IDX's head with our head
+        cmp16 W1,W3             ;our head == sprite_idx's head
         bne .not_head2head
         jsr head2head
 .not_head2head        
-        ;; check sprite S3's head for collision with our tail
-        cmp16 W2,W3
+        ;; check SPRT_IDX's head for collision with our tail
+        cmp16 W2,W3             ;out tail == sprite_idx's head
         bne .not_tail2head
         jsr tail2head
+        ;; we check oue head and tail against oncoming sprites heads , now
+        ;; it's time to check our head n tail against oncoming sprites tails
 .not_tail2head        
-x        ldSprtTailPos Sprite_loc,W3 ;S3 sprite's current tail position into W3
+        ldSprtTailPos Sprite_loc,W3 ;S3 sprite's current tail position into W3
         cpx  SPRT_CUR           ;are we checking against ourselves
-        beq .ourselves2         ;ok, W3 is good to go
+        beq .ourselves2         ;yes, then W3 is good to go
         ldSprtTailPos Sprite_loc2,W3 ;not ourselves, load W3 with S3 sprites's new position
 .ourselves2        
-        cmp16 W1,W3
+        cmp16 W1,W3             ;our head == sprite_idx's tail?
         bne .not_head2tail
         jsr head2tail 
 .not_head2tail        
-        cmp16 W2,W3
+        cmp16 W2,W3             ;our tail  == sprite_idx's tail?
         bne .not_tail2tail
         jsr tail2tail
 .not_tail2tail        
-        jmp .loop
+        jmp .loop               ;all possible collisions checked
         brk
+        
 ;;; handle tail to head collisions
 ;;; X is the indexed sprite
 tail2head SUBROUTINE
@@ -2332,9 +2413,9 @@ tail2head SUBROUTINE
         rts
 .ourselves
         ;; this would happen when scrolling left, for example
-        lda Sprite_sback2,X     ;load tail background
-        cmp #NOTCOPY                ;is it still 'unset'
-        bne .done               ;no, it's been set already, we are done
+        lda Sprite_sback2,X    ;load tail background
+        cmp #NOTCOPY           ;is it still 'unset'
+        bne .done              ;no, it's been set already, we are done
         ;; tail hasn't been set, let's copy our head 'playfied' background into it
         lda Sprite_back,X       ;load head playfield background
         sta Sprite_sback2,X     ;save into tail 'compositor' tile
@@ -2348,8 +2429,6 @@ head2head SUBROUTINE
         loadTile2
         ldy SPRT_CUR
         sta Sprite_sback,Y
-        ;; ldx SPRT_CUR
-        ;; jsr dumpBack2
         rts
 .ourselves
         lda Sprite_sback,X
@@ -2882,8 +2961,6 @@ scroll_down SUBROUTINE
         lda #PURPLE
         sta clrram,X
         ENDM
-mystep        
-        dc.b 2   
 ;;; 
 ;;; Display a BCD number
 DisplayBCD SUBROUTINE

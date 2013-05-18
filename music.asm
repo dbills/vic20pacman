@@ -60,7 +60,7 @@ Track21
     ds 1,240
     ds 1,1
     ds 1,2            ; repeat
-        
+#if 0        
 TrackBass
 	ds 1,1
 	ds 1,214
@@ -248,3 +248,4 @@ TrackHigh
 	ds 1,0
 	ds 1,45
         ds 1,2
+#endif
