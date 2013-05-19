@@ -1249,7 +1249,8 @@ main SUBROUTINE
 #IFCONST GHOSTS_ON        
         jsr GhostAI
 #endif
-        jsr PixelPos
+;        jsr PixelPos
+
         InitSpriteLoop
 .playerloop
         dec SPRITEIDX
@@ -1640,7 +1641,7 @@ UpdateMotion SUBROUTINE
         asl
         cpy #dirHoriz
         beq .horiz         ;
-        clc                ;we are vertical     
+        clc                ;we are vertical
         adc Sprite_offset2 ; add in the smooth scroll offset to pixel count
 .horiz        
         sta PACYPIXEL           ;store pixel row
@@ -1704,6 +1705,7 @@ GhostTurn
          
 ;        jsr GhostAsPlayer
         jsr MoveGhost           ;
+        jsr Collisions
 .animate
         ;; animate the ghost by changing frames
         dec Sprite_frame,X
@@ -2275,11 +2277,26 @@ PacManTurn
         move16 W3,Sprite_src
         jsr Animate
         rts
-        
-;;; find out what pacman is about to eat
-;;; doesn't handle ghosts, just playfield stuff
-;;; dots,power,fruit, etc
-PacHit SUBROUTINE
+;;; 
+Collisions SUBROUTINE
+        CalcGhostRowCol
+        TileToPixels GHOST_COL,GHOST_ROW,S1,S2
+        lda S1
+        sec
+        sbc PACXPIXEL
+        Abs
+        cmp #4
+        bcs .done
+
+        lda S2
+        sec
+        sbc PACYPIXEL
+        Abs
+        cmp #4
+        bcs .done
+        brk
+.done        
+        ;; GHOST_ROW,GHOST_COL
         rts
 ;;; animate a sprite by changing its source frames
 Animate SUBROUTINE
