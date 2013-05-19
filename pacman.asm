@@ -2,7 +2,7 @@
         processor 6502
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
-GHOSTS_ON   equ 1
+;GHOSTS_ON   equ 1
 _debug      equ 1                 ; true for debugging
 focusGhost  equ 10                ;ghost to print debugging for
 cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
@@ -1127,7 +1127,7 @@ drwsprt1 SUBROUTINE
  INCLUDE "audio.asm"
 
 PowerPill SUBROUTINE
-        lda #168
+        lda #11
         sta 36879
         rts
 ;-------------------------------------------
@@ -1735,6 +1735,21 @@ GhostTurn
 
 ;;; return true if character in A is a wall
 IsWall SUBROUTINE
+        pha
+        cpx #0
+        bne .notpacman
+        ;; pacman gets some extra checks
+        ;; like to turn sound on and off
+        ;; and maybe fruits if I do them are here
+        cmp #DOT
+        beq .isdot
+        jsr SoundOff
+        jmp .done
+.isdot
+        jsr SoundOn
+.done        
+.notpacman
+        pla
         cmp #MW
         rts
 ;;; display a number in A on screen
@@ -2569,18 +2584,6 @@ scroll_horiz SUBROUTINE
         beq .cantmove
 .continue
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
-        cpx #0
-        bne .0
-        ldy #0
-        lda (W2),Y
-        sta screen+15
-        cmp #DOT
-        beq .isdot
-        jsr SoundOff
-        jmp .0
-.isdot
-        jsr SoundOn
-.0
         pla                      ;pull new sprite offset from the stack
         tay
 .draw
@@ -2603,15 +2606,6 @@ SoundOff SUBROUTINE
         ldx #3
         HaltTrack
         ldx #0
-        rts
-;;
-;; set zero flag if move is forbidden
-;; proposed pacman leftmost position is in W1
-;;
-move_ok SUBROUTINE
-        ldy #0
-        lda (W1),y
-        cmp #MW            ; is it a wall?
         rts
 ;;; clear all bits to 0
 ;;; W2 = top half font ram
@@ -2856,7 +2850,7 @@ changehoriz SUBROUTINE
         
         ldy SPRT_LOCATOR
         lda (W2),Y
-        cmp #MW                 ;is it a wall
+        jsr IsWall
         beq .failed             ;we hit a wall, abort move
         
         lda #1                  ;change direction to horiz
@@ -2930,7 +2924,7 @@ changevert SUBROUTINE
         
         ldy S1
         lda (W2),Y
-        cmp #MW                 ;is it a wall
+        jsr IsWall
         beq .failed             ;we hit a wall, abort move
         
         lda #22                 ;change direction to down
