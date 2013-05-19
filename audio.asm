@@ -66,17 +66,23 @@ Scale_service2 SUBROUTINE
 ;;; not doc'd yet
 ;;; 2 = repeat
 ;-------------------------------------------
-trackDone    equ 0
-trackRunning equ 1        
+trackDone     equ 0
+trackRunning  equ 1        
 VoiceTrack_data ds.w    4,0,0,0,0      ; pointer to track data
 VoiceTrack_done ds      4,trackDone,trackDone,trackDone,trackDone 
 VoiceTrack_st   ds.w    4,0,0,0,0      ;address beginning
+VoiceTrack_halted ds    4,1,1,1,1
 ;
 ; Called regularly by main loop or VBI
 ; to service the voice track
 ; X = voice track to service
 ;
 VoiceTrack_svc SUBROUTINE
+        lda VoiceTrack_halted,x
+        bne .nothalted
+
+        rts
+.nothalted
         lda VoiceTrack_done,X
         beq .load_next_command
         ;; call appropriate service routine
@@ -120,6 +126,7 @@ VoiceTrack_svc SUBROUTINE
         beq .repeat
         cmp #02                 ; case 2 stop command
         brk
+.done        
         rts
         
 .repeat
@@ -132,13 +139,6 @@ VoiceTrack_svc SUBROUTINE
         ;; we use the same start/end freq for 'notes'
         sta Scale_sf,X              ; save start freq
         sta Scale_ef,X              ; save end freq
-        bne .0
-        lda #0
-        sta volume
-.0
-        lda #8
-        sta volume
-        
         lda #1                      ; direction = up ( not really relevant )
         sta Scale_st,X
         inc16 W1
@@ -163,4 +163,15 @@ VoiceTrack_svc SUBROUTINE
         ldx #{1}
         store16x {2},VoiceTrack_data
         store16x {2},VoiceTrack_st
+        ENDM
+
+        ;; X track to halt
+        MAC HaltTrack
+        lda #trackDone
+        sta VoiceTrack_halted,X
+        ENDM
+        ;; X track
+        MAC UnHaltTrack
+        lda #trackRunning
+        sta VoiceTrack_halted,X
         ENDM

@@ -96,7 +96,7 @@ SPRITEIDX       equ $f        ;sprite index for main loop
 MASTERCNT       equ $f        ;countdown; see masterDelay
 ;;; 
 CSPRTFRM        equ $10        ; number of frames in the currently processing sprite
-voice3on        equ $11         ;0 = voice 
+
 PACFRAMED       equ $12        ;pacframe dir
 NXTSPRTSRC      equ $13        ;when moving a sprite, the next 'set' of source bitmaps
 DSPL_1          equ $14        ;used by DisplayNum routine
@@ -1148,7 +1148,7 @@ main SUBROUTINE
 #endif        
         lda #1
         sta PACFRAMED
-        sta voice3on            ;voice3 enabled by default
+
         lda #$ff
         sta LASTJOYDIR
 ;        cli                     ; enable interrupts for jiffy clock 
@@ -1160,6 +1160,13 @@ main SUBROUTINE
         jsr copychar            ; copy our custom char set
 
         jsr mkmaze
+        ldx #22
+        lda #WHITE
+.top
+        sta clrram,X
+        dex
+        bne .top
+.done
 
 ;        LoadTrack 1,TrackBass
 ;        LoadTrack 2,TrackHigh
@@ -1181,11 +1188,9 @@ main SUBROUTINE
         bne .iloop
         ;; ok, we are at vertical blank, on one of the frames we want to render
         ;; here we go ...
-        lda voice3on
-        beq .skip3
         ldx #3
         jsr VoiceTrack_svc          ; run sound engine
-.skip3        
+
 
         lda #1                  ;dbl buffering, switch sprite tiles
         eor Sprite_page         ; 0 = 1
@@ -1212,15 +1217,25 @@ main SUBROUTINE
         ldy #0
         sty POWER_UP
         lda (W1),Y
+        sta screen+10
         sta Sprite_back,X
         cpx #0
-        bne .0
+        bne .notpac
         cmp #PWR
         bne .0
         jsr PowerPill
-.0        
+.0
+        cmp #DOT
+        beq .notpac
+        saveX
+        ldx #3
+
+;        HaltTrack
+        resX
+.notpac
         ldy Sprite_dir,X
         lda (W1),Y
+        sta screen+11
         sta Sprite_back2,X
         cpx #0
         bne .backloop
@@ -1442,7 +1457,6 @@ WaitFire SUBROUTINE
         lda #$ff                ;-1 into A
         sta SCRL_VAL
         jsr scroll_horiz
-        
         ENDM
 
         MAC scroll_right
@@ -1705,7 +1719,7 @@ GhostTurn
          
 ;        jsr GhostAsPlayer
         jsr MoveGhost           ;
-        jsr Collisions
+;        jsr Collisions
 .animate
         ;; animate the ghost by changing frames
         dec Sprite_frame,X
@@ -2555,6 +2569,18 @@ scroll_horiz SUBROUTINE
         beq .cantmove
 .continue
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
+        cpx #0
+        bne .0
+        ldy #0
+        lda (W2),Y
+        sta screen+15
+        cmp #DOT
+        beq .isdot
+        jsr SoundOff
+        jmp .0
+.isdot
+        jsr SoundOn
+.0
         pla                      ;pull new sprite offset from the stack
         tay
 .draw
@@ -2564,7 +2590,20 @@ scroll_horiz SUBROUTINE
         sta Sprite_offset2,X
         clc
         rts
-
+SoundOn SUBROUTINE
+        lda #8
+        sta 36879
+        ldx #3
+        UnHaltTrack
+        ldx #0
+        rts
+SoundOff SUBROUTINE
+        lda #13
+        sta 36879
+        ldx #3
+        HaltTrack
+        ldx #0
+        rts
 ;;
 ;; set zero flag if move is forbidden
 ;; proposed pacman leftmost position is in W1
