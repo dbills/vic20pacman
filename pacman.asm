@@ -4,7 +4,6 @@ _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 GHOSTS_ON   equ 1
 _debug      equ 1                 ; true for debugging
-focusGhost  equ 10                ;ghost to print debugging for
 cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
 voice1      equ 36874             ; sound registers
 voice2      equ 36875
@@ -156,7 +155,8 @@ SCRL_VAL        equ $49
 LASTJOY         equ $4a
 LASTJOYDIR      equ $4b         ;last joy reading that had a switch thrown
 MOVEMADE        equ $4c         ;true if last pacman move was successful
-
+TIMER1          equ $4d         ;decrement by main game loop every other trip
+TIMER2          equ $4e        
 #if 0
 ;;; just for testing how many bytes I could save
 ;;; if I moved these to zero page -- about 120 bytes right now
@@ -195,7 +195,7 @@ VV              equ $02         ;testing, voice 2
 ;;
 PACL            equ $00            ; pacman char number
 
-GHL             equ $08            ; ghost char number
+GHL             equ $0b            ; ghost char number
 GH1L            equ [GHL+4]
 GH2L            equ [GH1L+4]
 GH3L            equ [GH2L+4]    
@@ -203,7 +203,8 @@ DOT             equ $04
 WALLCH          equ $05
 MW              equ $05            ;maze wall character
 PWR             equ $06
-HWALL           equ $07        
+HWALL           equ $07
+EYES            equ $08        
 ;
 ;
 ;------------------------------------
@@ -965,6 +966,7 @@ dirVert         equ 22            ;sprite oriented vertically
 dirHoriz        equ 1             ;sprite oriented horizontally
 modeOutOfBox    equ 1             ;see sprite_mode
 modeLeaving     equ 2             ;leavin the ghost box
+modeEaten       equ 3             ;ghost was chomped
 outOfBoxCol     equ 11            ;column at ghost box entry/exit
 outOfBoxRow     equ 9             ;row of tile above exit
 ;;; the ghost's by X register offset
@@ -972,16 +974,17 @@ inky            equ 1
 blinky          equ 2
 pinky           equ 3
 clyde           equ 4
+focusGhost      equ blinky      ;ghost to print debugging for
 fruit1Dots      equ 70          ;dots to release fruit
 fruit2Dots      equ 120         ;dots to release fruit2
-clydeDots       equ 57          ;dots to release clyde
-inkyDots        equ 25          ;dots to release inky
-pinkyDots       equ 1           ;dots to release pinky
+clydeDots       equ 255          ;dots to release clyde ( about 33% )
+inkyDots        equ 255          ;dots to release inky  ( )
+pinkyDots       equ 255           ;dots to release pinky ( should be 1)
 ;;; 
 Sprite_page     dc.b 0        
 #if 1
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*2+8 ,screen+22*11+9,screen+22*9+11,screen+22*11+10,screen+22*11+12    ;new screen loc
+Sprite_loc2     DC.W screen+22*2+8 ,screen+22*11+9,screen+22*(9+12)+11,screen+22*11+10,screen+22*11+12    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0 ;current screen background ( might include some other sprite tile that was laid down )
@@ -997,7 +1000,7 @@ Sprite_dir      dc.b 1,1,1,1,1 ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 1,1,1,1,1 ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 0,0,0,2,6  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 0,0,0,2,6  ;sprite bit offset in tiles
-Sprite_speed    dc.b 20,20,25,20,20 ;your turn gets skipped every N loops of this
+Sprite_speed    dc.b 80,20,10,20,20 ;your turn gets skipped every N loops of this
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
         ;; in order of exit 
@@ -1130,6 +1133,26 @@ erasesprt SUBROUTINE
         adc #2
 .page0
         endm
+        ;; determine ghost drawing color
+        MAC GetSpriteColorInY
+        ldy Sprite_color,X
+        cpx #0                  ;pacman doesn't change colors
+        beq .done
+        lda POWER_UP
+        beq .done
+        ;; flash ghost color when power up is low
+        cmp #20
+        bcc .near_end
+        ldy #BLUE
+        jmp .done
+.near_end                       ;almost out of power time
+        ldy #WHITE
+        lda #4
+        bit POWER_UP
+        beq .done
+        ldy #BLUE
+.done
+        ENDM
 ;;; Y =  byte of color
 ;;; W1 = screen position of sprite
 ;;; X = sprite we are working with
@@ -1173,8 +1196,9 @@ drwsprt1 SUBROUTINE
         ldy Sprite_dir,X        ;are we vertical or horizontal?
 .skip        
         sta (W1),Y              ;lay down the tail tile
-        
-        ldy Sprite_color,X      ;color in A
+
+        GetSpriteColorInY
+
         jsr UpdateColorRam
         rts
 
@@ -1182,16 +1206,18 @@ drwsprt1 SUBROUTINE
 
         ;;
         ;;close the ghost box door
-        ;;
+        ;; A=box cover character on exit
         MAC CloseGhostBox
-        lda #MW
-        sta screen+22*[outOfBoxRow+1]+outOfBoxCol
         lda #BLUE
         sta clrram+22*[outOfBoxRow+1]+outOfBoxCol
+        lda #MW
+        sta screen+22*[outOfBoxRow+1]+outOfBoxCol
         ENDM
 PowerPill SUBROUTINE
-        lda #11
-        sta 36879
+        lda #100
+        sta POWER_UP
+;        lda #11
+;        sta 36879
         rts
 ;-------------------------------------------
 ; MAIN()
@@ -1227,7 +1253,7 @@ main SUBROUTINE
         jsr copychar            ; copy our custom char set
 
         jsr mkmaze
-;        CloseGhostBox
+        CloseGhostBox
 
         ldx #22
         lda #WHITE
@@ -1264,6 +1290,17 @@ main SUBROUTINE
         lda #1                  ;dbl buffering, switch sprite tiles
         eor Sprite_page         ; 0 = 1
         sta Sprite_page         ; or 1 = 0
+        ;; decrement game based timers such as power pills and attack/scatter
+        ldy POWER_UP
+        beq .skip
+        dey
+        sty POWER_UP
+.skip        
+        ldy TIMER2
+        beq .start
+        dey
+        sta TIMER2
+.start        
 
         InitSpriteLoop          ;foreach sprite
 .eraseloop
@@ -1284,7 +1321,6 @@ main SUBROUTINE
         ;; collect playfied background tiles so we can replace them later
         move16x Sprite_loc,W1
         ldy #0
-        sty POWER_UP
         lda (W1),Y
         sta screen+10
         sta Sprite_back,X
@@ -1367,9 +1403,9 @@ loadch SUBROUTINE
 ;;;  copy the stock character set
 ;;;
 copychar    SUBROUTINE
-    store16 chrom1+[8*8],W2
-    store16 mychars+[8*8],W3
-    store16 charcnt-[8*8],W1
+    store16 chrom1+[8*GHL],W2
+    store16 mychars+[8*GHL],W3
+    store16 charcnt-[8*GHL],W1
 
     jsr movedown
 
@@ -1656,6 +1692,13 @@ SpecialKeys SUBROUTINE
 
 .done        
         rts
+
+        
+UpdateMotion SUBROUTINE
+        lda GHOST_DIR
+        sta Sprite_motion,X
+        rts
+#if 0        
 ;;; update motion but don't reverse
 UpdateMotion SUBROUTINE        
         lda GHOST_DIR
@@ -1699,6 +1742,7 @@ UpdateMotion SUBROUTINE
         sta Sprite_motion,X
 .done        
         rts
+#endif        
         ;; calculate the ghost in X's
         ;; currently displayed row and column
         ;; Output: GHOST_ROW,GHOST_COL
@@ -1792,10 +1836,19 @@ GhostAI SUBROUTINE
         MyTurn2 GhostTurn      ;does this ghost get to move this time?
         jmp .loop              ;no he doesn't
 GhostTurn
-        lda #modeLeaving
-        cmp Sprite_mode,X
-        bne .normal
-
+        lda Sprite_mode,X
+        cmp #modeLeaving
+        beq .leaving
+        cmp #modeEaten
+        beq .eaten
+        jmp .normal
+.eaten
+        lda #outOfBoxCol
+        sta GHOST_TGTCOL
+        lda #outOfBoxRow+2
+        sta GHOST_TGTROW
+        jmp .continue
+.leaving
         lda #outOfBoxCol
         sta GHOST_TGTCOL
         lda #outOfBoxRow
@@ -1850,16 +1903,21 @@ GhostTurn
         
 .loopend
         rts
-LeaveBox SUBROUTINE
-        ;; instruct the ghost to leave the box
-        lda #modeLeaving
-        sta Sprite_mode,X
-        ;; open the door on the box
+;;; open the door on the ghost box
+OpenGhostBox SUBROUTINE
         lda #$20
         sta screen+22*[outOfBoxRow+1]+outOfBoxCol
         lda #BLACK
         sta clrram+22*[outOfBoxRow+1]+outOfBoxCol
         rts
+LeaveBox SUBROUTINE
+        ;; instruct the ghost to leave the box
+        lda #modeLeaving
+        sta Sprite_mode,X
+        ;; open the door on the box
+        jsr OpenGhostBox
+        rts
+;;; 
 DotEaten SUBROUTINE
         jsr SoundOn
         lda #modeLeaving
@@ -2128,64 +2186,67 @@ PossibleMoves SUBROUTINE
         sta GHOST_DIR       ;initialize best move to an invalid move
 
         jsr SaveSprite
-.checkright
-        ;; don't reverse
-        lda #motionLeft       
-        cmp Sprite_motion,X
-        beq .checkleft
-        ;; check if we can go right
-        scroll_right            ;
-        bcs .checkleft          ;
-        ;; we could go right
-        ldSprtTailPos Sprite_loc2,W1 ;correct
-        jsr CalcDistance             ;
-        jsr RestoreSprite            ;
-        IfFocus "R",1                ;
-.checkleft
-        ;; don't reverse
-        lda #motionRight
-        cmp Sprite_motion,X
-        beq .checkup
-        ;; check if we can go left
-        scroll_left             ;
-        bcs .checkup
-        ;; we could go left
-        ldSprtHeadPos Sprite_loc2,W1 ;
-        jsr CalcDistance             ;
-        jsr RestoreSprite            ;
-        IfFocus "L",5                ;
-.checkup                             ;
-        ;; don't reverse
-        lda #motionDown
-        cmp Sprite_motion,X
-        beq .checkdown
-        ;; check if we can go up
-        lda #motionUp                ;
-        sta SPRT_LOCATOR             ;
-        jsr scroll_up           ;
-        bcs .checkdown          ;
-        ;; we could go up;
-        ldSprtHeadPos Sprite_loc2,W1 ;
-        jsr CalcDistance             ;
-        jsr RestoreSprite            ;
-        IfFocus "U",9            ;
 .checkdown
-        ;; don't reverse
         ;; don't reverse
         lda #motionUp
         cmp Sprite_motion,X
-        beq .done
+        beq .enddown
         ;; check if we can go down
         lda #motionDown         ;
         sta S1                  ;
         sta SPRT_LOCATOR        ;
         jsr scroll_down         ;
-        bcs .done
+        bcs .enddown
         ;; we could go down
         ldSprtTailPos Sprite_loc2,W1 ;correct
         jsr CalcDistance
         jsr RestoreSprite
         IfFocus "D",13
+.enddown        
+.checkup                             ;
+        ;; don't reverse
+        lda #motionDown
+        cmp Sprite_motion,X
+        beq .endup
+        ;; check if we can go up
+        lda #motionUp                ;
+        sta SPRT_LOCATOR             ;
+        jsr scroll_up           ;
+        bcs .endup
+        ;; we could go up;
+        ldSprtHeadPos Sprite_loc2,W1 ;
+        jsr CalcDistance             ;
+        jsr RestoreSprite            ;
+        IfFocus "U",9            ;
+.endup        
+.checkright
+        ;; don't reverse
+        lda #motionLeft       
+        cmp Sprite_motion,X
+        beq .endright
+        ;; check if we can go right
+        scroll_right            ;
+        bcs .endright
+        ;; we could go right
+        ldSprtTailPos Sprite_loc2,W1 ;correct
+        jsr CalcDistance             ;
+        jsr RestoreSprite            ;
+        IfFocus "R",1                ;
+.endright        
+.checkleft
+        ;; don't reverse
+        lda #motionRight
+        cmp Sprite_motion,X
+        beq .endleft
+        ;; check if we can go left
+        scroll_left             ;
+        bcs .endleft
+        ;; we could go left
+        ldSprtHeadPos Sprite_loc2,W1 ;
+        jsr CalcDistance             ;
+        jsr RestoreSprite            ;
+        IfFocus "L",5                ;
+.endleft        
 .done
         rts
 ;;;  BlinkyRow,pacrow+2,inky target row
@@ -2472,29 +2533,38 @@ PacManTurn
         jsr Animate
         rts
 ;;; 
+;;; X ghost we are checking for collision
 Collisions SUBROUTINE
         CalcGhostRowCol
         ;; special directions for ghosts leaving box
         lda Sprite_mode,X
+        cmp #modeLeaving        ;check if we are exiting box
+        beq .enter_exit
+        cmp #modeEaten
+        beq .enter_exit
+        bne .notspecial
+.enter_exit        
+        ;; we are entering or exiting the box
+        ldy #outOfBoxRow        ;check target row
+        cpy GHOST_ROW           
+        bne .notspecial
+        ldy #outOfBoxCol        ;check target column
+        cpy GHOST_COL
+        bne .notspecial
+        ;; we made it to the box entrance/exit
         cmp #modeLeaving
-        bne .notspecial
-        lda #outOfBoxRow
-        cmp GHOST_ROW
-        bne .notspecial
-        lda #outOfBoxCol
-        cmp GHOST_COL
-        bne .notspecial
-        ;; we made it out of the ghost box
+        bne .eaten
         CloseGhostBox
-        lda #MW
         sta Sprite_back2,X
-        sta screen+22*[outOfBoxRow+1]+outOfBoxCol
-        lda #BLUE
-        sta clrram+22*[outOfBoxRow+1]+outOfBoxCol
         lda #modeOutOfBox
         sta Sprite_mode,X
+        jmp .notspecial
+.eaten
+        jsr OpenGhostBox
+        lda #motionDown
+        sta Sprite_motion,X
+        jsr scroll_down
 .notspecial
-        rts
         TileToPixels GHOST_COL,GHOST_ROW,S1,S2
         lda S1
         sec
@@ -2509,7 +2579,18 @@ Collisions SUBROUTINE
         Abs
         cmp #4
         bcs .done
-        brk
+        ;; collision between pacman and ghost
+        lda POWER_UP
+        bne .ghost_eaten
+        ;; pacman eaten
+;        brk
+        jmp .done
+.ghost_eaten
+        lda #modeEaten
+        sta Sprite_mode,X
+        lda #WHITE
+        sta Sprite_color,X
+        store16x BIT_EYES,Sprite_src
 .done        
         ;; GHOST_ROW,GHOST_COL
         rts
@@ -3315,6 +3396,32 @@ done:
         dc.b %00100100
         dc.b %00100100
         dc.b %00100100
+        ;; eyes
+BIT_EYES
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %11100111
+        dc.b %10100101
+        dc.b %11100111
+        dc.b %00000000
+        dc.b %00000000
+        ;; 
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %11100111
+        dc.b %11100111
+        dc.b %11100111
+        dc.b %00000000
+        dc.b %00000000
+        
+        ;; now the 4 ghosts occupy this area
+        ;;  need to clean this up a bit
+        
+        ds 4*8,0
+        ;; eyes
+        
         
 ;;; BEGIN custom character set
 ;    org mychars                 ;
