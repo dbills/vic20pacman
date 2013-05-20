@@ -96,7 +96,7 @@ SPRITEIDX       equ $f        ;sprite index for main loop
 MASTERCNT       equ $f        ;countdown; see masterDelay
 ;;; 
 CSPRTFRM        equ $10        ; number of frames in the currently processing sprite
-
+DOTCOUNT        equ $11        ;dots eaten
 PACFRAMED       equ $12        ;pacframe dir
 NXTSPRTSRC      equ $13        ;when moving a sprite, the next 'set' of source bitmaps
 DSPL_1          equ $14        ;used by DisplayNum routine
@@ -128,7 +128,9 @@ PACYPIXEL       equ $33
 #IFCONST _LOCAL_SAVEDIR
 GHOST_COL       equ $35        
 GHOST_ROW       equ $36
-#ENDIF        
+#ENDIF
+SCORE_l         equ $37
+SCORE_h         equ $38        
 S7              equ $43
 W5              equ $32
 W6              equ $44
@@ -136,7 +138,7 @@ W6              equ $44
         ;; as current variable name, sure sounds like a basic
         ;; interpreter thing to me 
         ;; 
-        
+
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
 NOTCOPY         equ $fd
@@ -154,6 +156,31 @@ SCRL_VAL        equ $49
 LASTJOY         equ $4a
 LASTJOYDIR      equ $4b         ;last joy reading that had a switch thrown
 MOVEMADE        equ $4c         ;true if last pacman move was successful
+
+#if 0
+;;; just for testing how many bytes I could save
+;;; if I moved these to zero page -- about 120 bytes right now
+Sprite_loc      equ $4d
+Sprite_loc2     equ $4f        
+Sprite_back      equ $4d
+Sprite_back2      equ $4d
+Sprite_sback      equ $4d
+Sprite_sback2      equ $4d
+Sprite_tile      equ $4d
+Sprite_src      equ $4d
+Sprite_frame      equ $4d
+Sprite_bmap      equ $4d
+Sprite_bmap2      equ $4d
+Sprite_motion      equ $4d
+Sprite_turn      equ $4d
+Sprite_color      equ $4d
+Sprite_mode      equ $4d
+Sprite_speed      equ $4d
+Sprite_offset      equ $4d
+Sprite_offset2     equ $4d
+Sprite_dir      equ $4d
+Sprite_dir2     equ $4d
+#endif        
         
 #IFCONST _LOCAL_SAVEDIR
 SAVE_OFFSET     equ $ab
@@ -934,9 +961,27 @@ PAC4 ds 8,$01
 ;;; debugging notes: 22*5+5 is at an intersection
 ;;; for testing up/down/left/right transitions
 ;------------------------------------
+dirVert         equ 22            ;sprite oriented vertically
+dirHoriz        equ 1             ;sprite oriented horizontally
+modeOutOfBox    equ 1             ;see sprite_mode
+modeLeaving     equ 2             ;leavin the ghost box
+outOfBoxCol     equ 11            ;column at ghost box entry/exit
+outOfBoxRow     equ 9             ;row of tile above exit
+;;; the ghost's by X register offset
+inky            equ 1        
+blinky          equ 2
+pinky           equ 3
+clyde           equ 4
+fruit1Dots      equ 70          ;dots to release fruit
+fruit2Dots      equ 120         ;dots to release fruit2
+clydeDots       equ 57          ;dots to release clyde
+inkyDots        equ 25          ;dots to release inky
+pinkyDots       equ 1           ;dots to release pinky
+;;; 
 Sprite_page     dc.b 0        
+#if 1
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*2+8 ,screen+22*7+2,screen+22*11+9,screen+22*12+5,screen+22*2+(22-5)    ;new screen loc
+Sprite_loc2     DC.W screen+22*2+8 ,screen+22*11+9,screen+22*9+11,screen+22*11+10,screen+22*11+12    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0 ;current screen background ( might include some other sprite tile that was laid down )
@@ -947,21 +992,25 @@ Sprite_frame    dc.b 0,1,1,1,1 ;animation frame of sprite as offset from _src
 ;;; sprite chargen ram ( where to put the source bmap )
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8)     , mychars+(GH2L*8)     , mychars+(GH3L*8)    
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16), mychars+(GH2L*8)+(16),mychars+(GH3L*8)+(16)
-Sprite_motion   dc.b 1,motionRight,motionUp,motionDown,motionDown ; see motion defines
-dirVert         equ 22            ;sprite oriented vertically
-dirHoriz        equ 1             ;sprite oriented horizontally
-Sprite_dir      dc.b 1,1,22,22,22 ;sprite direction 1(horiz),22(vert)
-Sprite_dir2     dc.b 1,1,22,22,22 ;sprite direction 1(horiz),22(vert)    
-Sprite_offset   dc.b 0,4,0,0,0  ;sprite bit offset in tiles
-Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
+Sprite_motion   dc.b 1,motionRight,motionLeft,motionRight,motionLeft ; see motion defines
+Sprite_dir      dc.b 1,1,1,1,1 ;sprite direction 1(horiz),22(vert)
+Sprite_dir2     dc.b 1,1,1,1,1 ;sprite direction 1(horiz),22(vert)    
+Sprite_offset   dc.b 0,0,0,2,6  ;sprite bit offset in tiles
+Sprite_offset2  dc.b 0,0,0,2,6  ;sprite bit offset in tiles
 Sprite_speed    dc.b 20,20,25,20,20 ;your turn gets skipped every N loops of this
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
+        ;; in order of exit 
+        ;; red=blinky ( starts outside of ghost house )
+        ;; green = pinky AI
+        ;; cyan =inky 
+        ;; purple = clyde
+        
         ;; if eyes heading toward ghost box
         ;; or in ghost box already
         ;; etc
-Sprite_mode    dc.b 1,1,0,1,1  ;in ghost box if false
-        
+Sprite_mode    dc.b 1,0,1,0,0  ;in ghost box if false
+#endif        
 masterSpeed      equ 15           ;master game delay
 #IFNCONST
 SAVE_OFFSET     dc.b 0
@@ -1057,19 +1106,8 @@ erasesprt SUBROUTINE
         lda Sprite_back2,X
 
         sta (W1),Y              ;restore tail tile to playfied
-
-        lda #clroffset          ;W1 now = color ram location
-        clc
-        adc W1+1
-        sta W1+1
-        lda #WHITE
-        ldy #0
-        sta (W1),Y
-        ldy Sprite_offset,X
-        beq .singletile
-        ldy Sprite_dir,X
-        sta (W1),Y
-.singletile        
+        ldy #WHITE
+        jsr UpdateColorRam
         rts
         ;; 
         ;; load the upcoming ( to be rendered ) tile
@@ -1092,7 +1130,30 @@ erasesprt SUBROUTINE
         adc #2
 .page0
         endm
-        
+;;; Y =  byte of color
+;;; W1 = screen position of sprite
+;;; X = sprite we are working with
+UpdateColorRam SUBROUTINE
+        lda #clroffset          ;W1 now = color ram location
+        clc
+        adc W1+1
+        sta W1+1
+        tya         ;color to A
+        ;; below checks if we need to set the color in the
+        ;; head, tail or both head and tail 
+        ldy Sprite_offset,X     ;check if we need to update
+        cpy #8                  ;color in head
+        beq .intailonly         ;sprite lives in tail only
+        ldy #0
+        sta (W1),Y              ;write head tile color ram
+.intailonly        
+        ldy Sprite_offset,X     ;check if we need to update
+        beq .singletile
+        ldy Sprite_dir,X        ;write tail tile color ram 
+        sta (W1),Y
+.singletile        
+        rts
+        rts
 ;;; TODO: the screen backing tiles needs to check to 'upcoming' sprite tile positions
 ;;; X = sprite to move
 ;;; uses W2,S2
@@ -1112,27 +1173,22 @@ drwsprt1 SUBROUTINE
         ldy Sprite_dir,X        ;are we vertical or horizontal?
 .skip        
         sta (W1),Y              ;lay down the tail tile
-        clc
-        lda #clroffset          ;W1 now = color ram location
-        adc W1+1
-        sta W1+1
-        lda Sprite_color,X
-        ldy #0
-        sta (W1),Y              ;write head tile to color ram
-        ;; if we are completely contained within one tile
-        ;;  there is no need to write the color for our tail
-        ;; and make a bad vic limitation even worse ;)
-        ldy Sprite_offset,X
-        beq .singletile
-;        cpy #8
-;        beq .singletile
-        ldy Sprite_dir,X        ;write tail tile to color ram 
-        sta (W1),Y
-.singletile        
+        
+        ldy Sprite_color,X      ;color in A
+        jsr UpdateColorRam
         rts
 
  INCLUDE "audio.asm"
 
+        ;;
+        ;;close the ghost box door
+        ;;
+        MAC CloseGhostBox
+        lda #MW
+        sta screen+22*[outOfBoxRow+1]+outOfBoxCol
+        lda #BLUE
+        sta clrram+22*[outOfBoxRow+1]+outOfBoxCol
+        ENDM
 PowerPill SUBROUTINE
         lda #11
         sta 36879
@@ -1152,21 +1208,27 @@ main SUBROUTINE
         ldx #0
         jsr DisplayBCD
         brk
-#endif        
+#endif
         lda #1
         sta PACFRAMED
 
         lda #$ff
         sta LASTJOYDIR
-;        cli                     ; enable interrupts for jiffy clock 
+        ;; huh, not surprisingly, if you don't run the cli
+        ;; the keyboard doesn't work
+        ;; but who turned it off? weird
+        cli                     ; enable interrupts for jiffy clock 
         lda #8
         sta 36879               ; border and screen colors
         sta volume              ; turn up the volume to 8
         lda #0
         sta $9113               ; joy VIA to input
+        sta DOTCOUNT
         jsr copychar            ; copy our custom char set
 
         jsr mkmaze
+;        CloseGhostBox
+
         ldx #22
         lda #WHITE
 .top
@@ -1479,6 +1541,8 @@ WaitFire SUBROUTINE
 #if 1
 ;;; move ghost in its currently indicated direction
 MoveGhost SUBROUTINE
+        lda Sprite_mode,X       ;ghost in box don't get to move
+        beq .exit
         lda Sprite_motion,X
         cmp #motionRight
         beq .right
@@ -1491,6 +1555,7 @@ MoveGhost SUBROUTINE
         brk
 .left
         scroll_left
+.exit        
         rts
 .right
         scroll_right
@@ -1578,6 +1643,19 @@ GhostAsPlayer SUBROUTINE
         jsr scroll_down         ;
         rts
 #endif
+SpecialKeys SUBROUTINE
+        lda 197
+        cmp #9                  ;'w'
+        bne .done
+
+        saveX
+
+        ldx #inky
+        jsr LeaveBox
+        resX
+
+.done        
+        rts
 ;;; update motion but don't reverse
 UpdateMotion SUBROUTINE        
         lda GHOST_DIR
@@ -1679,6 +1757,24 @@ UpdateMotion SUBROUTINE
         sta Sprite_turn,X
         sec
         ENDM
+        ;; 
+        ;; execute a queued move
+        ;; 
+        MAC ExeuteQueuedMove
+        lda Sprite_motion,X
+        cmp #motionRight
+        beq .go_up
+        cmp #motionLeft
+        beq .go_up
+        ;; go left
+        lda #motionLeft
+        sta Sprite_motion,X
+        bne .done
+.go_up
+        lda #motionUp
+        sta Sprite_motion,X
+.done        
+        ENDM
 ;;; animate a ghost back and forth
 GhostAI SUBROUTINE
         lda #0
@@ -1695,7 +1791,17 @@ GhostAI SUBROUTINE
         ldx SPRITEIDX
         MyTurn2 GhostTurn      ;does this ghost get to move this time?
         jmp .loop              ;no he doesn't
-GhostTurn        
+GhostTurn
+        lda #modeLeaving
+        cmp Sprite_mode,X
+        bne .normal
+
+        lda #outOfBoxCol
+        sta GHOST_TGTCOL
+        lda #outOfBoxRow
+        sta GHOST_TGTROW
+        jmp .continue
+.normal        
         ;; switch on ghost # to get ai routine
         cpx #4
         bne .ghost3
@@ -1722,11 +1828,16 @@ GhostTurn
         bne .notfocus
 ;        Display1 "G",17,GHOST_DIR
 .notfocus
+
         jsr UpdateMotion
-         
+        jsr SpecialKeys
 ;        jsr GhostAsPlayer
+.moveghost        
         jsr MoveGhost           ;
-;        jsr Collisions
+;        bcs .animate
+;        dec Sprite_move,X
+        
+        jsr Collisions
 .animate
         ;; animate the ghost by changing frames
         dec Sprite_frame,X
@@ -1739,7 +1850,48 @@ GhostTurn
         
 .loopend
         rts
-
+LeaveBox SUBROUTINE
+        ;; instruct the ghost to leave the box
+        lda #modeLeaving
+        sta Sprite_mode,X
+        ;; open the door on the box
+        lda #$20
+        sta screen+22*[outOfBoxRow+1]+outOfBoxCol
+        lda #BLACK
+        sta clrram+22*[outOfBoxRow+1]+outOfBoxCol
+        rts
+DotEaten SUBROUTINE
+        jsr SoundOn
+        lda #modeLeaving
+        ldy DOTCOUNT
+        iny
+        sty DOTCOUNT
+        cpy #pinkyDots
+        beq .pinkyexit
+        cpy  #fruit1Dots
+        beq .fruit
+        cpy #fruit2Dots
+        beq .fruit
+        cpy #inkyDots
+        beq .inkyexit           ;let inky out of the house
+        cpy #clydeDots
+        beq .clydeexit          ;let clyde out
+        rts
+.fruit
+        jsr Fruit
+        rts
+.inkyexit
+        ldx #inky
+        jsr LeaveBox
+        rts
+.clydeexit
+        ldx #clyde
+        jsr LeaveBox
+        rts
+.pinkyexit
+        ldx #pinky
+        jsr LeaveBox
+        rts
 ;;; return true if character in A is a wall
 IsWall SUBROUTINE
         pha
@@ -1749,15 +1901,21 @@ IsWall SUBROUTINE
         ;; like to turn sound on and off
         ;; and maybe fruits if I do them are here
         cmp #DOT
-        beq .isdot
-        jsr SoundOff
+        bne .notdot
+        saveX
+        jsr DotEaten
+        resX
         jmp .done
-.isdot
-        jsr SoundOn
+.notdot
+        jsr SoundOff
 .done        
 .notpacman
         pla
         cmp #MW
+        rts
+        
+;;; puta fruit out 
+Fruit SUBROUTINE
         rts
 ;;; display a number in A on screen
 ;;; bit 7 on will call to reverse characters
@@ -2055,8 +2213,8 @@ Ghost4AI SUBROUTINE
         jsr Ghost2AI            ;blinky's algo
         ;; how far are we away from where blinky would like to be?
         jsr CalcDistance        
-        Display1 "Y",0,GHOST_ROW
-        Display1 "X",3,GHOST_COL
+;        Display1 "Y",0,GHOST_ROW
+;        Display1 "X",3,GHOST_COL
         lda S3
         ;; < N and we are too close, flee
         cmp #9
@@ -2121,16 +2279,6 @@ Ghost1AI SUBROUTINE
 ;;; simple hot pursuit ( Blinky )
 ;;; 
 Ghost2AI  SUBROUTINE
-        lda Sprite_mode,X
-        bne .regular
-        ;; in the ghost box
-        lda #11                 ;col 11
-        sta GHOST_TGTCOL
-        lda #9
-        sta GHOST_TGTROW
-        rts
-.regular
-
         lda PACCOL
         sta GHOST_TGTCOL
         lda PACROW
@@ -2326,6 +2474,27 @@ PacManTurn
 ;;; 
 Collisions SUBROUTINE
         CalcGhostRowCol
+        ;; special directions for ghosts leaving box
+        lda Sprite_mode,X
+        cmp #modeLeaving
+        bne .notspecial
+        lda #outOfBoxRow
+        cmp GHOST_ROW
+        bne .notspecial
+        lda #outOfBoxCol
+        cmp GHOST_COL
+        bne .notspecial
+        ;; we made it out of the ghost box
+        CloseGhostBox
+        lda #MW
+        sta Sprite_back2,X
+        sta screen+22*[outOfBoxRow+1]+outOfBoxCol
+        lda #BLUE
+        sta clrram+22*[outOfBoxRow+1]+outOfBoxCol
+        lda #modeOutOfBox
+        sta Sprite_mode,X
+.notspecial
+        rts
         TileToPixels GHOST_COL,GHOST_ROW,S1,S2
         lda S1
         sec
@@ -3198,5 +3367,7 @@ ghost AI
         have a mode where their AI isn't running
         then when it's time to get out of the box
         set the target tile
+
+        there are 171 dots in our maze
         
 #endif        
