@@ -2,7 +2,7 @@
         processor 6502
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
-;GHOSTS_ON   equ 1
+GHOSTS_ON   equ 1
 _debug      equ 1                 ; true for debugging
 focusGhost  equ 10                ;ghost to print debugging for
 cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
@@ -566,7 +566,7 @@ MazeB
     dc.b %01000001
     dc.b %01001001
     dc.b %00100100
-    dc.b %11010010
+    dc.b %10010010
     dc.b %01001001
     dc.b %00100100
     dc.b %10010010
@@ -608,7 +608,7 @@ MazeB
     dc.b %01001001
     dc.b %00101000
     dc.b %10000010
-    dc.b %01001001
+    dc.b %01001000
     dc.b %00100100
     dc.b %10000010
     dc.b %10001001
@@ -640,9 +640,9 @@ MazeB
     dc.b %00000000
     dc.b %01001001
     dc.b %00101000
-    dc.b %10100011
+    dc.b %10100010
+    dc.b %01001001
     dc.b %00100100
-    dc.b %10010000
     dc.b %10100010
     dc.b %10001001
     dc.b %00100100
@@ -936,7 +936,7 @@ PAC4 ds 8,$01
 ;------------------------------------
 Sprite_page     dc.b 0        
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*2+8 ,screen+22*7+2,screen+22*7+5,screen+22*12+5,screen+22*2+(22-5)    ;new screen loc
+Sprite_loc2     DC.W screen+22*2+8 ,screen+22*7+2,screen+22*11+9,screen+22*12+5,screen+22*2+(22-5)    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0 ;current screen background ( might include some other sprite tile that was laid down )
@@ -957,6 +957,11 @@ Sprite_offset2  dc.b 0,4,0,0,0  ;sprite bit offset in tiles
 Sprite_speed    dc.b 20,20,25,20,20 ;your turn gets skipped every N loops of this
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
+        ;; if eyes heading toward ghost box
+        ;; or in ghost box already
+        ;; etc
+Sprite_mode    dc.b 1,1,0,1,1  ;in ghost box if false
+        
 masterSpeed      equ 15           ;master game delay
 #IFNCONST
 SAVE_OFFSET     dc.b 0
@@ -1049,20 +1054,22 @@ erasesprt SUBROUTINE
         sta (W1),Y
         
         ldy Sprite_dir,X
-        checkYDir
         lda Sprite_back2,X
 
         sta (W1),Y              ;restore tail tile to playfied
 
-        clc
         lda #clroffset          ;W1 now = color ram location
+        clc
         adc W1+1
         sta W1+1
         lda #WHITE
         ldy #0
         sta (W1),Y
+        ldy Sprite_offset,X
+        beq .singletile
         ldy Sprite_dir,X
         sta (W1),Y
+.singletile        
         rts
         ;; 
         ;; load the upcoming ( to be rendered ) tile
@@ -1117,8 +1124,8 @@ drwsprt1 SUBROUTINE
         ;; and make a bad vic limitation even worse ;)
         ldy Sprite_offset,X
         beq .singletile
-        cpy #8
-        beq .singletile
+;        cpy #8
+;        beq .singletile
         ldy Sprite_dir,X        ;write tail tile to color ram 
         sta (W1),Y
 .singletile        
@@ -2114,6 +2121,16 @@ Ghost1AI SUBROUTINE
 ;;; simple hot pursuit ( Blinky )
 ;;; 
 Ghost2AI  SUBROUTINE
+        lda Sprite_mode,X
+        bne .regular
+        ;; in the ghost box
+        lda #11                 ;col 11
+        sta GHOST_TGTCOL
+        lda #9
+        sta GHOST_TGTROW
+        rts
+.regular
+
         lda PACCOL
         sta GHOST_TGTCOL
         lda PACROW
@@ -3174,6 +3191,12 @@ ghost AI
         lets get the tunnel working
         
         
-        
+        ghost box
+        row 11
+        col 9
+
+        have a mode where their AI isn't running
+        then when it's time to get out of the box
+        set the target tile
         
 #endif        
