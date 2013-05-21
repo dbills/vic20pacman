@@ -2369,31 +2369,53 @@ PossibleMoves SUBROUTINE
         sbc {3}
         sta {3}
         ENDM
-;;; ghost running away AI
-;;; random turns selected
-FrightAI SUBROUTINE
-        ;; pick a random direction, if we are at an intersection
-        lda Sprite_motion,X
-        pha
-        jsr SaveSprite
-        lda JIFFYL              ;use lower 4 bits of jiffy clock
-        and #%00000011
-        tay
-        sty S1
+
+        MAC TryMove
         lda MotionTable,Y
         sta GHOST_DIR
         jsr UpdateMotion2
-;        sta Sprite_motion,X
         jsr MoveGhost
+        ENDM
+;;; ghost running away AI
+;;; random turns selected
+FrightAI SUBROUTINE
+        lda #0
+        sta S3
+        lda Sprite_motion,X
+        sta S2
+        lda Sprite_offset,X
+        ;;  we only have the possibility of turning at
+        ;; offset=0 and offset=8
+        beq .choice
+        cmp #8
+        beq .choice
+        rts
+
+        ;; pick a random direction, if we are at an intersection
+.choice
+        jsr SaveSprite
+
+        lda JIFFYL              ;use lower 4 bits of jiffy clock
+        adc $9006               ;light pen horiz
+        and #%00000011
+        tay
+
+        TryMove
         bcc .done
-        ;; move failed, so our choice is the same direction
         jsr RestoreSprite
-        pla
-        sta Sprite_motion,X
-        rts
+        ldy #0
+.try
+        TryMove
+        bcc .done
+        jsr RestoreSprite
+        iny
+        cpy #4
+        beq .bad
+        jmp .try
 .done
-        pla
         rts
+.bad
+        brk
 ;;; 
 ScatterGhostAI SUBROUTINE
         tya                     ;mul by 2
@@ -2969,31 +2991,29 @@ IncrementPos SUBROUTINE
         Inc16 W2
         rts
 scroll_horiz SUBROUTINE
-        
-        lda Sprite_dir,X
-        cmp #1
+        lda Sprite_dir,X        ;get our current orientation
+        cmp #1                  ;are we already horizontal
         beq .ok                 ;ok to move horizontal
-        ;; switch to horiz order
-        jsr changehoriz
-        bcc .ok
-        rts
+        jsr changehoriz         ;no, switch to horizontal
+        bcc .ok                 ;change successful
+        rts                     ;we could't change to horizontal
 .ok
-        ldy Sprite_offset,X
-        cpy END_SCRL_VAL
-        bne .draw
+        ldy Sprite_offset,X     ;get our current pixel offset
+        cpy END_SCRL_VAL        ;are we at the end of our tiles?
+        bne .draw               ;no, we can smooth scroll
 .course                         ;course scroll
 
-        move16x Sprite_loc,W2   ;
-        lda SCRL_VAL
-        bmi .left
+        move16x Sprite_loc,W2   ;screen location to W2
+        lda SCRL_VAL            ;load scroll direction 
+        bmi .left               ;branch to left code
         ;; going right
         lda #0                  ;push potential new sprite offset
-        pha
-        jsr IncrementPos
+        pha                     ;save it on stack
+        jsr IncrementPos        ;move over to right one tile
         ldy #01                 ;
         lda (W2),Y              ;check for wall at pos + 2
         jsr IsWall              ;remember we are 2 tiles wide
-        bne .continue
+        bne .continue           ;there is no wall, we can move
 .cantmove
         sec                     ;can't move, return false
         pla                     ;pop the single arg we pushed for our own use
@@ -3017,6 +3037,7 @@ scroll_horiz SUBROUTINE
         sta Sprite_offset2,X
         clc
         rts
+;;; attempt to turn the dot eating sound back on
 SoundOn SUBROUTINE
         lda #8
         sta 36879
@@ -3024,6 +3045,7 @@ SoundOn SUBROUTINE
         UnHaltTrack
         ldx #0
         rts
+;;; attempt to turn the dot eating sound off
 SoundOff SUBROUTINE
         lda #13
         sta 36879
@@ -3042,7 +3064,7 @@ blitc SUBROUTINE
     sta (W2),Y
     sta (W3),Y
     beq .done
-    jmp .loop
+    bne .loop
 .done
     rts
 ;;; vertical blit
@@ -3235,6 +3257,14 @@ scroll_up SUBROUTINE
 ;;; X sprite to attempt change on
 ;;; SPRT_LOCATOR direction to change to ( 22=left 24=right)
 ;;; output: sprite_loc2 contains new head position if successful
+;;; the ORG tile is picked such that test for a wall character
+;;; can use the same offset no matter what tile the sprite
+;;; is living in i.e. the head of the tail
+;;; for example: in the diagram below ( lower left )
+;;; when the sprite is in the tail tile, to check for a wall
+;;; going to the right is ORG+24
+;;; in the next case, sprite living in the head tile
+;;; ORG+24 also checks for a wall when moving right
 ;;; 
 ;;; destruction S2,S3,W2,W1
 ;;; -------------------------------------------------------
@@ -3289,7 +3319,7 @@ changehoriz SUBROUTINE
         sta Sprite_offset,X
 
         lda #22                 ;offset from ORG for new sprite pos
-        sta S3                  ;if moving up
+        sta S3                  ;if moving left
 .isright
         addxx W2,W1,S3          ;update new sprite pos
         move16x2 W1,Sprite_loc2
