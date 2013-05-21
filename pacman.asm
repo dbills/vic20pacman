@@ -18,6 +18,7 @@ clroffset   equ $78               ;offset from screen to color ram
 
 VICRASTER equ $9004        
 VICSCRN   equ $9005             ;vic chip character generator pointer
+LIGHPENX  equ $9006             ;used for random number
 VIA1DDR   equ $9113
 VIA2DDR   equ $9122             ; ?
 JOY0      equ $9111
@@ -102,7 +103,7 @@ DSPL_1          equ $14        ;used by DisplayNum routine
 BCD             equ $15        ;used by Bin2Hex routine
 DSPL_2          equ $16        ;
 DSPL_3          equ $17        ;
-WASCOURSE       equ $18        ;true if last move was course
+CHASEMODE       equ $18        ;ghosts in scatter mode or chase
 GHOST_DIST      equ $19  ; $18 best distance for current ghost AI calcs
 GHOST_DIR       equ $20  ; $19 best move matching GHOST_DIST
 DIV22_REM       equ $21        
@@ -224,6 +225,12 @@ EYES            equ $08
    mac checkYDir
    endm
 #endif
+        ;; logical not of 1, used to switch between on/off states
+        MAC Invert
+        lda #1                  ;dbl buffering, switch sprite tiles
+        eor {1}         ; 0 = 1
+        sta {1}         ; or 1 = 0
+        ENDM
         ;; save X
         MAC saveX
         txa
@@ -491,7 +498,28 @@ EYES            equ $08
         sbc #[{2}]>>8
         sta {1}+1
         ENDM
+        ;; ghosts to chase mode
+        ;; important: Z false on exit
+        MAC ChaseMode
 
+        Display1 "C",10,#1
+        ldy #255
+        sty TIMER1
+        lda #1
+        sta CHASEMODE
+        
+        ENDM
+        ;; ghosts to Scatter mode
+        ;; Z true on exit
+        MAC ScatterMode
+        
+        lda #110
+        sta TIMER1
+        Display1 "S",10,TIMER1
+        lda #0
+        sta CHASEMODE
+        
+        ENDM
 ;;; find the character font address of the tile
 ;;; underneath a sprite
 ;;; on entry: A = tile in question
@@ -969,12 +997,22 @@ modeLeaving     equ 2             ;leavin the ghost box
 modeEaten       equ 3             ;ghost was chomped
 outOfBoxCol     equ 11            ;column at ghost box entry/exit
 outOfBoxRow     equ 9             ;row of tile above exit
+pinkyHomeCol    equ 3
+pinkyHomeRow    equ 3
+blinkyHomeCol   equ 22-3
+blinkyHomeRow   equ 3
+clydeHomeCol    equ 6
+clydeHomeRow    equ 23-2
+inkyHomeCol     equ 23-6
+inkyHomeRow     equ 23-2        
+;;; screen location of ghost box exit
+ghostBoxExit    cmp [screen+[22*outOfBoxRow]+outOfBoxCol]
 ;;; the ghost's by X register offset
 inky            equ 1        
 blinky          equ 2
 pinky           equ 3
 clyde           equ 4
-focusGhost      equ blinky      ;ghost to print debugging for
+focusGhost      equ 10          ;ghost to print debugging for
 fruit1Dots      equ 70          ;dots to release fruit
 fruit2Dots      equ 120         ;dots to release fruit2
 clydeDots       equ 255          ;dots to release clyde ( about 33% )
@@ -1027,7 +1065,8 @@ DIV22_WORK      dc.w 0
 #ENDIF        
 ;;; 
 ;;; division table for division by 22
-Div22Table dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
+Div22Table      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
+GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 ;;; swap upcoming sprite data with current sprite data
 ;;; i.e. page flip the screen location
         MAC SwapSpritePos
@@ -1213,6 +1252,18 @@ drwsprt1 SUBROUTINE
         lda #MW
         sta screen+22*[outOfBoxRow+1]+outOfBoxCol
         ENDM
+Timer1Expired SUBROUTINE
+        lda CHASEMODE
+        beq .chase
+
+        ScatterMode
+
+        beq .done
+.chase        
+        ChaseMode
+.done
+        rts
+        
 PowerPill SUBROUTINE
         lda #100
         sta POWER_UP
@@ -1247,13 +1298,18 @@ main SUBROUTINE
         lda #8
         sta 36879               ; border and screen colors
         sta volume              ; turn up the volume to 8
+
         lda #0
-        sta $9113               ; joy VIA to input
-        sta DOTCOUNT
+        sta $9113               ;joy VIA to input
+        sta DOTCOUNT            ;dot count to 0
+        sta POWER_UP            ;power up to 0
+
         jsr copychar            ; copy our custom char set
 
         jsr mkmaze
+
         CloseGhostBox
+        ScatterMode         ;start ghosts out in scatter mode
 
         ldx #22
         lda #WHITE
@@ -1286,22 +1342,23 @@ main SUBROUTINE
         ldx #3
         jsr VoiceTrack_svc          ; run sound engine
 
+        Invert Sprite_page      ;dbl buffering, switch sprite tiles
 
-        lda #1                  ;dbl buffering, switch sprite tiles
-        eor Sprite_page         ; 0 = 1
-        sta Sprite_page         ; or 1 = 0
         ;; decrement game based timers such as power pills and attack/scatter
         ldy POWER_UP
         beq .skip
         dey
         sty POWER_UP
 .skip        
-        ldy TIMER2
+        ldy TIMER1
         beq .start
         dey
-        sta TIMER2
+        sty TIMER1
+        bne .start
+        ;; notify timer1 expired
+        jsr Timer1Expired
 .start        
-
+        Display1 "T",0,TIMER1
         InitSpriteLoop          ;foreach sprite
 .eraseloop
         dec SPRITEIDX
@@ -1322,7 +1379,6 @@ main SUBROUTINE
         move16x Sprite_loc,W1
         ldy #0
         lda (W1),Y
-        sta screen+10
         sta Sprite_back,X
         cpx #0
         bne .notpac
@@ -1340,7 +1396,6 @@ main SUBROUTINE
 .notpac
         ldy Sprite_dir,X
         lda (W1),Y
-        sta screen+11
         sta Sprite_back2,X
         cpx #0
         bne .backloop
@@ -1836,19 +1891,21 @@ GhostAI SUBROUTINE
         MyTurn2 GhostTurn      ;does this ghost get to move this time?
         jmp .loop              ;no he doesn't
 GhostTurn
+;        lda POWER_UP
+;        beq .
         lda Sprite_mode,X
         cmp #modeLeaving
         beq .leaving
         cmp #modeEaten
         beq .eaten
         jmp .normal
-.eaten
+.eaten                          ;load target tile for eaten ghosts
         lda #outOfBoxCol
         sta GHOST_TGTCOL
         lda #outOfBoxRow+2
         sta GHOST_TGTROW
         jmp .continue
-.leaving
+.leaving                        ;load target tile for ghosts leaving box
         lda #outOfBoxCol
         sta GHOST_TGTCOL
         lda #outOfBoxRow
@@ -1911,6 +1968,9 @@ OpenGhostBox SUBROUTINE
         sta clrram+22*[outOfBoxRow+1]+outOfBoxCol
         rts
 LeaveBox SUBROUTINE
+        ;; make sure ghost has proper bitmap
+        ;; in case if was the eaten eyes leaving the box
+        store16x GHOST,Sprite_src
         ;; instruct the ghost to leave the box
         lda #modeLeaving
         sta Sprite_mode,X
@@ -1951,6 +2011,7 @@ DotEaten SUBROUTINE
         jsr LeaveBox
         rts
 ;;; return true if character in A is a wall
+;;; W2 ( candidate position )
 IsWall SUBROUTINE
         pha
         cpx #0
@@ -2262,8 +2323,22 @@ PossibleMoves SUBROUTINE
         sbc {3}
         sta {3}
         ENDM
-;;; sue
-;;; opposite quadrants 
+;;; 
+ScatterGhostAI SUBROUTINE
+        tya                     ;mul by 2
+        lsr
+        tay
+        lda GhosthomeTable,Y
+        sta GHOST_TGTCOL
+        iny
+        lda GhosthomeTable,Y
+        sta GHOST_TGTROW
+        rts
+;;; 
+;;; the ghost the runs away when pacman is too close
+;;; sue or clyde
+;;; opposite quadrants
+;;; 
 Ghost4AI SUBROUTINE
         ;;  determine distance to pacman
         ;; I should care about whether I load the head or tail pos
@@ -2545,13 +2620,27 @@ Collisions SUBROUTINE
         bne .notspecial
 .enter_exit        
         ;; we are entering or exiting the box
-        ldy #outOfBoxRow        ;check target row
-        cpy GHOST_ROW           
-        bne .notspecial
+        ;; if we are right ABOVE the box
+        
         ldy #outOfBoxCol        ;check target column
         cpy GHOST_COL
         bne .notspecial
-        ;; we made it to the box entrance/exit
+        
+        ldy #outOfBoxRow        ;check target row
+        cpy GHOST_ROW
+        beq .special
+        iny                     ;check if IN the box
+        iny                     ;which is two tiles down
+        cpy GHOST_ROW
+        bne .notspecial
+        ;; in the box
+        cmp #modeEaten
+        bne .notspecial
+        lda #motionUp           ;set upward, out of box
+        sta Sprite_motion,X     ;store it on sprite
+        jsr LeaveBox            ;send em right back out
+        jmp .notspecial
+.special                        ;above the box
         cmp #modeLeaving
         bne .eaten
         CloseGhostBox
@@ -2588,8 +2677,8 @@ Collisions SUBROUTINE
 .ghost_eaten
         lda #modeEaten
         sta Sprite_mode,X
-        lda #WHITE
-        sta Sprite_color,X
+;        lda #WHITE
+;        sta Sprite_color,X
         store16x BIT_EYES,Sprite_src
 .done        
         ;; GHOST_ROW,GHOST_COL
@@ -2809,8 +2898,6 @@ IncrementPos SUBROUTINE
         Inc16 W2
         rts
 scroll_horiz SUBROUTINE
-        lda #0
-        sta WASCOURSE
         
         lda Sprite_dir,X
         cmp #1
@@ -2824,8 +2911,7 @@ scroll_horiz SUBROUTINE
         cpy END_SCRL_VAL
         bne .draw
 .course                         ;course scroll
-        lda #1
-        sta WASCOURSE
+
         move16x Sprite_loc,W2   ;
         lda SCRL_VAL
         bmi .left
@@ -3039,9 +3125,6 @@ blith SUBROUTINE
 ;;;
 ;;; X = sprite to move
 scroll_up SUBROUTINE
-        lda #0
-        sta WASCOURSE
-        
         lda Sprite_dir,X
         cmp #22                     ;check if already vertical
         beq .00
@@ -3054,13 +3137,11 @@ scroll_up SUBROUTINE
         ldy Sprite_offset,X
         bne .fine               ; > 0 then fine scroll
 .course                         ; course scroll
-        lda #1
-        sta WASCOURSE
 
-        move16x Sprite_loc,W1   ; screen location to W2
-        sub16Im W1,#22            ; check up one tile
+        move16x Sprite_loc,W2   ; screen location to W2
+        sub16Im W2,#22            ; check up one tile
         ldy #0
-        lda (W1),Y
+        lda (W2),Y
         jsr IsWall
         bne .continue
 .cantmove        
@@ -3068,10 +3149,10 @@ scroll_up SUBROUTINE
         rts
 .continue
         lda #1
-        move16x2 W1,Sprite_loc2  ;save the new sprite screen location
+        move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         ldy #8                  ;reset fine scroll offset
 .fine
-;        brk
+
         dey
         tya
         sta Sprite_offset2,X
@@ -3221,8 +3302,6 @@ changevert SUBROUTINE
 ;;; X = sprite to scroll down
 ;;; carry is set on return if move is not possible
 scroll_down SUBROUTINE
-        lda #0
-        sta WASCOURSE
         
         lda Sprite_dir,X
         cmp #22                 ;check if already vertical
@@ -3247,8 +3326,7 @@ scroll_down SUBROUTINE
         sec                     ;indicate failure
         rts
 .continue        
-        lda #1
-        sta WASCOURSE
+
         addxx W2,W1,#22
         move16x2 W1,Sprite_loc2  ;save the new sprite screen location
         ldy #0                  ;reset fine scroll offset
