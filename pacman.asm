@@ -29,9 +29,9 @@ JOYL      equ $10               ; joy left
 JOYT      equ $20               ; joy fire
 JOYR      equ $80               ; joy right bit
 
-jiffyh    equ $a0               ; jiffy clock lsb - msb
-jiffym    equ $a1
-jiffyl    equ $a2
+JIIFYH    equ $a0               ; jiffy clock lsb - msb
+JIFFYM    equ $a1
+JIFFYL    equ $a2
 
 chrom1    equ $8000             ; upper case character rom
 chrom2    equ $8400             ; upper case reversed
@@ -157,7 +157,7 @@ LASTJOY         equ $4a
 LASTJOYDIR      equ $4b         ;last joy reading that had a switch thrown
 MOVEMADE        equ $4c         ;true if last pacman move was successful
 TIMER1          equ $4d         ;decrement by main game loop every other trip
-TIMER2          equ $4e        
+TIMER1_h        equ $4e         ;timer1 high byte
 #if 0
 ;;; just for testing how many bytes I could save
 ;;; if I moved these to zero page -- about 120 bytes right now
@@ -241,7 +241,7 @@ EYES            equ $08
         pla
         tax
         ENDM
-        
+        ;; compare {1} with #{2} 
         MAC cmp16Im
         lda {1}
         cmp #[{2}] & $ff    ; load low byte
@@ -503,8 +503,7 @@ EYES            equ $08
         MAC ChaseMode
 
         Display1 "C",10,#1
-        ldy #255
-        sty TIMER1
+        store16 255,TIMER1
         lda #1
         sta CHASEMODE
         
@@ -512,9 +511,9 @@ EYES            equ $08
         ;; ghosts to Scatter mode
         ;; Z true on exit
         MAC ScatterMode
-        
-        lda #110
-        sta TIMER1
+
+        store16 110,TIMER1
+
         Display1 "S",10,TIMER1
         lda #0
         sta CHASEMODE
@@ -1067,6 +1066,7 @@ DIV22_WORK      dc.w 0
 ;;; division table for division by 22
 Div22Table      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
+MotionTable     dc.b motionUp,motionDown,motionLeft,motionRight        
 ;;; swap upcoming sprite data with current sprite data
 ;;; i.e. page flip the screen location
         MAC SwapSpritePos
@@ -1252,7 +1252,42 @@ drwsprt1 SUBROUTINE
         lda #MW
         sta screen+22*[outOfBoxRow+1]+outOfBoxCol
         ENDM
+ReverseGhost SUBROUTINE
+        InitSpriteLoop          ;foreach sprite
+.loop        
+        dec SPRITEIDX
+        beq .done
+        ldx SPRITEIDX
+        lda Sprite_motion,X
+        cmp #motionRight
+        beq .right
+        cmp #motionDown
+        beq .down
+        cmp #motionLeft
+        beq .left
+        cmp #motionUp
+        beq .up
+        brk
+.left
+        lda #motionRight
+        sta Sprite_motion,X
+        bne .loop
+.right
+        lda #motionLeft
+        sta Sprite_motion,X
+        bne .loop
+.up
+        lda #motionDown
+        sta Sprite_motion,X
+        bne .loop
+.down
+        lda #motionUp
+        sta Sprite_motion,X
+        bne .loop
+.done
+        rts
 Timer1Expired SUBROUTINE
+;        jsr ReverseGhost
         lda CHASEMODE
         beq .chase
 
@@ -1349,16 +1384,16 @@ main SUBROUTINE
         beq .skip
         dey
         sty POWER_UP
-.skip        
-        ldy TIMER1
+.skip
+        cmp16Im TIMER1,#0
         beq .start
-        dey
-        sty TIMER1
+        DEC16 TIMER1
         bne .start
         ;; notify timer1 expired
         jsr Timer1Expired
 .start        
-        Display1 "T",0,TIMER1
+;        Display1 "T",0,TIMER1
+        Display1 "J",0,JIFFYL
         InitSpriteLoop          ;foreach sprite
 .eraseloop
         dec SPRITEIDX
@@ -1753,9 +1788,9 @@ UpdateMotion SUBROUTINE
         lda GHOST_DIR
         sta Sprite_motion,X
         rts
-#if 0        
+#if 1        
 ;;; update motion but don't reverse
-UpdateMotion SUBROUTINE        
+UpdateMotion2 SUBROUTINE        
         lda GHOST_DIR
         cmp #motionRight
         beq .right
@@ -1772,25 +1807,25 @@ UpdateMotion SUBROUTINE
         lda #motionRight
         cmp Sprite_motion,X
         bne .store
-        brk
+;        brk
         rts
 .right
         lda #motionLeft
         cmp Sprite_motion,X
         bne .store
-        brk
+;        brk
         rts
 .up
         lda #motionDown
         cmp Sprite_motion,X
         bne .store
-        brk
+;        brk
         rts
 .down
         lda #motionUp
         cmp Sprite_motion,X
         bne .store
-        brk
+;        brk
         rts
 .store
         lda GHOST_DIR
@@ -1886,13 +1921,14 @@ GhostAI SUBROUTINE
         InitSpriteLoop
 .loop
         dec SPRITEIDX
-        beq .loopend            ;pacman is sprite 0, so we leave
+        bne .notpac
+        rts                     ;pacman is sprite 0, so we leave
+.notpac        
+
         ldx SPRITEIDX
         MyTurn2 GhostTurn      ;does this ghost get to move this time?
         jmp .loop              ;no he doesn't
 GhostTurn
-;        lda POWER_UP
-;        beq .
         lda Sprite_mode,X
         cmp #modeLeaving
         beq .leaving
@@ -1911,7 +1947,17 @@ GhostTurn
         lda #outOfBoxRow
         sta GHOST_TGTROW
         jmp .continue
-.normal        
+.normal
+;        lda POWER_UP
+;        bne .notfrightened
+        jsr FrightAI
+        jmp .moveghost
+.notfrightened        
+        ;; lda CHASEMODE
+        ;; bne .chasing
+        ;; jsr ScatterGhostAI
+        ;; jmp .continue
+.chasing        
         ;; switch on ghost # to get ai routine
         cpx #4
         bne .ghost3
@@ -1952,11 +1998,11 @@ GhostTurn
         ;; animate the ghost by changing frames
         dec Sprite_frame,X
         bmi .reset                   ;time to wrap around?
-        bpl .loop
+        jmp .loop
 .reset
         lda #1                  ;reset frame counter
         sta Sprite_frame,X
-        bpl .loop
+        jmp .loop
         
 .loopend
         rts
@@ -2323,6 +2369,31 @@ PossibleMoves SUBROUTINE
         sbc {3}
         sta {3}
         ENDM
+;;; ghost running away AI
+;;; random turns selected
+FrightAI SUBROUTINE
+        ;; pick a random direction, if we are at an intersection
+        lda Sprite_motion,X
+        pha
+        jsr SaveSprite
+        lda JIFFYL              ;use lower 4 bits of jiffy clock
+        and #%00000011
+        tay
+        sty S1
+        lda MotionTable,Y
+        sta GHOST_DIR
+        jsr UpdateMotion2
+;        sta Sprite_motion,X
+        jsr MoveGhost
+        bcc .done
+        ;; move failed, so our choice is the same direction
+        jsr RestoreSprite
+        pla
+        sta Sprite_motion,X
+        rts
+.done
+        pla
+        rts
 ;;; 
 ScatterGhostAI SUBROUTINE
         tya                     ;mul by 2
