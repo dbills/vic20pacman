@@ -1951,8 +1951,8 @@ GhostTurn
         sta GHOST_TGTROW
         jmp .continue
 .normal
-;        lda POWER_UP
-;        bne .notfrightened
+        lda POWER_UP
+        beq .notfrightened
         jsr FrightAI
         jmp .moveghost
 .notfrightened        
@@ -2382,72 +2382,17 @@ PossibleMoves SUBROUTINE
 ;;; ghost running away AI
 ;;; random turns selected
 FrightAI SUBROUTINE
-        txa
-        pha
-        lda Sprite_motion,X
-        sta S5
-        tsx
-        sta S6                  ;save stack pointer
-        jsr rand_8
-        sta S7
-        jsr SaveSprite
-.checkdown        
-        lda #motionUp
-        cmp S5
-        beq .enddown
-        jsr scroll_down
-        bcs .enddown
-        ;; we could go down, should we?
-        lsr S7
-        bcs .done
-        lda #motionDown
-        pha
-        jsr RestoreSprite
-.enddown
-.checkup        
-        lda #motionDown
-        cmp S5
-        beq .endup
-        jsr scroll_up
-        bcs .endup
-        ;; we could go up, should we?
-        lsr S7
-        bcs .done
-        lda #motionUp
-        pha
-        jsr RestoreSprite
-.endup
-.checkleft
-        lda #motionRight
-        cmp S5
-        beq .endleft
-        scroll_left
-        bcs .endleft
-        ;; we could go left, should we?
-        lsr S7
-        bcs .done
-        lda #motionLeft
-        pha
-        jsr RestoreSprite
-.endleft
-.checkright
-        lda #motionLeft
-        cmp S5
-        beq .endright
-        scroll_right
-        bcs .endright
-        ;; we could go right, should we?
-        lsr S7
-        bcs .done
-        lda #motionRight
-        pha
-        jsr RestoreSprite
-.endright
-        ;; if we got here we didn't take any of our possible moves
-        ;; do to the random number
-        ;; now we just punt and pick the first one on the stack
+        ldy Sprite_motion,X
+        lda Sprite_offset,X
+        beq .head
+        cmp #8
+        beq .tail
+.head
         
-.done        
+        brk
+.tail
+        brk
+.done
         rts
 ;;; 
 ScatterGhostAI SUBROUTINE
@@ -3285,6 +3230,28 @@ scroll_up SUBROUTINE
 .done
         clc
         rts
+        ;; calculate the ORG tile
+        MAC CalcVertOrgTile
+        move16x Sprite_loc,{1}
+        lda Sprite_offset,X
+        beq .head
+        cmp #8
+        beq .tail
+        ;; return false, in middle of tile
+        lda #0               
+        beq .done
+.head
+        lda #23
+        bne .subtract
+.tail
+        lda #1
+.subtract
+        sec
+        sbc {1}
+        lda #0
+        sbc {1}+1
+.done        
+        ENDM
 
 ;;; change orientation to horizontal
 ;;; X sprite to attempt change on
@@ -3313,7 +3280,7 @@ changehoriz SUBROUTINE
         lda #1                 ; offset to blank tile in endtile case
         sta S3                  ;-offset to ORG in endtile case
         lda Sprite_offset,X     ;where is sprite offset
-        cmp CORNER_SHAVE        ;with shave dist of beg tile?
+        cmp CORNER_SHAVE        ;within shave dist of beg tile?
         bcc .begtile            ;less then shave
         beq .begtile            ;= to shave
         clc
@@ -3385,7 +3352,7 @@ changehoriz SUBROUTINE
 ;;; 
 changevert SUBROUTINE
         move16x Sprite_loc,W1
-        ldy #22                 ;offset of tile to erase in endtile case
+        ldy #22                 ;
         sty S3                  ;offset to ORG in endtile case
         lda Sprite_offset,X     ; where is sprite offset
         cmp CORNER_SHAVE        ; within shave dist of 0?
@@ -3471,7 +3438,7 @@ scroll_down SUBROUTINE
         tya
         sta Sprite_offset2,X
 .done
-        store16 PAC1D,W1
+;        store16 PAC1D,W1
         clc
         rts
 
@@ -3577,7 +3544,48 @@ rotatehighbyte:
 done:
         sta W5
         rts
+;feed S1 in before call
+;either #1 for up
+;or #45 for down
+;END_SCRL_VAL 7 for down 0 for up
 
+#if 0
+scroll_vert2 SUBROUTINE
+        
+        lda Sprite_dir,X
+        cmp #22                 ;check if already vertical
+        beq .00
+        jsr changevert          ;if not, change us to down
+        bcc .00
+        rts
+.00
+        CalcVertOrgTile W1 ; ORG tile offset in W1
+        beq .fine       ; not ready for course scroll
+.course                         ; course scroll
+        ldy #motionDown                 ;check one tile down from tail
+        lda (W1),Y
+        jsr IsWall
+        bne .continue
+.cantmove
+        sec                     ;indicate failure
+        rts
+.continue        
+        addxx W1,W2,#motionDown
+        move16x2 W2,Sprite_loc2  ;save the new sprite screen location
+        ldy #0                  ;reset fine scroll offset
+.fine
+;        brk
+        iny
+        tya
+        sta Sprite_offset2,X
+.done
+        store16 PAC1D,W1
+        clc
+        rts
+#endif
+;;;
+;;;
+;;; 
         org $1c00
         ds 8*4,0
         ;; regular eating dot
@@ -3652,9 +3660,6 @@ BIT_EYES
         ;; eyes
         
         
-;;; BEGIN custom character set
-;    org mychars                 ;
-;        dc.b $ff
 #if 0
 ;;; scratch text for debugging thoughts
 ;; 0 @
@@ -3681,6 +3686,7 @@ BIT_EYES
 why tile scrolling works
 we allow going to 8 or 0 which always allows to make it to the end of a tile set
 so if you are heading towards a wall, you will always be able to touch it
+when you start in the new tile after a course scroll it's always 1 or 7         
 
 I experimented with allowing pacman to cut corner by decreasing the number
 at which we allow the changevert or horz to operate, and it seems to work
@@ -3706,4 +3712,6 @@ ghost AI
 
         there are 171 dots in our maze
         
-#endif        
+#endif
+
+        
