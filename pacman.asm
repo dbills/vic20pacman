@@ -158,6 +158,7 @@ LASTJOYDIR      equ $4b         ;last joy reading that had a switch thrown
 MOVEMADE        equ $4c         ;true if last pacman move was successful
 TIMER1          equ $4d         ;decrement by main game loop every other trip
 TIMER1_h        equ $4e         ;timer1 high byte
+r_seed          equ $4f        
 #if 0
 ;;; just for testing how many bytes I could save
 ;;; if I moved these to zero page -- about 120 bytes right now
@@ -1329,7 +1330,9 @@ main SUBROUTINE
         ;; huh, not surprisingly, if you don't run the cli
         ;; the keyboard doesn't work
         ;; but who turned it off? weird
-        cli                     ; enable interrupts for jiffy clock 
+        cli                     ; enable interrupts for jiffy clock
+        lda JIFFYL
+        sta r_seed
         lda #8
         sta 36879               ; border and screen colors
         sta volume              ; turn up the volume to 8
@@ -2379,43 +2382,73 @@ PossibleMoves SUBROUTINE
 ;;; ghost running away AI
 ;;; random turns selected
 FrightAI SUBROUTINE
-        lda #0
-        sta S3
+        txa
+        pha
         lda Sprite_motion,X
-        sta S2
-        lda Sprite_offset,X
-        ;;  we only have the possibility of turning at
-        ;; offset=0 and offset=8
-        beq .choice
-        cmp #8
-        beq .choice
-        rts
-
-        ;; pick a random direction, if we are at an intersection
-.choice
+        sta S5
+        tsx
+        sta S6                  ;save stack pointer
+        jsr rand_8
+        sta S7
         jsr SaveSprite
-
-        lda JIFFYL              ;use lower 4 bits of jiffy clock
-        adc $9006               ;light pen horiz
-        and #%00000011
-        tay
-
-        TryMove
-        bcc .done
+.checkdown        
+        lda #motionUp
+        cmp S5
+        beq .enddown
+        jsr scroll_down
+        bcs .enddown
+        ;; we could go down, should we?
+        lsr S7
+        bcs .done
+        lda #motionDown
+        pha
         jsr RestoreSprite
-        ldy #0
-.try
-        TryMove
-        bcc .done
+.enddown
+.checkup        
+        lda #motionDown
+        cmp S5
+        beq .endup
+        jsr scroll_up
+        bcs .endup
+        ;; we could go up, should we?
+        lsr S7
+        bcs .done
+        lda #motionUp
+        pha
         jsr RestoreSprite
-        iny
-        cpy #4
-        beq .bad
-        jmp .try
-.done
+.endup
+.checkleft
+        lda #motionRight
+        cmp S5
+        beq .endleft
+        scroll_left
+        bcs .endleft
+        ;; we could go left, should we?
+        lsr S7
+        bcs .done
+        lda #motionLeft
+        pha
+        jsr RestoreSprite
+.endleft
+.checkright
+        lda #motionLeft
+        cmp S5
+        beq .endright
+        scroll_right
+        bcs .endright
+        ;; we could go right, should we?
+        lsr S7
+        bcs .done
+        lda #motionRight
+        pha
+        jsr RestoreSprite
+.endright
+        ;; if we got here we didn't take any of our possible moves
+        ;; do to the random number
+        ;; now we just punt and pick the first one on the stack
+        
+.done        
         rts
-.bad
-        brk
 ;;; 
 ScatterGhostAI SUBROUTINE
         tya                     ;mul by 2
@@ -3402,6 +3435,7 @@ changevert SUBROUTINE
         rts
 ;;; X = sprite to scroll down
 ;;; carry is set on return if move is not possible
+;;; destroys: S1,S3,W2,W1
 scroll_down SUBROUTINE
         
         lda Sprite_dir,X
@@ -3500,7 +3534,23 @@ Bin2Hex SUBROUTINE
         tax
         rts
 #endif        
+; returns pseudo random 8 bit number in A. Affects A. (r_seed) is the
+; byte from which the number is generated and MUST be initialised to a
+; non zero value or this function will always return zero. Also r_seed		
+; must be in RAM, you can see why......
+
+rand_8 SUBROUTINE
+	LDA	r_seed		; get seed
+	ASL			; shift byte
+	BCC	no_eor		; branch if no carry
+
+	EOR	#$CF		; else EOR with $CF
+no_eor
+	STA	r_seed		; save number as next seed
+	RTS			; done
+;;; 
 ;;; S5 * S6 output ( 16 bit ) W5
+;;; 
 multxx SUBROUTINE
 ;
 ; B * C [i.e] multiplier * multiplicand
