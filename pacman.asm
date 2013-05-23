@@ -2,7 +2,7 @@
         processor 6502
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
-GHOSTS_ON   equ 1
+;GHOSTS_ON   equ 1
 _debug      equ 1                 ; true for debugging
 cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
 voice1      equ 36874             ; sound registers
@@ -487,6 +487,16 @@ EYES            equ $08
         sta {1}
         lda {1}+1
         sbc {2}+1
+        sta {1}+1
+        ENDM
+
+        MAC add16Im
+        clc
+        lda {1}
+        adc #[{2}]&$ff
+        sta {1}
+        lda {1}+1
+        adc #[{2}]>>8
         sta {1}+1
         ENDM
 
@@ -1067,7 +1077,22 @@ DIV22_WORK      dc.w 0
 ;;; division table for division by 22
 Div22Table      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
-MotionTable     dc.b motionUp,motionDown,motionLeft,motionRight        
+MotionTable     dc.b motionUp,motionDown,motionLeft,motionRight
+        MAC MoveSpriteDown
+        saveX
+        txa
+        asl
+        tax
+        lda Sprite_loc,X
+        clc
+        adc #22
+        sta Sprite_loc,X
+        inx
+        lda Sprite_loc,X
+        adc #0
+        sta Sprite_loc,X
+        resX
+        ENDM
 ;;; swap upcoming sprite data with current sprite data
 ;;; i.e. page flip the screen location
         MAC SwapSpritePos
@@ -1646,9 +1671,19 @@ WaitFire SUBROUTINE
 .fire
         rts
 
+        MAC mscroll_down
+        lda #motionDown
+        sta SPRT_LOCATOR
+        lda #8
+        sta END_SCRL_VAL
+        lda #1
+        sta SCRL_VAL
+        jsr scroll_down2
+        ENDM
+
         MAC scroll_left
 
-        lda #22
+        lda #motionLeft
         sta SPRT_LOCATOR
         lda #0
         sta END_SCRL_VAL
@@ -1659,7 +1694,7 @@ WaitFire SUBROUTINE
 
         MAC scroll_right
         
-        lda #24
+        lda #motionRight
         sta SPRT_LOCATOR
         lda #8
         sta END_SCRL_VAL
@@ -2659,7 +2694,8 @@ PacManTurn
         store16 PAC1D,W3
         lda #motionDown
         sta Sprite_motion
-        jsr scroll_down
+        ;jsr scroll_down
+        mscroll_down
         bcc .moveok
         jmp .uselast
 .right
@@ -3371,7 +3407,7 @@ changevert SUBROUTINE
 .endtile                        ;end of tiles branch
         subxx W1,W2,S3          ;generate ORG address in W2
         
-        ldy S1
+        ldy SPRT_LOCATOR
         lda (W2),Y
         jsr IsWall
         beq .failed             ;we hit a wall, abort move
@@ -3379,25 +3415,24 @@ changevert SUBROUTINE
         lda #22                 ;change direction to down
         sta Sprite_dir2,X
 
-        lda #0                  ;assume going down
-        sta Sprite_offset,X     ;sprite offset = 0
+        lda #1                  ;assume going down
+        sta Sprite_offset2,X     
 
         lda #23                 ;offset from ORG for new sprite pos
         sta S3                  ;if moving down
 
-        lda S1                  ;moving down?
+        lda SPRT_LOCATOR        ;moving down?
         cmp #45
         beq .isdown             ;branch down
 
-        lda #8                  ;going up, sprite offset = 8
-        sta Sprite_offset,X
+        lda #7                  ;going up, sprite offset = 8
+        sta Sprite_offset2,X
 
         lda #1                  ;offset from ORG for new sprite pos
         sta S3                  ;if moving up
 .isdown
         addxx W2,W1,S3          ;update new sprite pos
         move16x2 W1,Sprite_loc2
-
         clc                     ;return success
         rts
 ;;; X = sprite to scroll down
@@ -3441,8 +3476,70 @@ scroll_down SUBROUTINE
 ;        store16 PAC1D,W1
         clc
         rts
+        ;; move sprite_loc -22 into {1}
+        MAC SpriteVRef
+        saveX
+        txa
+        asl
+        tax
+        lda Sprite_loc,X
+        sec
+        sbc #22
+        sta {1}
+        inx
+        lda Sprite_loc,X
+        sbc #0
+        sta {1}+1
+        resX
+        ENDM
 
-        
+scroll_down2 SUBROUTINE
+        lda Sprite_dir,X
+        cmp #dirVert            ;check if already vertical
+        beq .00
+
+        jsr changevert          ;if not, change us to down
+        rts
+.00
+        lda Sprite_offset,X
+        cmp END_SCRL_VAL        ; less than 8? then fine scroll
+        bmi .fine
+.course                         ; course scroll
+        SpriteVRef W2         ; VREF tile loc-22
+        lda SCRL_VAL
+        bmi .up
+        ;; going down
+        ldy #66                 ;check one tile down from tail
+        lda #0                  ;push new sprite offset
+        pha
+        beq .wallcheck          ;jmp .wallcheck
+.up
+        lda #8                  ;push new sprite offset
+        pha
+        ldy #0                  ;check one tile above head
+.wallcheck
+        sty S1
+        lda (W2),Y              ;offset from VREF tile
+        jsr IsWall              ;is there a wall character there?
+        bne .continue
+        pla
+        sec                     ;indicate failure
+        rts
+.continue
+        lda S1                  ;if was up, no update of W2 needed
+        beq .wasup
+        add16Im W2,44           ;VREF+44 is new screen loc
+.wasup        
+        move16x2 W2,Sprite_loc2  ;save the new sprite screen location
+        pla
+.fine
+        clc
+        adc SCRL_VAL
+        sta Sprite_offset2,X
+.done
+;        clc
+        rts
+;;; 
         MAC DisplayBCDDigit
         cmp #10
         bmi .numbers
@@ -3549,40 +3646,6 @@ done:
 ;or #45 for down
 ;END_SCRL_VAL 7 for down 0 for up
 
-#if 0
-scroll_vert2 SUBROUTINE
-        
-        lda Sprite_dir,X
-        cmp #22                 ;check if already vertical
-        beq .00
-        jsr changevert          ;if not, change us to down
-        bcc .00
-        rts
-.00
-        CalcVertOrgTile W1 ; ORG tile offset in W1
-        beq .fine       ; not ready for course scroll
-.course                         ; course scroll
-        ldy #motionDown                 ;check one tile down from tail
-        lda (W1),Y
-        jsr IsWall
-        bne .continue
-.cantmove
-        sec                     ;indicate failure
-        rts
-.continue        
-        addxx W1,W2,#motionDown
-        move16x2 W2,Sprite_loc2  ;save the new sprite screen location
-        ldy #0                  ;reset fine scroll offset
-.fine
-;        brk
-        iny
-        tya
-        sta Sprite_offset2,X
-.done
-        store16 PAC1D,W1
-        clc
-        rts
-#endif
 ;;;
 ;;;
 ;;; 
