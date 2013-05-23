@@ -2,7 +2,7 @@
         processor 6502
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
-;GHOSTS_ON   equ 1
+GHOSTS_ON   equ 1
 _debug      equ 1                 ; true for debugging
 cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
 voice1      equ 36874             ; sound registers
@@ -525,7 +525,7 @@ EYES            equ $08
 
         store16 110,TIMER1
 
-        Display1 "S",10,TIMER1
+;        Display1 "S",10,TIMER1
         lda #0
         sta CHASEMODE
         
@@ -1022,7 +1022,8 @@ inky            equ 1
 blinky          equ 2
 pinky           equ 3
 clyde           equ 4
-focusGhost      equ 10          ;ghost to print debugging for
+nobody          equ 10        
+focusGhost      equ nobody          ;ghost to print debugging for
 fruit1Dots      equ 70          ;dots to release fruit
 fruit2Dots      equ 120         ;dots to release fruit2
 clydeDots       equ 255          ;dots to release clyde ( about 33% )
@@ -1032,7 +1033,7 @@ pinkyDots       equ 255           ;dots to release pinky ( should be 1)
 Sprite_page     dc.b 0        
 #if 1
 Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*2+8 ,screen+22*11+9,screen+22*(9+12)+11,screen+22*11+10,screen+22*11+12    ;new screen loc
+Sprite_loc2     DC.W screen+22*7+5 ,screen+22*11+9,screen+22*(9+12)+11,screen+22*11+10,screen+22*11+12    ;new screen loc
 Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
 Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0 ;current screen background ( might include some other sprite tile that was laid down )
@@ -1044,10 +1045,10 @@ Sprite_frame    dc.b 0,1,1,1,1 ;animation frame of sprite as offset from _src
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8)     , mychars+(GH2L*8)     , mychars+(GH3L*8)    
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16), mychars+(GH2L*8)+(16),mychars+(GH3L*8)+(16)
 Sprite_motion   dc.b 1,motionRight,motionLeft,motionRight,motionLeft ; see motion defines
-Sprite_dir      dc.b 1,1,1,1,1 ;sprite direction 1(horiz),22(vert)
-Sprite_dir2     dc.b 1,1,1,1,1 ;sprite direction 1(horiz),22(vert)    
-Sprite_offset   dc.b 0,0,0,2,6  ;sprite bit offset in tiles
-Sprite_offset2  dc.b 0,0,0,2,6  ;sprite bit offset in tiles
+Sprite_dir      dc.b 22,1,1,1,1 ;sprite direction 1(horiz),22(vert)
+Sprite_dir2     dc.b 22,1,1,1,1 ;sprite direction 1(horiz),22(vert)    
+Sprite_offset   dc.b 4,0,0,2,6  ;sprite bit offset in tiles
+Sprite_offset2  dc.b 4,0,0,2,6  ;sprite bit offset in tiles
 Sprite_speed    dc.b 80,20,10,20,20 ;your turn gets skipped every N loops of this
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
@@ -1421,7 +1422,7 @@ main SUBROUTINE
         jsr Timer1Expired
 .start        
 ;        Display1 "T",0,TIMER1
-        Display1 "J",0,JIFFYL
+;        Display1 "J",0,JIFFYL
         InitSpriteLoop          ;foreach sprite
 .eraseloop
         dec SPRITEIDX
@@ -1671,28 +1672,35 @@ WaitFire SUBROUTINE
 .fire
         rts
 
-        MAC mscroll_down
+scroll_down SUBROUTINE
         lda #motionDown
         sta SPRT_LOCATOR
         lda #8
         sta END_SCRL_VAL
         lda #1
         sta SCRL_VAL
-        jsr scroll_down2
-        ENDM
+        jmp scroll_down2
 
-        MAC scroll_left
+scroll_up SUBROUTINE
+        lda #motionUp
+        sta SPRT_LOCATOR
+        lda #0
+        sta END_SCRL_VAL
+        lda #-1
+        sta SCRL_VAL
+        jmp scroll_down2
 
+
+scroll_left SUBROUTINE
         lda #motionLeft
         sta SPRT_LOCATOR
         lda #0
         sta END_SCRL_VAL
         lda #$ff                ;-1 into A
         sta SCRL_VAL
-        jsr scroll_horiz
-        ENDM
+        jmp scroll_horiz
 
-        MAC scroll_right
+scroll_right SUBROUTINE
         
         lda #motionRight
         sta SPRT_LOCATOR
@@ -1700,8 +1708,8 @@ WaitFire SUBROUTINE
         sta END_SCRL_VAL
         lda #$01
         sta SCRL_VAL
-        jsr scroll_horiz
-        ENDM
+        jmp scroll_horiz
+
 #if 1
 ;;; move ghost in its currently indicated direction
 MoveGhost SUBROUTINE
@@ -1718,11 +1726,11 @@ MoveGhost SUBROUTINE
         beq .up
         brk
 .left
-        scroll_left
+        jsr scroll_left
 .exit        
         rts
 .right
-        scroll_right
+        jsr scroll_right
         rts
 .up
         jsr scroll_up
@@ -1795,10 +1803,10 @@ GhostAsPlayer SUBROUTINE
         beq .right
         rts
 .left
-        scroll_left
+        jsr scroll_left
         rts
 .right
-        scroll_right
+        jsr scroll_right
         rts
 .up
         jsr scroll_up
@@ -1870,19 +1878,26 @@ UpdateMotion2 SUBROUTINE
         sta Sprite_motion,X
 .done        
         rts
-#endif        
+#endif
+        ;; {1} as screen location
+        ;; broken into col,row
+        ;; stored in {2} , {3}
+        MAC ScreenToColRow
+        sub16Im {1},screen
+        jsr Divide22_16
+        lda W1                  ;column result ( remainder )
+        sta {2}
+        lda DIV22_RSLT          ;row result
+        sta {3}
+        
+        ENDM
         ;; calculate the ghost in X's
         ;; currently displayed row and column
         ;; Output: GHOST_ROW,GHOST_COL
         MAC CalcGhostRowCol
         
         move16x Sprite_loc,W1
-        sub16Im W1,screen
-        jsr Divide22_16
-        lda W1
-        sta GHOST_COL
-        lda DIV22_RSLT
-        sta GHOST_ROW
+        ScreenToColRow W1,GHOST_COL,GHOST_ROW
         
         ENDM
         ;; pac upcoming row col into variables
@@ -1986,10 +2001,10 @@ GhostTurn
         sta GHOST_TGTROW
         jmp .continue
 .normal
-        lda POWER_UP
-        beq .notfrightened
+;        lda POWER_UP
+;        beq .notfrightened
         jsr FrightAI
-        jmp .moveghost
+        jmp .continue
 .notfrightened        
         ;; lda CHASEMODE
         ;; bne .chasing
@@ -2028,8 +2043,6 @@ GhostTurn
 ;        jsr GhostAsPlayer
 .moveghost        
         jsr MoveGhost           ;
-;        bcs .animate
-;        dec Sprite_move,X
         
         jsr Collisions
 .animate
@@ -2246,10 +2259,12 @@ PixelPos SUBROUTINE
         Display1 "N",6,S1
         Display1 "M",9,S2
 #endif
+#if 0        
         Display1 "T",12,PACCOL
         Display1 "Y",15,PACROW
         Display1 "N",6,PACXPIXEL
         Display1 "M",9,PACYPIXEL
+#endif        
         rts
 ;;; Calculate distance of W1 to target tile
 ;;; input: W1 candidate sprite position
@@ -2317,6 +2332,8 @@ RestoreSprite SUBROUTINE
 .done
         ENDM
         ;; debug if this is the focus ghost
+        ;; {1}=display letter {2}=offset
+        ;; displays distance from target tile
         MAC IfFocus
         cpx #focusGhost
         bne .not
@@ -2370,7 +2387,7 @@ PossibleMoves SUBROUTINE
         cmp Sprite_motion,X
         beq .endright
         ;; check if we can go right
-        scroll_right            ;
+        jsr scroll_right            ;
         bcs .endright
         ;; we could go right
         ldSprtTailPos Sprite_loc2,W1 ;correct
@@ -2384,7 +2401,7 @@ PossibleMoves SUBROUTINE
         cmp Sprite_motion,X
         beq .endleft
         ;; check if we can go left
-        scroll_left             ;
+        jsr scroll_left             ;
         bcs .endleft
         ;; we could go left
         ldSprtHeadPos Sprite_loc2,W1 ;
@@ -2417,17 +2434,19 @@ PossibleMoves SUBROUTINE
 ;;; ghost running away AI
 ;;; random turns selected
 FrightAI SUBROUTINE
-        ldy Sprite_motion,X
-        lda Sprite_offset,X
-        beq .head
-        cmp #8
-        beq .tail
-.head
+        ;; pick a random offset from pacman's location
+        ;; to become our target tile
+        store16 [22*20]+21+screen,W1
+        ;; jsr rand_8
+        ;; sub16 W1,r_seed
+        ;; jsr rand_8
+        ;; sub16 W1,r_seed
+        ;; W1 is the screen location of our target tile
+
+        ScreenToColRow W1,GHOST_TGTCOL,GHOST_TGTROW
+        Display1 "X",0,GHOST_TGTCOL
+        Display1 "Y",3,GHOST_TGTROW
         
-        brk
-.tail
-        brk
-.done
         rts
 ;;; 
 ScatterGhostAI SUBROUTINE
@@ -2678,7 +2697,7 @@ PacManTurn
         store16 PAC_L1,W3
         lda #motionLeft
         sta Sprite_motion
-        scroll_left
+        jsr scroll_left
         bcs .uselast            ;couldn't move, use last reading
         jmp .moveok
 .up
@@ -2694,8 +2713,7 @@ PacManTurn
         store16 PAC1D,W3
         lda #motionDown
         sta Sprite_motion
-        ;jsr scroll_down
-        mscroll_down
+        jsr scroll_down
         bcc .moveok
         jmp .uselast
 .right
@@ -2704,7 +2722,7 @@ PacManTurn
         store16 PAC1,W3    ;
         lda #motionRight
         sta Sprite_motion
-        scroll_right
+        jsr scroll_right
         bcc .moveok
         jmp .uselast
 .moveok
@@ -2988,32 +3006,32 @@ tail2tail SUBROUTINE
         rts
 ;;; handle tunnel left side
 DecrementPos SUBROUTINE
-        cmp16Im W2,[tunnelRow*22]+tunnelLCol+$1e00
+        cmp16Im W2,[tunnelRow*22]+tunnelLCol+screen
         bne .done
-        store16 [tunnelRow*22]+tunnelRCol+$1e00,W2
+        store16 [tunnelRow*22]+tunnelRCol+screen,W2
         rts
 .done
         Dec16 W2
         rts
 ;;; handle tunnel right side
 IncrementPos SUBROUTINE
-        cmp16Im W2,[tunnelRow*22]+tunnelRCol+$1e00
+        cmp16Im W2,[tunnelRow*22]+tunnelRCol+screen
         bne .done
-        store16 [tunnelRow*22]+tunnelLCol+$1e00,W2
+        store16 [tunnelRow*22]+tunnelLCol+screen,W2
         rts
 .done
         Inc16 W2
         rts
 scroll_horiz SUBROUTINE
         lda Sprite_dir,X        ;get our current orientation
-        cmp #1                  ;are we already horizontal
+        cmp #dirHoriz           ;are we already horizontal
         beq .ok                 ;ok to move horizontal
         jsr changehoriz         ;no, switch to horizontal
         bcc .ok                 ;change successful
         rts                     ;we could't change to horizontal
 .ok
-        ldy Sprite_offset,X     ;get our current pixel offset
-        cpy END_SCRL_VAL        ;are we at the end of our tiles?
+        lda Sprite_offset,X     ;get our current pixel offset
+        cmp END_SCRL_VAL        ;are we at the end of our tiles?
         bne .draw               ;no, we can smooth scroll
 .course                         ;course scroll
 
@@ -3043,9 +3061,7 @@ scroll_horiz SUBROUTINE
 .continue
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla                      ;pull new sprite offset from the stack
-        tay
 .draw
-        tya
         clc
         adc SCRL_VAL
         sta Sprite_offset2,X
@@ -3183,38 +3199,30 @@ blith SUBROUTINE
 #endif
 #if 1
         ldx S2
-        txa
-        asl
-        pha
-        tay
+
         lda Sprite_sback,X      ;input to mergeTile
-;        sta screen+9,Y
         mergeTile               ;font address of underneath tile into W4
         move16 W4,W6
 
-        pla
-        tay
         lda Sprite_sback2,X
-;        sta screen+$A,Y
         mergeTile
 #endif        
         ldy #7
-        ldx S1
+        ldx S1                  ;amount to shift sprite
 .nextbyte
         lda (W1),Y
         sta (W2),Y
         ldx S1
-.loop
         beq .shiftdone
+.loop
         lda (W2),y
-        clc
-        ror
+        lsr
         sta (W2),Y
         lda (W3),Y
         ror
         sta (W3),Y
         dex
-        jmp .loop
+        bne .loop
 .shiftdone
 #if 1        
         lda (W6),Y              ;load left tile underneath bits
@@ -3229,65 +3237,6 @@ blith SUBROUTINE
         jmp .nextbyte
 .done
     rts
-;;;
-;;; X = sprite to move
-scroll_up SUBROUTINE
-        lda Sprite_dir,X
-        cmp #22                     ;check if already vertical
-        beq .00
-        lda #1
-        sta S1
-        jsr changevert          ;offset = 8 if we successfully change orientation
-        bcc .00
-        rts
-.00
-        ldy Sprite_offset,X
-        bne .fine               ; > 0 then fine scroll
-.course                         ; course scroll
-
-        move16x Sprite_loc,W2   ; screen location to W2
-        sub16Im W2,#22            ; check up one tile
-        ldy #0
-        lda (W2),Y
-        jsr IsWall
-        bne .continue
-.cantmove        
-        sec
-        rts
-.continue
-        lda #1
-        move16x2 W2,Sprite_loc2  ;save the new sprite screen location
-        ldy #8                  ;reset fine scroll offset
-.fine
-
-        dey
-        tya
-        sta Sprite_offset2,X
-.done
-        clc
-        rts
-        ;; calculate the ORG tile
-        MAC CalcVertOrgTile
-        move16x Sprite_loc,{1}
-        lda Sprite_offset,X
-        beq .head
-        cmp #8
-        beq .tail
-        ;; return false, in middle of tile
-        lda #0               
-        beq .done
-.head
-        lda #23
-        bne .subtract
-.tail
-        lda #1
-.subtract
-        sec
-        sbc {1}
-        lda #0
-        sbc {1}+1
-.done        
-        ENDM
 
 ;;; change orientation to horizontal
 ;;; X sprite to attempt change on
@@ -3435,47 +3384,6 @@ changevert SUBROUTINE
         move16x2 W1,Sprite_loc2
         clc                     ;return success
         rts
-;;; X = sprite to scroll down
-;;; carry is set on return if move is not possible
-;;; destroys: S1,S3,W2,W1
-scroll_down SUBROUTINE
-        
-        lda Sprite_dir,X
-        cmp #22                 ;check if already vertical
-        beq .00
-        lda #45
-        sta S1
-        jsr changevert          ;if not, change us to down
-        bcc .00
-        rts
-.00
-        ldy Sprite_offset,X
-        cpy #8                  ; less than 8? then fine scroll
-        bmi .fine
-.course                         ; course scroll
-;        brk
-        move16x Sprite_loc,W2   ; screen location to W2
-        ldy #44                 ;check one tile down from tail
-        lda (W2),Y
-        jsr IsWall
-        bne .continue
-.cantmove
-        sec                     ;indicate failure
-        rts
-.continue        
-
-        addxx W2,W1,#22
-        move16x2 W1,Sprite_loc2  ;save the new sprite screen location
-        ldy #0                  ;reset fine scroll offset
-.fine
-;        brk
-        iny
-        tya
-        sta Sprite_offset2,X
-.done
-;        store16 PAC1D,W1
-        clc
-        rts
         ;; move sprite_loc -22 into {1}
         MAC SpriteVRef
         saveX
@@ -3503,7 +3411,7 @@ scroll_down2 SUBROUTINE
 .00
         lda Sprite_offset,X
         cmp END_SCRL_VAL        ; less than 8? then fine scroll
-        bmi .fine
+        bne .fine
 .course                         ; course scroll
         SpriteVRef W2         ; VREF tile loc-22
         lda SCRL_VAL
@@ -3537,7 +3445,7 @@ scroll_down2 SUBROUTINE
         adc SCRL_VAL
         sta Sprite_offset2,X
 .done
-;        clc
+        clc
         rts
 ;;; 
         MAC DisplayBCDDigit
