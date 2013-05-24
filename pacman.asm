@@ -1166,10 +1166,95 @@ install_isr SUBROUTINE
         store16 isr1,$0314
         cli
         rts
+        
+delay2 subroutine
+        
+        rts
+        
+delay SUBROUTINE
+;        ldy #220
+.loop        
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        dey
+        bne .loop
+        rts
+sound1 SUBROUTINE
+.st
+        lda #1
+        sta S2
+        lda #1
+        sta S1
+        
+        lda #0
+        sta 36876
+
+        ldx #255
+.del1        
+        ldy #255
+        jsr delay
+        dex
+        bne .del1
+
+.go        
+        ldx #190
+.loop
+        ldy #230
+        jsr delay
+.loop2        
+        stx 36876
+        inx
+        cpx #234
+        beq .st
+        txa
+        and #2
+        
+        beq .off
+
+        lda S2
+        sta 36878
+        clc
+        adc S1
+        sta S2
+        cmp #15
+        beq .down
+        
+        jmp .loop
+.down
+        lda #-1
+        sta S1
+        jmp .loop
+.off
+        txa
+        clc
+        adc #6
+        sta 36876
+        jmp .loop
+        rts
 ;-------------------------------------------
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
+        lda #8
+        sta 36878
+        jsr sound1
 #if 0
         lda #$ea
         DoubleSigned
