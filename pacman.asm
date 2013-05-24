@@ -158,7 +158,8 @@ LASTJOYDIR      equ $4b         ;last joy reading that had a switch thrown
 MOVEMADE        equ $4c         ;true if last pacman move was successful
 TIMER1          equ $4d         ;decrement by main game loop every other trip
 TIMER1_h        equ $4e         ;timer1 high byte
-r_seed          equ $4f        
+r_seed          equ $4f
+AUDIO           equ $66         ;sound routines work register ( on isr )
 #if 0
 ;;; just for testing how many bytes I could save
 ;;; if I moved these to zero page -- about 120 bytes right now
@@ -195,18 +196,20 @@ VV              equ $02         ;testing, voice 2
 ;;
 ;; misc constants
 ;;
-PACL            equ $00            ; pacman char number
-
-GHL             equ $0b            ; ghost char number
-GH1L            equ [GHL+4]
-GH2L            equ [GH1L+4]
-GH3L            equ [GH2L+4]    
+charTop         equ 63          ;max user def chars
+EMPTY           equ $03
 DOT             equ $04
 WALLCH          equ $05
 MW              equ $05            ;maze wall character
 PWR             equ $06
-HWALL           equ $07
-EYES            equ $08        
+PWR2            equ PWR+1
+HWALL           equ PWR2+1
+VWALL           equ HWALL+1        
+GHL             equ VWALL+1         ; ghost char number
+GH1L            equ [GHL+4]
+GH2L            equ [GH1L+4]
+GH3L            equ [GH2L+4]    
+PACL            equ [GH3L+4]        ;pacman char number
 ;
 ;
 ;------------------------------------
@@ -769,200 +772,6 @@ MazeX
 
 
 pacframes  equ #4            ; total number of pacman animation frames ( 1 based )
-;;; 
-;;; define some 8x8 characters
-;;; 
-#if 1
-
-PAC1
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC2
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11110000
-    ds 1,%11110000
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC3
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111000
-    ds 1,%11110000
-    ds 1,%11110000
-    ds 1,%11111000
-    ds 1,%01111110
-    ds 1,%00111100
-PAC4
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11110000
-    ds 1,%11100000
-    ds 1,%11100000
-    ds 1,%11110000
-    ds 1,%01111110
-    ds 1,%00111100
-;;; --------------
-PAC1D
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC2D
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11100111
-    ds 1,%11100111
-    ds 1,%01100110
-    ds 1,%00100100
-PAC3D
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11100111
-    ds 1,%11000011
-    ds 1,%01000010
-    ds 1,%00000000
-PAC4D
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11100111
-    ds 1,%11000011
-    ds 1,%11000011
-    ds 1,%01000010
-    ds 1,%00000000
-;;; -------------
-PAC_UP1
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC_UP2
-    ds 1,%00100100
-    ds 1,%01100110
-    ds 1,%11100111
-    ds 1,%11100111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC_UP3
-    ds 1,%00000000
-    ds 1,%01000010
-    ds 1,%11000011
-    ds 1,%11100111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC_UP4
-    ds 1,%00000000
-    ds 1,%01000010
-    ds 1,%11000011
-    ds 1,%11000011
-    ds 1,%11100111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-;;; --------------------------
-PAC_L1
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC_L2
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%00001111
-    ds 1,%00001111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC_L3
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%00011111
-    ds 1,%00001111
-    ds 1,%00001111
-    ds 1,%00011111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC_L4
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%00001111
-    ds 1,%00000111
-    ds 1,%00000111
-    ds 1,%00001111
-    ds 1,%01111110
-    ds 1,%00111100
-        
-GHOST
-    ds 1,%01111110
-    ds 1,%11000011
-    ds 1,%11010111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11100011
-    ds 1,%11111111
-    ds 1,%10101010
-GHOST2        
-    ds 1,%01111110
-    ds 1,%11000011
-    ds 1,%11010111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11100011
-    ds 1,%11111111
-    ds 1,%01010101
-    ;; ds 1,215
-    ;; ds 1,255
-    ;; ds 1,255
-    ;; ds 1,227
-    ;; ds 1,255
-    ;; ds 1,170
-#else
-
-GHOST
-    ds 1,1
-    ds 1,2
-    ds 1,4
-    ds 1,8
-    ds 1,16
-    ds 1,32
-    ds 1,64
-    ds 1,128
-
-PAC1 ds 8,$01
-PAC2 ds 8,$01
-PAC3 ds 8,$01
-PAC4 ds 8,$01
-#endif
 
 ;------------------------------------
 ;;;
@@ -1145,7 +954,7 @@ erasesprt SUBROUTINE
         lda #4
         cmp Sprite_offset
         bne .notpac
-        lda #$20
+        lda #EMPTY
         sta Sprite_back
         sta Sprite_back2
 .notpac        
@@ -1311,7 +1120,6 @@ Timer1Expired SUBROUTINE
         rts
 
 PowerPillOff SUBROUTINE
-        brk
 .loop        
         lda Sprite_base,Y
         sta Sprite_speed,Y
@@ -1321,6 +1129,7 @@ PowerPillOff SUBROUTINE
 .done        
         rts
 PowerPill SUBROUTINE
+        brk
         lda #255
         sta POWER_UP
         ldy #5
@@ -1333,6 +1142,29 @@ PowerPill SUBROUTINE
 ;        lda #11
 ;        sta 36879
 .done        
+        rts
+
+isr1
+
+        pha
+        txa
+        pha
+        tya
+        pha
+        ldx #2
+        jsr VoiceTrack_svc
+        ldx #4
+        jsr VoiceTrack_svc
+        pla
+        tay
+        pla
+        tax
+        pla
+        jmp $eabf
+install_isr SUBROUTINE
+        sei
+        store16 isr1,$0314
+        cli
         rts
 ;-------------------------------------------
 ; MAIN()
@@ -1358,7 +1190,8 @@ main SUBROUTINE
         ;; huh, not surprisingly, if you don't run the cli
         ;; the keyboard doesn't work
         ;; but who turned it off? weird
-        cli                     ; enable interrupts for jiffy clock
+        
+;        cli                     ; enable interrupts for jiffy clock
         lda JIFFYL
         sta r_seed
         lda #8
@@ -1387,7 +1220,10 @@ main SUBROUTINE
 
 ;        LoadTrack 1,TrackBass
 ;        LoadTrack 2,TrackHigh
-        LoadTrack 3,Track1
+;        LoadTrack 2,Track1
+        LoadTrack 2,Track1x
+        LoadTrack 4,Vol1
+        jsr install_isr
 
         jmp .background
 .loop
@@ -1405,8 +1241,11 @@ main SUBROUTINE
         bne .iloop
         ;; ok, we are at vertical blank, on one of the frames we want to render
         ;; here we go ...
-        ldx #3
-        jsr VoiceTrack_svc          ; run sound engine
+        ldx #2
+;        jsr VoiceTrack_svc          ; run sound engine
+        ldx #4
+;        jsr VoiceTrack_svc          ; run sound engine
+        
 
         Invert Sprite_page      ;dbl buffering, switch sprite tiles
 
@@ -1516,7 +1355,7 @@ copychar    SUBROUTINE
     store16 mychars+[8*GHL],W3
     store16 charcnt-[8*GHL],W1
 
-    jsr movedown
+;    jsr movedown
 
     lda VICSCRN
     and #$f0
@@ -1586,7 +1425,7 @@ process_code SUBROUTINE
         beq .hwall              ;horizontal wall section
         cmp #%011
         beq .pdot
-        lda #$20                ;default to space
+        lda #EMPTY              ;default to space
         rts
 .pdot
         lda #PWR
@@ -1605,7 +1444,7 @@ process_code SUBROUTINE
         ldx #WHITE
         rts
 .space
-        lda #$20
+        lda #EMPTY
         ldx #BLACK
         rts
 ; Move memory down
@@ -1779,7 +1618,7 @@ MoveGhost SUBROUTINE
         sta Sprite_motion,X
 .done
         ENDM
-#if 1    
+#if 0
 ;;; move a ghost using the keyboard
 GhostAsPlayer SUBROUTINE
         lda 197
@@ -2031,7 +1870,7 @@ GhostTurn
         rts
 ;;; open the door on the ghost box
 OpenGhostBox SUBROUTINE
-        lda #$20
+        lda #EMPTY
         sta screen+22*[outOfBoxRow+1]+outOfBoxCol
         lda #BLACK
         sta clrram+22*[outOfBoxRow+1]+outOfBoxCol
@@ -3486,14 +3325,23 @@ done:
         dc.b $ff
         dc.b $ff
         ;; power pellet
-        dc.b 0
-        dc.b 24
-        dc.b 60
-        dc.b 60
-        dc.b 60
-        dc.b 60
-        dc.b 24
-        dc.b 0
+        dc.b %00000000
+        dc.b %00011000
+        dc.b %00111100
+        dc.b %00111100
+        dc.b %00111100
+        dc.b %00111100
+        dc.b %00011000
+        dc.b %00000000
+        ;; power pellet2
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00011000
+        dc.b %00111100
+        dc.b %00111100
+        dc.b %00011000
+        dc.b %00000000
+        dc.b %00000000
         ;; horizontal wall
         dc.b %00000000
         dc.b %00000000
@@ -3512,6 +3360,11 @@ done:
         dc.b %00100100
         dc.b %00100100
         dc.b %00100100
+        
+        ;; 5 sprites * 4 tiles per sprite * 8 bytes
+        ;;  need to clean this up a bit
+        
+        ds 5*4*8,0
         ;; eyes
 BIT_EYES
         dc.b %00000000
@@ -3531,13 +3384,173 @@ BIT_EYES
         dc.b %11100111
         dc.b %00000000
         dc.b %00000000
-        
-        ;; now the 4 ghosts occupy this area
-        ;;  need to clean this up a bit
-        
-        ds 4*8,0
         ;; eyes
         
+GHOST
+    dc.b %01111110
+    dc.b %11000011
+    dc.b %11010111
+    dc.b %11111111
+    dc.b %11111111
+    dc.b %11100011
+    dc.b %11111111
+    dc.b %10101010
+GHOST2        
+    dc.b %01111110
+    dc.b %11000011
+    dc.b %11010111
+    dc.b %11111111
+    dc.b %11111111
+    dc.b %11100011
+    dc.b %11111111
+    dc.b %01010101
+PAC1
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC2
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11110000
+    ds 1,%11110000
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC3
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111000
+    ds 1,%11110000
+    ds 1,%11110000
+    ds 1,%11111000
+    ds 1,%01111110
+    ds 1,%00111100
+PAC4
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11110000
+    ds 1,%11100000
+    ds 1,%11100000
+    ds 1,%11110000
+    ds 1,%01111110
+    ds 1,%00111100
+;;; --------------
+PAC1D
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC2D
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11100111
+    ds 1,%11100111
+    ds 1,%01100110
+    ds 1,%00100100
+PAC3D
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11100111
+    ds 1,%11000011
+    ds 1,%01000010
+    ds 1,%00000000
+PAC4D
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11100111
+    ds 1,%11000011
+    ds 1,%11000011
+    ds 1,%01000010
+    ds 1,%00000000
+;;; -------------
+PAC_UP1
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC_UP2
+    ds 1,%00100100
+    ds 1,%01100110
+    ds 1,%11100111
+    ds 1,%11100111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC_UP3
+    ds 1,%00000000
+    ds 1,%01000010
+    ds 1,%11000011
+    ds 1,%11100111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC_UP4
+    ds 1,%00000000
+    ds 1,%01000010
+    ds 1,%11000011
+    ds 1,%11000011
+    ds 1,%11100111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+;;; --------------------------
+PAC_L1
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC_L2
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%11111111
+    ds 1,%00001111
+    ds 1,%00001111
+    ds 1,%11111111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC_L3
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%00011111
+    ds 1,%00001111
+    ds 1,%00001111
+    ds 1,%00011111
+    ds 1,%01111110
+    ds 1,%00111100
+PAC_L4
+    ds 1,%00111100
+    ds 1,%01111110
+    ds 1,%00001111
+    ds 1,%00000111
+    ds 1,%00000111
+    ds 1,%00001111
+    ds 1,%01111110
+    ds 1,%00111100
         
 #if 0
 ;;; scratch text for debugging thoughts

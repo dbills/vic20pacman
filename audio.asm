@@ -5,13 +5,13 @@
 ;    4 instances for the 4 voices
 ;    if playing a note, then Scale_ef and Scale_st is not relevant
 ;------------------------------------
-Scale_sf      ds 4,0,0,0,0        ; current start freq
-Scale_ef      ds 4,0,0,0,0        ; current end freq
-Scale_st      ds 4,0,0,0,0        ; step ( signed byte )
+Scale_sf      ds 5,0,0,0,0,0        ; current start freq
+Scale_ef      ds 5,0,0,0,0,0       ; current end freq
+Scale_st      ds 5,0,0,0,0,0        ; step ( signed byte )
 Note_dur
-Scale_dur     ds 4,0,0,0,0        ; duration in jiffys
+Scale_dur     ds 5,0,0,0,0,0        ; duration in jiffys
 Note_rem
-Scale_rem     ds 4,0,0,0,0        ; remaining jiffys in current sound
+Scale_rem     ds 5,0,0,0,0,0        ; remaining jiffys in current sound
 ;--------
 ; methods
 ;--------
@@ -68,10 +68,10 @@ Scale_service2 SUBROUTINE
 ;-------------------------------------------
 trackDone     equ 0
 trackRunning  equ 1        
-VoiceTrack_data ds.w    4,0,0,0,0      ; pointer to track data
-VoiceTrack_done ds      4,trackDone,trackDone,trackDone,trackDone 
-VoiceTrack_st   ds.w    4,0,0,0,0      ;address beginning
-VoiceTrack_halted ds    4,1,1,1,1
+VoiceTrack_data ds.w    5,0,0,0,0,0      ; pointer to track data
+VoiceTrack_done ds      5,trackDone,trackDone,trackDone,trackDone,trackDone
+VoiceTrack_st   ds.w    5,0,0,0,0,0      ;address beginning
+VoiceTrack_halted ds    5,1,1,1,1,1
 ;
 ; Called regularly by main loop or VBI
 ; to service the voice track
@@ -93,21 +93,21 @@ VoiceTrack_svc SUBROUTINE
         brk                         ; service routine shoulda called rts
 
 .loadscale
-        inc16 W1
-        lda (W1),Y
+        inc16 AUDIO
+        lda (AUDIO),Y
         sta Scale_sf,X
-        inc16 W1
-        lda (W1),Y
+        inc16 AUDIO
+        lda (AUDIO),Y
         sta Scale_ef,X
-        inc16 W1
-        lda (W1),Y
+        inc16 AUDIO
+        lda (AUDIO),Y
         sta Scale_st,X
-        inc16 W1
-        lda (W1),Y
+        inc16 AUDIO
+        lda (AUDIO),Y
         sta Scale_dur,X
-        inc16 W1
+        inc16 AUDIO
                                 ; install Scale as service handler
-        move16x2 W1,VoiceTrack_data
+        move16x2 AUDIO,VoiceTrack_data
 
         lda #trackRunning 
         sta VoiceTrack_done,X       ;
@@ -115,39 +115,43 @@ VoiceTrack_svc SUBROUTINE
         
 .load_next_command
         ;; move pointer to zero page so we can use it for indexing 
-        move16x VoiceTrack_data,W1
+        move16x VoiceTrack_data,AUDIO
         ldy #0
-        lda (W1),Y
+        lda (AUDIO),Y
         ;; switch ( track[idx] )
         beq .loadscale
         cmp #1                  ; case 1
         beq  .load_note         ;
         cmp #3
         beq .repeat
-        cmp #02                 ; case 2 stop command
+        cmp #4
+        beq .repeat2
         brk
 .done        
         rts
         
 .repeat
-        move16x    VoiceTrack_st,W1
+        move16x    VoiceTrack_st,AUDIO
         jmp .loadscale
+.repeat2        
+        move16x    VoiceTrack_st,AUDIO
+        jmp .load_note
         
 .load_note
-        inc16 W1
-        lda (W1),Y                  ; get note freq
+        inc16 AUDIO
+        lda (AUDIO),Y                  ; get note freq
         ;; we use the same start/end freq for 'notes'
         sta Scale_sf,X              ; save start freq
         sta Scale_ef,X              ; save end freq
         lda #1                      ; direction = up ( not really relevant )
         sta Scale_st,X
-        inc16 W1
-        lda (W1),Y                  ; get note dur
+        inc16 AUDIO
+        lda (AUDIO),Y                  ; get note dur
         sta Note_dur,X              ;
         sta Note_rem,X              ; initialize remaining time
-        inc16 W1
+        inc16 AUDIO
                                 ; install Scale as service handler
-        move16x2 W1,VoiceTrack_data
+        move16x2 AUDIO,VoiceTrack_data
         
         lda #trackRunning
         sta VoiceTrack_done,X       ;
@@ -169,6 +173,8 @@ VoiceTrack_svc SUBROUTINE
         MAC HaltTrack
         lda #trackDone
         sta VoiceTrack_halted,X
+        lda #0
+        sta 36877
         ENDM
         ;; X track
         MAC UnHaltTrack
