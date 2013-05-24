@@ -213,19 +213,6 @@ EYES            equ $08
 ; Utility macros
 ;------------------------------------
 ;
-#if _debug        
-   mac checkYDir
-        cpy #22
-        beq .checkYok
-        cpy #1
-        beq .checkYok
-        brk
-.checkYok
-   endm
-#else        
-   mac checkYDir
-   endm
-#endif
         ;; logical not of 1, used to switch between on/off states
         MAC Invert
         lda #1                  ;dbl buffering, switch sprite tiles
@@ -1049,7 +1036,10 @@ Sprite_dir      dc.b 22,1,1,1,1 ;sprite direction 1(horiz),22(vert)
 Sprite_dir2     dc.b 22,1,1,1,1 ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 4,0,0,2,6  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 4,0,0,2,6  ;sprite bit offset in tiles
-Sprite_speed    dc.b 80,20,10,20,20 ;your turn gets skipped every N loops of this
+Sprite_speed    dc.b 10,10,10,10,10 ;your turn gets skipped every N loops of this
+;;; speeds when pacman is powered up
+Sprite_speed2   dc.b 80,2,2,2,2
+Sprite_base     dc.b 10,10,10,10,10        
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
         ;; in order of exit 
@@ -1063,7 +1053,7 @@ Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
         ;; etc
 Sprite_mode    dc.b 1,0,1,0,0  ;in ghost box if false
 #endif        
-masterSpeed      equ 15           ;master game delay
+masterSpeed      equ 5           ;master game delay
 #IFNCONST
 SAVE_OFFSET     dc.b 0
 SAVE_OFFSET2    dc.b 0
@@ -1108,13 +1098,6 @@ MotionTable     dc.b motionUp,motionDown,motionLeft,motionRight
 ;;; S2 sprite to render
 render_sprite SUBROUTINE
         stx S2                  ;set for call to blith
-#if _debug        
-        lda #SPRITES
-        cmp S2
-        bcs .ok
-        brk
-.ok
-#endif
 ;        jsr dumpBack2
         move16x Sprite_src,W1   ;bitmap source -> W1
         lda Sprite_frame,X
@@ -1204,17 +1187,18 @@ erasesprt SUBROUTINE
         ldy Sprite_color,X
         cpx #0                  ;pacman doesn't change colors
         beq .done
+        
         lda POWER_UP
-        beq .done
+        beq .done            ;not in power up mode
         ;; flash ghost color when power up is low
-        cmp #20
+        cmp #20                 
         bcc .near_end
         ldy #BLUE
         jmp .done
 .near_end                       ;almost out of power time
-        ldy #WHITE
-        lda #4
-        bit POWER_UP
+        ldy #WHITE              ;show white
+        lda #4                  ;but flash blue when 
+        bit POWER_UP            ;power_up modulo 4 is 0
         beq .done
         ldy #BLUE
 .done
@@ -1243,7 +1227,7 @@ UpdateColorRam SUBROUTINE
 .singletile        
         rts
         rts
-;;; TODO: the screen backing tiles needs to check to 'upcoming' sprite tile positions
+;;; 
 ;;; X = sprite to move
 ;;; uses W2,S2
 drwsprt1 SUBROUTINE
@@ -1325,12 +1309,30 @@ Timer1Expired SUBROUTINE
         ChaseMode
 .done
         rts
-        
+
+PowerPillOff SUBROUTINE
+        brk
+.loop        
+        lda Sprite_base,Y
+        sta Sprite_speed,Y
+        dey
+        bmi .done
+        jmp .loop
+.done        
+        rts
 PowerPill SUBROUTINE
-        lda #100
+        lda #255
         sta POWER_UP
+        ldy #5
+.loop        
+        lda Sprite_speed2,Y
+        sta Sprite_speed,Y
+        dey
+        bmi .done
+        jmp .loop
 ;        lda #11
 ;        sta 36879
+.done        
         rts
 ;-------------------------------------------
 ; MAIN()
@@ -1413,6 +1415,8 @@ main SUBROUTINE
         beq .skip
         dey
         sty POWER_UP
+        bne .skip
+        jsr PowerPillOff
 .skip
         cmp16Im TIMER1,#0
         beq .start
@@ -1504,20 +1508,6 @@ main SUBROUTINE
         jmp .loop
         brk
         
-;;; -------------------------------------------------------------------------------------------
-;;; load a character image
-;;; W1 = source data
-;;; W2 = dest data
-loadch SUBROUTINE
-    ldy #0
-.1  lda (W1),y                  ;lda (*w1)+y
-    sta (W2),y
-    iny
-    cpy #8
-    beq .done
-    jmp .1
-.done
-    rts
 ;;;
 ;;;  copy the stock character set
 ;;;
@@ -1944,24 +1934,6 @@ UpdateMotion2 SUBROUTINE
         sta Sprite_turn,X
         sec
         ENDM
-        ;; 
-        ;; execute a queued move
-        ;; 
-        MAC ExeuteQueuedMove
-        lda Sprite_motion,X
-        cmp #motionRight
-        beq .go_up
-        cmp #motionLeft
-        beq .go_up
-        ;; go left
-        lda #motionLeft
-        sta Sprite_motion,X
-        bne .done
-.go_up
-        lda #motionUp
-        sta Sprite_motion,X
-.done        
-        ENDM
 ;;; animate a ghost back and forth
 GhostAI SUBROUTINE
         lda #0
@@ -2001,8 +1973,8 @@ GhostTurn
         sta GHOST_TGTROW
         jmp .continue
 .normal
-;        lda POWER_UP
-;        beq .notfrightened
+        lda POWER_UP
+        beq .notfrightened
         jsr FrightAI
         jmp .continue
 .notfrightened        
@@ -2321,17 +2293,6 @@ RestoreSprite SUBROUTINE
         lda SAVE_DIR2
         sta Sprite_dir2,X
         rts
-        ;; figure out the ORG offset of a 9x9 tile for a sprite
-        ;; depending on it's current orientation ( horiz, or vertical )
-        ;; X sprite
-        MAC OrgOffsetByDir
-        lda #1
-        cmp Sprite_dir,X
-        beq .done
-        lda #22                 ;it's vertical then
-.done
-        ENDM
-        ;; debug if this is the focus ghost
         ;; {1}=display letter {2}=offset
         ;; displays distance from target tile
         MAC IfFocus
@@ -2354,9 +2315,6 @@ PossibleMoves SUBROUTINE
         cmp Sprite_motion,X
         beq .enddown
         ;; check if we can go down
-        lda #motionDown         ;
-        sta S1                  ;
-        sta SPRT_LOCATOR        ;
         jsr scroll_down         ;
         bcs .enddown
         ;; we could go down
@@ -2371,8 +2329,6 @@ PossibleMoves SUBROUTINE
         cmp Sprite_motion,X
         beq .endup
         ;; check if we can go up
-        lda #motionUp                ;
-        sta SPRT_LOCATOR             ;
         jsr scroll_up           ;
         bcs .endup
         ;; we could go up;
@@ -2436,16 +2392,16 @@ PossibleMoves SUBROUTINE
 FrightAI SUBROUTINE
         ;; pick a random offset from pacman's location
         ;; to become our target tile
-        store16 [22*20]+21+screen,W1
-        ;; jsr rand_8
-        ;; sub16 W1,r_seed
-        ;; jsr rand_8
-        ;; sub16 W1,r_seed
-        ;; W1 is the screen location of our target tile
+        store16 screen,W1
+        jsr rand_8
+        add W1,r_seed
+        jsr rand_8
+        add W1,r_seed
+;        W1 is the screen location of our target tile ;
 
         ScreenToColRow W1,GHOST_TGTCOL,GHOST_TGTROW
-        Display1 "X",0,GHOST_TGTCOL
-        Display1 "Y",3,GHOST_TGTROW
+;        Display1 "X",0,GHOST_TGTCOL ;
+;        Display1 "Y",3,GHOST_TGTROW
         
         rts
 ;;; 
@@ -2805,6 +2761,8 @@ Collisions SUBROUTINE
 ;        lda #WHITE
 ;        sta Sprite_color,X
         store16x BIT_EYES,Sprite_src
+        lda #255                ;eyes as fast as possible
+        sta Sprite_speed,X
 .done        
         ;; GHOST_ROW,GHOST_COL
         rts
@@ -2864,24 +2822,12 @@ SPRT_CUR set S2                 ;current sprite
         cmp #NOTCOPY            ;is head tile filled in?
         bne .checktail
         lda (W1),Y              ;nope, fill it with screen
-#if _debug        
-        cmp #MW
-        bne .ok
-;        brk                     ;we just loaded a mazewall, something is wrong
-.ok        
-#endif
         sta Sprite_sback,X
 .checktail
         lda Sprite_sback2,X
         cmp #NOTCOPY            ;is tail tile filled in?
         bne .alldone
         lda (W2),Y              ;nope, fill it with screen
-#if _debug        
-        cmp #MW
-        bne .ok2
-;        brk                     ;we just loaded a mazewall, something is wrong
-.ok2        
-#endif
         sta Sprite_sback2,X
 .alldone        
         rts
@@ -3087,12 +3033,11 @@ SoundOff SUBROUTINE
 ;;; W2 = top half font ram
 ;;; W3 = bottom half font ram
 blitc SUBROUTINE
-    ldy #8
+    ldy #16
     lda #0
 .loop
     dey
     sta (W2),Y
-    sta (W3),Y
     beq .done
     bne .loop
 .done
@@ -3106,13 +3051,6 @@ blitc SUBROUTINE
 ;;; uses W4,S5,S6
 ;;; 
 blitd SUBROUTINE
-#if _debug                      ;scroll amount should be in range of 0 - 7
-        lda #8
-        cmp S1
-        bcs .0
-        brk
-.0
-#endif
         ;; get left hand tile 'underneath' bitmap
         ;; so we can or it into this new image
         ldx S2                 
@@ -3123,15 +3061,15 @@ blitd SUBROUTINE
         ldx #0
         ldy #0
 .loop        
-        lda (W4),Y
-        cpx S1
-        bmi .lt
-        ora (W1),Y
-        inc16 W1
-.lt                             ;don't copy from source
-        sta (W2),Y
-        inc16 W4
-        inc16 W2
+        lda (W4),Y              ;load background tile byte
+        cpx S1                  ;are we ready to start copying source bitmap
+        bmi .lt                 ;nope, skip
+        ora (W1),Y              ;yes, or in the source byte
+        inc16 W1                ;increment the source byte count
+.lt           
+        sta (W2),Y              ;store the possibly combined background/sprite byte
+        inc16 W4                ;increment background byte pointer
+        inc16 W2                ;increment left tile destination byte pointer
         inx                     ;next x
         cpx #8
         bmi .loop
@@ -3159,28 +3097,6 @@ blitd SUBROUTINE
 
 .done
         rts
-;#if _debug
-#if 0        
-;;; X sprite background tiles to dump
-dumpBack SUBROUTINE
-        txa
-        asl
-        tay
-        lda Sprite_back,X      ;input to mergeTile
-        sta screen+4,Y
-        lda Sprite_back2,X
-        sta screen+5,Y
-        rts
-dumpBack2 SUBROUTINE
-        txa
-        asl
-        tay
-        lda Sprite_sback,X      ;input to mergeTile
-        sta screen+9,Y
-        lda Sprite_sback2,X
-        sta screen+$A,Y
-        rts
-#endif        
 ;;; horizontal blit
 ;;; W1 = source bits
 ;;; W2 = left tile dest bits
@@ -3189,14 +3105,6 @@ dumpBack2 SUBROUTINE
 ;;; S1 = amount to shift ( 1 - 8 )
 ;;; S2 = sprite to move
 blith SUBROUTINE
-#if _debug                      ;scroll amount should be in range of 0 - 7
-    clc
-    lda #8
-    cmp S1
-    bcs .0
-    brk
-.0
-#endif
 #if 1
         ldx S2
 
@@ -3371,7 +3279,7 @@ changevert SUBROUTINE
         sta S3                  ;if moving down
 
         lda SPRT_LOCATOR        ;moving down?
-        cmp #45
+        cmp #motionDown
         beq .isdown             ;branch down
 
         lda #7                  ;going up, sprite offset = 8
