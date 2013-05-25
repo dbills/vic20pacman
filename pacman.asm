@@ -232,6 +232,20 @@ PACL            equ [GH3L+4]        ;pacman char number
         pla
         tax
         ENDM
+        MAC saveAll
+        pha
+        txa
+        pha
+        tya
+        pha
+        ENDM
+        MAC resAll
+        pla
+        tay
+        pla
+        tax
+        pla
+        ENDM
         ;; compare {1} with #{2} 
         MAC cmp16Im
         lda {1}
@@ -862,7 +876,7 @@ Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
         ;; etc
 Sprite_mode    dc.b 1,0,1,0,0  ;in ghost box if false
 #endif        
-masterSpeed      equ 5           ;master game delay
+masterSpeed      equ 7 ;master game delay
 #IFNCONST
 SAVE_OFFSET     dc.b 0
 SAVE_OFFSET2    dc.b 0
@@ -878,6 +892,8 @@ DIV22_WORK      dc.w 0
 Div22Table      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 MotionTable     dc.b motionUp,motionDown,motionLeft,motionRight
+VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1 ;15
+VolTableSz equ 15        
         MAC MoveSpriteDown
         saveX
         txa
@@ -1129,7 +1145,7 @@ PowerPillOff SUBROUTINE
 .done        
         rts
 PowerPill SUBROUTINE
-        brk
+
         lda #255
         sta POWER_UP
         ldy #5
@@ -1144,6 +1160,63 @@ PowerPill SUBROUTINE
 .done        
         rts
 
+crap1
+        dc.b 219
+rdur equ 2       
+ddur equ 1       
+crap2        
+        dc.b ddur
+sstep equ 4
+crap3   dc.b sstep
+isr2 SUBROUTINE
+        dec crap2
+        beq .newnote
+        jmp $eabf
+.newnote
+        lda crap1
+        cmp #0
+        beq .up
+        cmp #1
+        beq .down
+        cmp #242
+        bcs .rest2
+        cmp #218
+        bcc .rest1
+        bne .cont
+.rest1
+        lda #0
+        sta crap1
+        ldy #rdur
+        jmp .storenote
+.rest2
+        lda #1
+        sta crap1
+        ldy #rdur
+        jmp .storenote
+
+.up
+        lda #sstep
+        sta crap3
+        lda #219
+        sta crap1
+        jmp .cont
+.down
+        lda #-sstep
+        sta crap3
+        lda #241
+        sta crap1
+.cont
+        clc
+        adc crap3
+        sta crap1
+        ldy #ddur
+.storenote        
+        sta 36877
+.resetDur
+        sty crap2
+        jmp $eabf
+
+        
 isr1
 
         pha
@@ -1163,98 +1236,101 @@ isr1
         jmp $eabf
 install_isr SUBROUTINE
         sei
-        store16 isr1,$0314
+;        store16 isr1,$0314
+        store16 isr2,$0314
         cli
         rts
-        
-delay2 subroutine
-        
+delay2 SUBROUTINE
+.wait        
+        lda JIFFYL
+        sta S1
+.again        
+        lda JIFFYL
+        cmp S1
+        beq .again
+        dey
+        beq .done
+        jmp .wait
+.done        
         rts
-        
 delay SUBROUTINE
-;        ldy #220
-.loop        
-        nop
-        nop
-        nop
-        nop
-        nop
-        nop
-        nop
-        nop
-        nop
-        nop
-        nop
-        nop
-        nop
-        nop
-        nop
-        nop
-        nop
+        txa
+        pha
+        ldx #0
+.xloop        
+        lda VolTable,X
+        sta volume
+        inx
+        cpx #VolTableSz
+        beq .done
+
+        ldy S2
+.yloop        
         nop
         nop
         dey
-        bne .loop
+        bne .yloop
+        jmp .xloop
+.done        
+        pla
+        tax
         rts
 sound1 SUBROUTINE
+        saveAll
+        lda S2
+        pha
+
 .st
-        lda #1
+        lda #190
         sta S2
-        lda #1
-        sta S1
         
         lda #0
         sta 36876
-
-        ldx #255
-.del1        
-        ldy #255
-        jsr delay
-        dex
-        bne .del1
-
-.go        
-        ldx #190
+        ldy #120
+;        jsr delay2
+        ldx #195
 .loop
-        ldy #230
+        lda S2
+        sec
+        sbc #3
+        sta S2
         jsr delay
-.loop2        
+
         stx 36876
         inx
-        cpx #234
-        beq .st
+        inx
+
+        cpx #230
+;        bcs .st
+        bcs .done
         txa
         and #2
         
-        beq .off
+       beq .off              ;
 
-        lda S2
-        sta 36878
-        clc
-        adc S1
-        sta S2
-        cmp #15
-        beq .down
-        
-        jmp .loop
-.down
-        lda #-1
-        sta S1
         jmp .loop
 .off
+;        inx
         txa
-        clc
-        adc #6
+        sec
+        sbc #2
         sta 36876
         jmp .loop
+.done
+        lda #0
+        sta 36876
+        pla
+        sta S2
+        resAll
         rts
 ;-------------------------------------------
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
-        lda #8
-        sta 36878
-        jsr sound1
+        ;; cli
+        ;; lda #8
+        ;; sta 36878
+        ;; jsr sound1
 #if 0
         lda #$ea
         DoubleSigned
@@ -1305,9 +1381,9 @@ main SUBROUTINE
 
 ;        LoadTrack 1,TrackBass
 ;        LoadTrack 2,TrackHigh
-;        LoadTrack 2,Track1
-        LoadTrack 2,Track1x
-        LoadTrack 4,Vol1
+         LoadTrack 3,Track1
+;        LoadTrack 2,Track1x
+;        LoadTrack 4,Vol1
         jsr install_isr
 
         jmp .background
@@ -1326,7 +1402,7 @@ main SUBROUTINE
         bne .iloop
         ;; ok, we are at vertical blank, on one of the frames we want to render
         ;; here we go ...
-        ldx #2
+        ldx #3
 ;        jsr VoiceTrack_svc          ; run sound engine
         ldx #4
 ;        jsr VoiceTrack_svc          ; run sound engine
@@ -2681,6 +2757,9 @@ Collisions SUBROUTINE
         jmp .done
 .ghost_eaten
         lda #modeEaten
+        cmp Sprite_mode,X
+        beq .done               ;already eaten
+        jsr sound1
         sta Sprite_mode,X
 ;        lda #WHITE
 ;        sta Sprite_color,X

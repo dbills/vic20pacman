@@ -8,8 +8,8 @@ Track1                          ; a siren ( up,down scale )
         
     ds 1,0                      ; up scale
     ds 1,218
-    ds 1,242
-    ds 1,3                    ; step
+    ds 1,242-6
+    ds 1,6                    ; step
     ds 1,1                      ; duration
 
         ds 1,1
@@ -17,9 +17,9 @@ Track1                          ; a siren ( up,down scale )
         ds 1,2
         
     ds 1,0                      ; up scale
-    ds 1,242
+    ds 1,242-6
     ds 1,218
-    ds 1,-3                   ; step
+    ds 1,-6                   ; step
     ds 1,1                      ; duration
 
 
