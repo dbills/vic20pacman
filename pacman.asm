@@ -97,6 +97,7 @@ MASTERCNT       equ $f        ;countdown; see masterDelay
 ;;; 
 CSPRTFRM        equ $10        ; number of frames in the currently processing sprite
 DOTCOUNT        equ $11        ;dots eaten
+frameCount      equ 4          ;number of pacman animation frames
 PACFRAMED       equ $12        ;pacframe dir
 NXTSPRTSRC      equ $13        ;when moving a sprite, the next 'set' of source bitmaps
 DSPL_1          equ $14        ;used by DisplayNum routine
@@ -160,6 +161,8 @@ TIMER1          equ $4d         ;decrement by main game loop every other trip
 TIMER1_h        equ $4e         ;timer1 high byte
 r_seed          equ $4f
 AUDIO           equ $66         ;sound routines work register ( on isr )
+
+         
 #if 0
 ;;; just for testing how many bytes I could save
 ;;; if I moved these to zero page -- about 120 bytes right now
@@ -973,6 +976,9 @@ erasesprt SUBROUTINE
         lda #EMPTY
         sta Sprite_back
         sta Sprite_back2
+        lda wasdot
+        beq .notpac
+        jsr SoundOn
 .notpac        
         move16x Sprite_loc,W1   ;sprite location to W1
         ldy #0
@@ -1159,18 +1165,24 @@ PowerPill SUBROUTINE
 ;        sta 36879
 .done        
         rts
-
+wasdot
+        dc.b 0
+eat_halt
+        dc.b  1
+wtop equ 242
+wbot equ 218        
 crap1
-        dc.b 219
-rdur equ 2       
-ddur equ 1       
+        dc.b wbot+1
+rdur equ 3       
+ddur equ 1
 crap2        
         dc.b ddur
-sstep equ 4
+sstep equ 6
 crap3   dc.b sstep
 isr2 SUBROUTINE
-        dec crap2
+        lda crap2
         beq .newnote
+        dec crap2
         jmp $eabf
 .newnote
         lda crap1
@@ -1178,9 +1190,9 @@ isr2 SUBROUTINE
         beq .up
         cmp #1
         beq .down
-        cmp #242
+        cmp #wtop
         bcs .rest2
-        cmp #218
+        cmp #wbot
         bcc .rest1
         bne .cont
 .rest1
@@ -1195,15 +1207,17 @@ isr2 SUBROUTINE
         jmp .storenote
 
 .up
+        lda eat_halt
+        beq .done
         lda #sstep
         sta crap3
-        lda #219
+        lda #wbot
         sta crap1
         jmp .cont
 .down
         lda #-sstep
         sta crap3
-        lda #241
+        lda #wtop
         sta crap1
 .cont
         clc
@@ -1214,6 +1228,7 @@ isr2 SUBROUTINE
         sta 36877
 .resetDur
         sty crap2
+.done        
         jmp $eabf
 
         
@@ -2048,7 +2063,9 @@ LeaveBox SUBROUTINE
         rts
 ;;; 
 DotEaten SUBROUTINE
-        jsr SoundOn
+;        jsr SoundOn
+        lda #1
+        sta wasdot
         lda #modeLeaving
         ldy DOTCOUNT
         iny
@@ -2095,6 +2112,8 @@ IsWall SUBROUTINE
         resX
         jmp .done
 .notdot
+        cmp #EMPTY              ;have we eaten here?
+        bne .done               ;must have been a wall
         jsr SoundOff
 .done        
 .notpacman
@@ -2620,6 +2639,8 @@ PacManTurn
 #endif        
         ldy MOVEMADE            ;if we made a move already then exit
         beq .cont
+        ;;  we must have failed to move?
+        jsr SoundOff
         rts
 .cont        
         ldy #1
@@ -2776,7 +2797,7 @@ Animate SUBROUTINE
         clc
         adc Sprite_frame
         bmi .reverse
-        cmp #4
+        cmp #pacframes
         beq .reverse
         sta Sprite_frame
         rts
@@ -2785,7 +2806,6 @@ Animate SUBROUTINE
         eor PACFRAMED
         ora #1
         sta PACFRAMED
-;        jmp .start
         rts
         
         ;; load the currently rendered tile for a sprite
@@ -3020,17 +3040,28 @@ scroll_horiz SUBROUTINE
 SoundOn SUBROUTINE
         lda #8
         sta 36879
-        ldx #3
-        UnHaltTrack
-        ldx #0
+        ;; ldx #3
+        ;; UnHaltTrack
+        ;; ldx #0
+        sei
+        lda #1
+        sta eat_halt
+        cli
         rts
 ;;; attempt to turn the dot eating sound off
 SoundOff SUBROUTINE
+        lda #0                  
+        sta wasdot
+        
         lda #13
         sta 36879
-        ldx #3
-        HaltTrack
-        ldx #0
+        sei
+        lda #0
+        sta eat_halt
+        cli
+        ;; ldx #3
+        ;; HaltTrack
+        ;; ldx #0
         rts
 ;;; clear all bits to 0
 ;;; W2 = top half font ram
