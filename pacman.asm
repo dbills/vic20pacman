@@ -863,6 +863,7 @@ Sprite_dir2     dc.b 22,1,1,1,1 ;sprite direction 1(horiz),22(vert)
 Sprite_offset   dc.b 4,0,0,2,6  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 4,0,0,2,6  ;sprite bit offset in tiles
 Sprite_speed    dc.b 10,10,10,10,10 ;your turn gets skipped every N loops of this
+;Sprite_speed    dc.b 55,55,55,55,55 ;your turn gets skipped every N loops of this
 ;;; speeds when pacman is powered up
 Sprite_speed2   dc.b 80,2,2,2,2
 Sprite_base     dc.b 10,10,10,10,10        
@@ -879,7 +880,7 @@ Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
         ;; etc
 Sprite_mode    dc.b 1,0,1,0,0  ;in ghost box if false
 #endif        
-masterSpeed      equ 7 ;master game delay
+masterSpeed      equ 8 ;master game delay
 #IFNCONST
 SAVE_OFFSET     dc.b 0
 SAVE_OFFSET2    dc.b 0
@@ -1966,8 +1967,8 @@ GhostAI SUBROUTINE
 .notpac        
 
         ldx SPRITEIDX
-        MyTurn2 GhostTurn      ;does this ghost get to move this time?
-        jmp .loop              ;no he doesn't
+;        MyTurn2 GhostTurn      ;does this ghost get to move this time?
+;        jmp .loop              ;no he doesn't
 GhostTurn
         lda Sprite_mode,X
         cmp #modeLeaving
@@ -2973,6 +2974,19 @@ tail2tail SUBROUTINE
         sta Sprite_sback2,X
 .done
         rts
+;;; add the scroll value to a sprite
+;;; handles the different speeds
+        MAC AddScroll
+.again
+        clc
+        adc SCRL_VAL
+        dec Sprite_turn,X
+        bne .no_extra
+        lda Sprite_speed,X
+        sta Sprite_turn,X
+        jmp .again
+.no_extra        
+        ENDM
 ;;; handle tunnel left side
 DecrementPos SUBROUTINE
         cmp16Im W2,[tunnelRow*22]+tunnelLCol+screen
@@ -3031,8 +3045,9 @@ scroll_horiz SUBROUTINE
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla                      ;pull new sprite offset from the stack
 .draw
-        clc
-        adc SCRL_VAL
+        AddScroll
+;        clc
+;        adc SCRL_VAL
         sta Sprite_offset2,X
         clc
         rts
@@ -3383,8 +3398,9 @@ scroll_down2 SUBROUTINE
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla
 .fine
-        clc
-        adc SCRL_VAL
+        AddScroll
+;        clc
+;        adc SCRL_VAL
         sta Sprite_offset2,X
 .done
         clc
