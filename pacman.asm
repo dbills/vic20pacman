@@ -869,6 +869,9 @@ Sprite_speed2   dc.b 80,2,2,2,2
 Sprite_base     dc.b 10,10,10,10,10        
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
+;;; cruise elroy timer for blinky
+BlinkyCruise      dc.b 6        ;2 = blinky fast mode 5-255 = off
+
         ;; in order of exit 
         ;; red=blinky ( starts outside of ghost house )
         ;; green = pinky AI
@@ -897,6 +900,31 @@ Div22Table      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 MotionTable     dc.b motionUp,motionDown,motionLeft,motionRight
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1 ;15
+SirenTimer dc.b 2        
+sirenBase equ 222
+sirenStep equ 5
+WakaIdx dc.b 0
+WakaTimer dc.b 2        
+SirenTable      
+        dc.b sirenBase+[sirenStep*0]
+        dc.b sirenBase+[sirenStep*1]
+        dc.b sirenBase+[sirenStep*2]
+        dc.b sirenBase+[sirenStep*3]
+;        dc.b sirenBase+[sirenStep*4]
+;        dc.b sirenBase+[sirenStep*5]
+        dc.b 0
+;        dc.b 0
+;        dc.b sirenBase+[sirenStep*5]
+;        dc.b sirenBase+[sirenStep*4]
+        dc.b sirenBase+[sirenStep*3]
+        dc.b sirenBase+[sirenStep*2]
+        dc.b sirenBase+[sirenStep*1]
+        dc.b sirenBase+[sirenStep*0]
+        dc.b 0
+;        dc.b 0
+SirenTableEnd
+
+
 VolTableSz equ 15        
         MAC MoveSpriteDown
         saveX
@@ -1166,72 +1194,72 @@ PowerPill SUBROUTINE
 ;        sta 36879
 .done        
         rts
+sirenBot equ 211
+sirenTop equ 222
+SirenIdx
+        dc.b sirenBot+1
+SirenDir dc.b 1       
+isr3 subroutine
+        ldy SirenIdx
+        cpy #sirenTop
+        bcs .reverse
+        cpy #sirenBot
+        bcc .reverse
+.add
+        tya
+        clc
+        adc SirenDir
+        sta SirenIdx
+        sta 36876
+        clc
+;        adc #17                 ;
+;        sta 36875
+.done
+;        jmp $eabf
+        rts
+.reverse
+        lda #$ff
+        eor SirenDir
+        ora #1
+        sta SirenDir
+        jmp .add
 wasdot
         dc.b 0
 eat_halt
         dc.b  1
-wtop equ 242
-wbot equ 218        
-crap1
-        dc.b wbot+1
-rdur equ 3       
-ddur equ 1
-crap2        
-        dc.b ddur
-sstep equ 6
-crap3   dc.b sstep
-isr2 SUBROUTINE
-        lda crap2
-        beq .newnote
-        dec crap2
+eat_halted
+        dc.b 1
+isr2 subroutine
+        jsr isr3
+        lda eat_halted
+        beq .done2
+        ldx WakaIdx
+        bmi .reset
+.0        
+        ldy SirenTable,X
+        sty 36877
+        iny
+        sty 36875
+        lda WakaTimer
+        bne .done
+        dex
+        stx WakaIdx
+        lda #2
+        sta WakaTimer
+.done
+        dec WakaTimer
+.done2        
         jmp $eabf
-.newnote
-        lda crap1
-        cmp #0
-        beq .up
-        cmp #1
-        beq .down
-        cmp #wtop
-        bcs .rest2
-        cmp #wbot
-        bcc .rest1
-        bne .cont
-.rest1
-        lda #0
-        sta crap1
-        ldy #rdur
-        jmp .storenote
-.rest2
-        lda #1
-        sta crap1
-        ldy #rdur
-        jmp .storenote
-
-.up
+.reset
         lda eat_halt
-        beq .done
-        lda #sstep
-        sta crap3
-        lda #wbot
-        sta crap1
-        jmp .cont
-.down
-        lda #-sstep
-        sta crap3
-        lda #wtop
-        sta crap1
-.cont
-        clc
-        adc crap3
-        sta crap1
-        ldy #ddur
-.storenote        
+        bne .nothalted
+        sta eat_halted
         sta 36877
-.resetDur
-        sty crap2
-.done        
-        jmp $eabf
-
+        sta 36875
+        beq .done2
+.nothalted        
+        ldx #SirenTableEnd-SirenTable
+        bne .0
         
 isr1
 
@@ -1254,6 +1282,7 @@ install_isr SUBROUTINE
         sei
 ;        store16 isr1,$0314
         store16 isr2,$0314
+;        store16 isr3,$0314
         cli
         rts
 delay2 SUBROUTINE
@@ -1950,25 +1979,45 @@ UpdateMotion2 SUBROUTINE
         sta Sprite_turn,X
         sec
         ENDM
+
+        ;; Place target tile for an eaten ghost
+        ;; into GHOST_TGTCOL,GHOST_TGTROW
+        ;; returns: Z not set
+        MAC SetEatenTargetTile
+        lda #outOfBoxCol
+        sta GHOST_TGTCOL
+        lda #outOfBoxRow+2
+        sta GHOST_TGTROW
+        ENDM
+        ;; Place target tile for ghost leaving box 
+        ;; into GHOST_TGTCOL,GHOST_TGTROW
+        ;; returns: Z not set
+        MAC SetLeavingTargetTile
+        lda #outOfBoxCol
+        sta GHOST_TGTCOL
+        lda #outOfBoxRow
+        sta GHOST_TGTROW
+        ENDM
+        ;; on double turn eligible, jmp to {1}
+        MAC CheckDoubleTurn
+        ENDM
 ;;; animate a ghost back and forth
 GhostAI SUBROUTINE
         lda #0
         sta CORNER_SHAVE        ;ghosts get no cornering bonus
         ;; caculate pacman row,col so ghosts can use
         ;; in their AI routines
-
         CalcPacRowCol
 
         InitSpriteLoop
 .loop
         dec SPRITEIDX
-        bne .notpac
+        bne ailoop0
         rts                     ;pacman is sprite 0, so we leave
-.notpac        
-
+ailoop0
         ldx SPRITEIDX
-;        MyTurn2 GhostTurn      ;does this ghost get to move this time?
-;        jmp .loop              ;no he doesn't
+        MyTurn2 GhostTurn      ;does this ghost get to move this time?
+        jmp .loop              ;no he doesn't
 GhostTurn
         lda Sprite_mode,X
         cmp #modeLeaving
@@ -1977,17 +2026,11 @@ GhostTurn
         beq .eaten
         jmp .normal
 .eaten                          ;load target tile for eaten ghosts
-        lda #outOfBoxCol
-        sta GHOST_TGTCOL
-        lda #outOfBoxRow+2
-        sta GHOST_TGTROW
-        jmp .continue
+        SetEatenTargetTile
+        bne .continue
 .leaving                        ;load target tile for ghosts leaving box
-        lda #outOfBoxCol
-        sta GHOST_TGTCOL
-        lda #outOfBoxRow
-        sta GHOST_TGTROW
-        jmp .continue
+        SetLeavingTargetTile
+        bne .continue
 .normal
         lda POWER_UP
         beq .notfrightened
@@ -2016,7 +2059,6 @@ GhostTurn
         jmp .continue
 .ghost1        
         cpx #1
-;        beq .animate
         bne .continue
         jsr Ghost1AI
 .continue
@@ -2036,14 +2078,13 @@ GhostTurn
 .animate
         ;; animate the ghost by changing frames
         dec Sprite_frame,X
-        bmi .reset                   ;time to wrap around?
-        jmp .loop
-.reset
+        bpl .done
         lda #1                  ;reset frame counter
         sta Sprite_frame,X
+.done
+        CheckDoubleTurn ailoop0   ;does this ghost get a second turn?
         jmp .loop
         
-.loopend
         rts
 ;;; open the door on the ghost box
 OpenGhostBox SUBROUTINE
@@ -2980,12 +3021,6 @@ tail2tail SUBROUTINE
 .again
         clc
         adc SCRL_VAL
-        dec Sprite_turn,X
-        bne .no_extra
-        lda Sprite_speed,X
-        sta Sprite_turn,X
-        jmp .again
-.no_extra        
         ENDM
 ;;; handle tunnel left side
 DecrementPos SUBROUTINE
@@ -3005,13 +3040,36 @@ IncrementPos SUBROUTINE
 .done
         Inc16 W2
         rts
+        ;; if blinky is in cruise elroy mode, he get's a plus one
+        ;; advantage to his scroll value when course scrolling
+        ;; account for that here
+        MAC ApplyBlinkyBonus
+        cpx BlinkyCruise
+        bne .done
+        AddScroll
+.done        
+        ENDM
+        ;; extra speed bonus for eyes
+        ;; nearly double speed
+        ;; 2 pixel increments when not at 0 or 8
+        MAC ApplyScroll
+        AddScroll
+        ldy Sprite_mode,X
+        cpy #modeEaten
+        bne .done
+        cmp END_SCRL_VAL
+        beq .done
+        AddScroll
+.done        
+        ENDM
+;;; move sprite horizontal
 scroll_horiz SUBROUTINE
         lda Sprite_dir,X        ;get our current orientation
         cmp #dirHoriz           ;are we already horizontal
         beq .ok                 ;ok to move horizontal
         jsr changehoriz         ;no, switch to horizontal
         bcc .ok                 ;change successful
-        rts                     ;we could't change to horizontal
+        rts                     ;we couldn't change to horizontal
 .ok
         lda Sprite_offset,X     ;get our current pixel offset
         cmp END_SCRL_VAL        ;are we at the end of our tiles?
@@ -3044,10 +3102,10 @@ scroll_horiz SUBROUTINE
 .continue
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla                      ;pull new sprite offset from the stack
+        ApplyBlinkyBonus
 .draw
-        AddScroll
-;        clc
-;        adc SCRL_VAL
+        ApplyScroll
+
         sta Sprite_offset2,X
         clc
         rts
@@ -3061,6 +3119,7 @@ SoundOn SUBROUTINE
         sei
         lda #1
         sta eat_halt
+        sta eat_halted
         cli
         rts
 ;;; attempt to turn the dot eating sound off
@@ -3074,6 +3133,7 @@ SoundOff SUBROUTINE
         lda #0
         sta eat_halt
         cli
+
         ;; ldx #3
         ;; HaltTrack
         ;; ldx #0
@@ -3397,10 +3457,10 @@ scroll_down2 SUBROUTINE
 .wasup        
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla
+
+        ApplyBlinkyBonus        ;blinky's speed bonus on course scrolls
 .fine
-        AddScroll
-;        clc
-;        adc SCRL_VAL
+        ApplyScroll
         sta Sprite_offset2,X
 .done
         clc
