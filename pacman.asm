@@ -900,7 +900,6 @@ Div22Table      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 MotionTable     dc.b motionUp,motionDown,motionLeft,motionRight
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1 ;15
-SirenTimer dc.b 2        
 sirenBase equ 222
 sirenStep equ 5
 WakaIdx dc.b 0
@@ -1194,8 +1193,8 @@ PowerPill SUBROUTINE
 ;        sta 36879
 .done        
         rts
-sirenBot equ 211
-sirenTop equ 222
+sirenBot equ 211+5-3
+sirenTop equ 222+5
 SirenIdx
         dc.b sirenBot+1
 SirenDir dc.b 1       
@@ -1211,7 +1210,7 @@ isr3 subroutine
         adc SirenDir
         sta SirenIdx
         sta 36876
-        clc
+;        clc
 ;        adc #17                 ;
 ;        sta 36875
 .done
@@ -1229,7 +1228,40 @@ eat_halt
         dc.b  1
 eat_halted
         dc.b 1
+        
+power_top equ 244
+power_bot equ 200        
+power_idx dc.b power_top
+vol_idx dc.b 14
+isr4 subroutine
+        lda power_idx
+        cmp #power_bot
+        bcc .reset
+        sta 36876
+        clc
+        adc #4
+        sta 36877
+        ldx vol_idx
+        ldy VolTable,X
+        sty 36878
+        dex
+        bpl .cont
+        ldx #14
+.cont
+        stx vol_idx
+;        dec power_idx
+        sec
+        sbc #3
+        sta power_idx
+.done        
+        jmp $eabf
+.reset
+        lda #power_top
+        sta power_idx
+        bne .done
 isr2 subroutine
+        lda #3
+        sta 36878
         jsr isr3
         lda eat_halted
         beq .done2
@@ -1238,6 +1270,7 @@ isr2 subroutine
 .0        
         ldy SirenTable,X
         sty 36877
+        iny
         iny
         sty 36875
         lda WakaTimer
@@ -1248,7 +1281,11 @@ isr2 subroutine
         sta WakaTimer
 .done
         dec WakaTimer
-.done2        
+.done2
+        lda #0
+        sta 36875
+        lda #8
+        sta 36878
         jmp $eabf
 .reset
         lda eat_halt
@@ -1282,6 +1319,7 @@ install_isr SUBROUTINE
         sei
 ;        store16 isr1,$0314
         store16 isr2,$0314
+;        store16 isr4,$0314
 ;        store16 isr3,$0314
         cli
         rts
