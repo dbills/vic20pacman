@@ -38,6 +38,11 @@ chrom1    equ $8000             ; upper case character rom
 chrom2    equ $8400             ; upper case reversed
 chrom3    equ $8c00             ; upper lower reversed
 chrom4    equ $8800             ; upper lower
+cassStart equ $033d             ;start of cassette buffer ( 190 bytes)
+        ;; Sprite_loc first 10 bytes
+        ;; 0347
+        ;; sprite_loc2 second 10
+cassEnd   equ $03fb
 
 ;; vic-I chip registers
 chrst           equ $9003       ; font map pointer
@@ -164,31 +169,6 @@ r_seed          equ $4f
 AUDIO           equ $66         ;sound routines work register ( on isr )
 
          
-#if 0
-;;; just for testing how many bytes I could save
-;;; if I moved these to zero page -- about 120 bytes right now
-Sprite_loc      equ $4d
-Sprite_loc2     equ $4f        
-Sprite_back      equ $4d
-Sprite_back2      equ $4d
-Sprite_sback      equ $4d
-Sprite_sback2      equ $4d
-Sprite_tile      equ $4d
-Sprite_src      equ $4d
-Sprite_frame      equ $4d
-Sprite_bmap      equ $4d
-Sprite_bmap2      equ $4d
-Sprite_motion      equ $4d
-Sprite_turn      equ $4d
-Sprite_color      equ $4d
-Sprite_mode      equ $4d
-Sprite_speed      equ $4d
-Sprite_offset      equ $4d
-Sprite_offset2     equ $4d
-Sprite_dir      equ $4d
-Sprite_dir2     equ $4d
-#endif        
-        
 #IFCONST _LOCAL_SAVEDIR
 SAVE_OFFSET     equ $ab
 SAVE_OFFSET2    equ $ac
@@ -843,13 +823,21 @@ fruit2Dots      equ 120         ;dots to release fruit2
 clydeDots       equ 255          ;dots to release clyde ( about 33% )
 inkyDots        equ 255          ;dots to release inky  ( )
 pinkyDots       equ 255           ;dots to release pinky ( should be 1)
+pacStart        equ screen+22*7+5
+g1Start         equ screen+22*11+9
+g2Start         equ screen+22*(9+12)+11
+g3Start         equ screen+22*11+10
+g4Start         equ screen+22*11+12
 ;;; 
 Sprite_page     dc.b 0        
-#if 1
-Sprite_loc      DC.W 0,0,0,0,0    ;screen loc
-Sprite_loc2     DC.W screen+22*7+5 ,screen+22*11+9,screen+22*(9+12)+11,screen+22*11+10,screen+22*11+12    ;new screen loc
-Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
-Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
+ResetPoint      dc.b 0           ;stack reset location for game reset ( longjmp )
+Sprite_loc      equ cassStart
+;Sprite_loc2     DC.W  pacStart,g1Start,g2Start,g3Start,g4Start            ;new screen loc
+Sprite_loc2     equ Sprite_loc+10
+;Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
+Sprite_back     equ Sprite_loc2+10
+Sprite_back2    equ Sprite_back+5
+;Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
 Sprite_sback    dc.b 0,0,0,0,0 ;current screen background ( might include some other sprite tile that was laid down )
 Sprite_sback2   dc.b 0,0,0,0,0        
 Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,GH3L      ;foreground char
@@ -858,8 +846,9 @@ Sprite_frame    dc.b 0,1,1,1,1 ;animation frame of sprite as offset from _src
 ;;; sprite chargen ram ( where to put the source bmap )
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8)     , mychars+(GH2L*8)     , mychars+(GH3L*8)    
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16), mychars+(GH2L*8)+(16),mychars+(GH3L*8)+(16)
-Sprite_motion   dc.b 1,motionRight,motionLeft,motionRight,motionLeft ; see motion defines
-Sprite_dir      dc.b 22,1,1,1,1 ;sprite direction 1(horiz),22(vert)
+Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; see motion defines
+;Sprite_dir      dc.b 22,1,1,1,1 ;sprite direction 1(horiz),22(vert)
+Sprite_dir      dc.b 0,0,0,0,0
 Sprite_dir2     dc.b 22,1,1,1,1 ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   dc.b 4,0,0,2,6  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 4,0,0,2,6  ;sprite bit offset in tiles
@@ -884,7 +873,6 @@ BlinkyCruise      dc.b 6        ;2 = blinky fast mode 5-255 = off
         ;; or in ghost box already
         ;; etc
 Sprite_mode    dc.b 1,0,1,0,0  ;in ghost box if false
-#endif        
 masterSpeed      equ 8 ;master game delay
 #IFNCONST
 SAVE_OFFSET     dc.b 0
@@ -1113,7 +1101,7 @@ drwsprt1 SUBROUTINE
         jsr UpdateColorRam
         rts
 
- INCLUDE "audio.asm"
+; INCLUDE "audio.asm"
 
         ;;
         ;;close the ghost box door
@@ -1311,7 +1299,7 @@ isr2 subroutine
 .nothalted        
         ldx #SirenTableEnd-SirenTable
         bne .0
-        
+#if 0        
 isr1
 
         pha
@@ -1329,7 +1317,7 @@ isr1
         tax
         pla
         jmp $eabf
-
+#endif
 uninstall_isr subroutine
         sei
         store16 defaultISR,$0314
@@ -1365,6 +1353,7 @@ delay2 SUBROUTINE
 ;;; wrap a volume envelope
 ;;; around a specified delay
 ;;; S2 = delay
+;;; s4 = raise pitch mode
 delay SUBROUTINE
         txa
         pha
@@ -1372,12 +1361,27 @@ delay SUBROUTINE
 .xloop        
         lda VolTable,X
         sta volume
+
+        ldy S4
+        beq .no_raise
+        clc
+        adc S3
+        sta 36875
+.no_raise        
         inx
         cpx #VolTableSz
         beq .done
 ;        bcs .done
 
         ldy S2
+        bne .yloop              ;longer 1/60 sec delay
+        ldy #190
+.short_loop                     ;shorter, hard coded delay
+        nop
+        nop
+        dey
+        beq .xloop
+        bne .short_loop
 .yloop
 .gettime        
         lda JIFFYL
@@ -1386,30 +1390,26 @@ delay SUBROUTINE
         beq .waiting
         dey
         bne .yloop
-        jmp .xloop
+        beq .xloop
 .done        
         pla
         tax
         rts
 sound1 SUBROUTINE
         saveAll
-        jsr uninstall_isr           ;turn off all sound but this
         lda S2
         pha
+        jsr uninstall_isr           ;turn off all sound but this
 
 .st
-        lda #190
-        sta S2
         
         lda #0
         sta 36876
-        ldy #120
+        ldy #1
 ;        jsr delay2
         ldx #195
 .loop
-        lda S2
-        sec
-        sbc #3
+        lda #0
         sta S2
         jsr delay
 
@@ -1469,6 +1469,7 @@ death subroutine
         ;; inc 8x4 each time
         lda #220
         sta S3
+        sta S4                  ;no zero = pitch mode for 'delay'
         lda #5
 .top
         move16 AUDIO,Sprite_src
@@ -1498,9 +1499,44 @@ death subroutine
         bne .top
         store16 PAC1,AUDIO
         jmp .top
-.done        
+.done
+        ldx ResetPoint
+        txs
+        jmp PacDeathEntry
         rts
-
+;;; reset game after pacman death
+reset_game subroutine
+        store16 pacStart , Sprite_loc2+[2*0]
+        store16 g1Start  , Sprite_loc2+[2*1]
+        store16 g2Start  , Sprite_loc2+[2*2] 
+        store16 g3Start  , Sprite_loc2+[2*3] 
+        store16 g4Start  , Sprite_loc2+[2*4]
+        ldx #4
+        lda #0
+.0        
+        sta Sprite_offset,X
+        sta Sprite_offset2,X
+        sta Sprite_sback,X
+        dex
+        bmi .1
+        bpl .0
+.1
+        lda #motionUp
+        sta Sprite_motion
+        lda #motionRight
+        sta Sprite_motion+1
+        sta Sprite_motion+3
+        lda #motionLeft
+        sta Sprite_motion+2
+        sta Sprite_motion+4
+        lda #dirHoriz
+        sta Sprite_dir2+4
+        sta Sprite_dir2+3
+        sta Sprite_dir2+2
+        sta Sprite_dir2+1
+        lda #dirVert
+        sta Sprite_dir2+0
+        rts
 ;-------------------------------------------
 ; MAIN()
 ;-------------------------------------------
@@ -1559,11 +1595,14 @@ main SUBROUTINE
 
 ;        LoadTrack 1,TrackBass
 ;        LoadTrack 2,TrackHigh
-         LoadTrack 3,Track1
+;         LoadTrack 3,Track1
 ;        LoadTrack 2,Track1x
 ;        LoadTrack 4,Vol1
         jsr install_isr
-
+        tsx
+        stx ResetPoint
+PacDeathEntry                   ;code longjmp's here on pacman death
+        jsr reset_game
         jmp .background
 .loop
         lda #masterSpeed
@@ -1786,6 +1825,7 @@ process_code SUBROUTINE
         lda #EMPTY
         ldx #BLACK
         rts
+#if 0        
 ; Move memory down
 ;
 ; W2 = source start address
@@ -1816,7 +1856,7 @@ md3
         BNE md3
 md4
         RTS
-
+#endif
 
 ;;; waits for joystick to be pressed
 ;;; and released
