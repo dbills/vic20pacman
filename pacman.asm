@@ -3,9 +3,9 @@
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 GHOSTS_ON   equ 1
-_debug      equ 1                 ; true for debugging
-cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
-voice1      equ 36874             ; sound registers
+_debug      equ 1              ; true for debugging
+cornerAdv   equ 1              ;pacman's cornering advantage in pixels
+voice1      equ 36874          ; sound registers
 voice2      equ 36875
 voice3      equ 36876
 voice4      equ 36877        
@@ -13,9 +13,10 @@ volume      equ 36878
 ;screen     equ $1000        ; screen ram
 screen      equ $1e00        
 ;clrram     equ $9400        ; color ram for screen
-clrram      equ $9600             ; color ram for screen
-clroffset   equ $78               ;offset from screen to color ram
-
+clrram      equ $9600           ; color ram for screen
+clroffset   equ $78             ;offset from screen to color ram
+defaultISR  equ $eabf           ;os default IRQ
+defaultVol  equ 8               ;default volume for app
 VICRASTER equ $9004        
 VICSCRN   equ $9005             ;vic chip character generator pointer
 LIGHPENX  equ $9006             ;used for random number
@@ -865,6 +866,7 @@ Sprite_offset2  dc.b 4,0,0,2,6  ;sprite bit offset in tiles
 Sprite_speed    dc.b 10,10,10,10,10 ;your turn gets skipped every N loops of this
 ;Sprite_speed    dc.b 55,55,55,55,55 ;your turn gets skipped every N loops of this
 ;;; speeds when pacman is powered up
+eyeSpeed equ 2                  ;sprite_speed setting for eyes
 Sprite_speed2   dc.b 80,2,2,2,2
 Sprite_base     dc.b 10,10,10,10,10        
 Sprite_turn     dc.b 5,4,4,4,4        
@@ -1178,21 +1180,25 @@ PowerPillOff SUBROUTINE
         jmp .loop
 .done        
         rts
+;;; called when a power pill is activated
+;;; 
 PowerPill SUBROUTINE
 
-        lda #255
-        sta POWER_UP
-        ldy #5
-.loop        
+        lda #255                ;load powr pill on time
+        sta POWER_UP            ;store in timer
+        ldy #SPRITES            ;init loop counter
+        ;; install new speed map for all sprites
+.loop
         lda Sprite_speed2,Y
         sta Sprite_speed,Y
         dey
         bmi .done
-        jmp .loop
+        bpl .loop
 ;        lda #11
 ;        sta 36879
 .done        
         rts
+        
 sirenBot equ 211+5-3
 sirenTop equ 222+5
 SirenIdx
@@ -1253,16 +1259,24 @@ isr4 subroutine
         sec
         sbc #3
         sta power_idx
-.done        
-        jmp $eabf
+.done
+        rts
 .reset
         lda #power_top
         sta power_idx
         bne .done
+        ;; indirect jmp = 5 cycles
+        ;; bne + jmp = 5 cycles
 isr2 subroutine
         lda #3
         sta 36878
+        lda POWER_UP
+        beq .not_power
+        jsr isr4
+        jmp .waka       
+.not_power        
         jsr isr3
+.waka        
         lda eat_halted
         beq .done2
         ldx WakaIdx
@@ -1315,6 +1329,16 @@ isr1
         tax
         pla
         jmp $eabf
+
+uninstall_isr subroutine
+        sei
+        store16 defaultISR,$0314
+        lda #0
+        sta 36877
+        sta 36876
+        sta 36875
+        cli
+        rts
 install_isr SUBROUTINE
         sei
 ;        store16 isr1,$0314
@@ -1323,6 +1347,7 @@ install_isr SUBROUTINE
 ;        store16 isr3,$0314
         cli
         rts
+#if 0        
 delay2 SUBROUTINE
 .wait        
         lda JIFFYL
@@ -1336,6 +1361,10 @@ delay2 SUBROUTINE
         jmp .wait
 .done        
         rts
+#endif
+;;; wrap a volume envelope
+;;; around a specified delay
+;;; S2 = delay
 delay SUBROUTINE
         txa
         pha
@@ -1346,11 +1375,15 @@ delay SUBROUTINE
         inx
         cpx #VolTableSz
         beq .done
+;        bcs .done
 
         ldy S2
-.yloop        
-        nop
-        nop
+.yloop
+.gettime        
+        lda JIFFYL
+.waiting        
+        cmp JIFFYL
+        beq .waiting
         dey
         bne .yloop
         jmp .xloop
@@ -1360,6 +1393,7 @@ delay SUBROUTINE
         rts
 sound1 SUBROUTINE
         saveAll
+        jsr uninstall_isr           ;turn off all sound but this
         lda S2
         pha
 
@@ -1389,9 +1423,8 @@ sound1 SUBROUTINE
         txa
         and #2
         
-       beq .off              ;
-
-        jmp .loop
+        beq .off                        
+        bne .loop
 .off
 ;        inx
         txa
@@ -1402,10 +1435,72 @@ sound1 SUBROUTINE
 .done
         lda #0
         sta 36876
+        
+        jsr install_isr
+        lda #defaultVol
+        sta volume
+
         pla
         sta S2
         resAll
         rts
+;;; pacman dies scene
+deathStart equ 220              ;death start note
+deathStep  equ 2                ;note step
+deathCount equ 5                ;iterations
+deathStop  equ deathStart-[deathCount*deathStep]
+        
+death subroutine
+        jsr uninstall_isr
+        ldx #0
+
+        move16 Sprite_loc,W1
+        lda #EMPTY
+        sta Sprite_back
+        sta Sprite_sback
+        sta Sprite_back2
+        sta Sprite_sback2
+        ldy #0
+        sta (W1),Y
+        ldy Sprite_dir
+        sta (W1),Y
+        store16 PAC1,AUDIO  ;
+;        move16 PAC_UP1,Sprite_src
+        ;; inc 8x4 each time
+        lda #220
+        sta S3
+        lda #5
+.top
+        move16 AUDIO,Sprite_src
+        lda #2
+        sta Sprite_frame
+        ldx #0
+        jsr render_sprite
+        Invert Sprite_page
+        ldx #0
+        jsr drwsprt1
+
+
+        lda S3
+        sta 36875
+        ldy #1
+        sty S2
+        jsr delay
+        lda S3
+        sec
+        sbc #deathStep
+        cmp #deathStop
+        beq .done
+        sta S3
+
+        add16im AUDIO,32
+        cmp16Im AUDIO,PAC_LAST
+        bne .top
+        store16 PAC1,AUDIO
+        jmp .top
+.done        
+        rts
+
 ;-------------------------------------------
 ; MAIN()
 ;-------------------------------------------
@@ -2855,6 +2950,7 @@ Collisions SUBROUTINE
         bne .ghost_eaten
         ;; pacman eaten
 ;        brk
+        jsr death
         jmp .done
 .ghost_eaten
         lda #modeEaten
@@ -2865,7 +2961,7 @@ Collisions SUBROUTINE
 ;        lda #WHITE
 ;        sta Sprite_color,X
         store16x BIT_EYES,Sprite_src
-        lda #255                ;eyes as fast as possible
+        lda #eyeSpeed           ;eyes as fast as possible
         sta Sprite_speed,X
 .done        
         ;; GHOST_ROW,GHOST_COL
@@ -3092,12 +3188,12 @@ IncrementPos SUBROUTINE
         ;; 2 pixel increments when not at 0 or 8
         MAC ApplyScroll
         AddScroll
-        ldy Sprite_mode,X
-        cpy #modeEaten
-        bne .done
-        cmp END_SCRL_VAL
-        beq .done
-        AddScroll
+        ;; ldy Sprite_mode,X
+        ;; cpy #modeEaten
+        ;; bne .done
+        ;; cmp END_SCRL_VAL
+        ;; beq .done
+        ;; AddScroll
 .done        
         ENDM
 ;;; move sprite horizontal
@@ -3860,7 +3956,7 @@ PAC_L4
     ds 1,%00001111
     ds 1,%01111110
     ds 1,%00111100
-        
+PAC_LAST        
 #if 0
 ;;; scratch text for debugging thoughts
 ;; 0 @
