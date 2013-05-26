@@ -820,9 +820,9 @@ nobody          equ 10
 focusGhost      equ nobody          ;ghost to print debugging for
 fruit1Dots      equ 70          ;dots to release fruit
 fruit2Dots      equ 120         ;dots to release fruit2
-clydeDots       equ 255          ;dots to release clyde ( about 33% )
-inkyDots        equ 255          ;dots to release inky  ( )
-pinkyDots       equ 255           ;dots to release pinky ( should be 1)
+clydeDots       equ 30          ;dots to release clyde ( about 33% )
+inkyDots        equ 10          ;dots to release inky  ( )
+pinkyDots       equ 20           ;dots to release pinky ( should be 1)
 pacStart        equ screen+22*7+5
 g1Start         equ screen+22*11+9
 g2Start         equ screen+22*(9+12)+11
@@ -1536,6 +1536,22 @@ reset_game subroutine
         sta Sprite_dir2+1
         lda #dirVert
         sta Sprite_dir2+0
+        
+        lda #8
+        sta 36879               ; border and screen colors
+        sta volume              ; turn up the volume to 8
+        lda #$ff
+        sta LASTJOYDIR
+        lda #1
+        sta PACFRAMED
+        lda JIFFYL
+        sta r_seed
+
+        jsr mkmaze
+
+        CloseGhostBox
+        ScatterMode         ;start ghosts out in scatter mode
+        jsr install_isr
         rts
 ;-------------------------------------------
 ; MAIN()
@@ -1557,21 +1573,12 @@ main SUBROUTINE
         jsr DisplayBCD
         brk
 #endif
-        lda #1
-        sta PACFRAMED
 
-        lda #$ff
-        sta LASTJOYDIR
         ;; huh, not surprisingly, if you don't run the cli
         ;; the keyboard doesn't work
         ;; but who turned it off? weird
         
 ;        cli                     ; enable interrupts for jiffy clock
-        lda JIFFYL
-        sta r_seed
-        lda #8
-        sta 36879               ; border and screen colors
-        sta volume              ; turn up the volume to 8
 
         lda #0
         sta $9113               ;joy VIA to input
@@ -1580,10 +1587,6 @@ main SUBROUTINE
 
         jsr copychar            ; copy our custom char set
 
-        jsr mkmaze
-
-        CloseGhostBox
-        ScatterMode         ;start ghosts out in scatter mode
 
         ldx #22
         lda #WHITE
@@ -1598,7 +1601,6 @@ main SUBROUTINE
 ;         LoadTrack 3,Track1
 ;        LoadTrack 2,Track1x
 ;        LoadTrack 4,Vol1
-        jsr install_isr
         tsx
         stx ResetPoint
 PacDeathEntry                   ;code longjmp's here on pacman death
@@ -1611,10 +1613,6 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         lda VICRASTER           ;load raster line
         bne .iloop
 
-
-;        ldx #1                     ; service voice VV
-;        jsr VoiceTrack_svc         ; run sound engine
-        
         dec MASTERCNT
         bne .iloop
         ;; ok, we are at vertical blank, on one of the frames we want to render
@@ -1696,9 +1694,6 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         dec SPRITEIDX                
         bmi .player
         ldx SPRITEIDX
-#if _debug        
-;        jsr dumpBack
-#endif        
         jsr drwsprt1             ;draw in new location
         jmp .drawloop
 .player
