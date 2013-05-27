@@ -832,14 +832,12 @@ g4Start         equ screen+22*11+12
 Sprite_page     dc.b 0        
 ResetPoint      dc.b 0           ;stack reset location for game reset ( longjmp )
 Sprite_loc      equ cassStart
-;Sprite_loc2     DC.W  pacStart,g1Start,g2Start,g3Start,g4Start            ;new screen loc
-Sprite_loc2     equ Sprite_loc+10
-;Sprite_back     dc.b 0,0,0,0,0           ;background char value before other sprites are drawn
-Sprite_back     equ Sprite_loc2+10
-Sprite_back2    equ Sprite_back+5
-;Sprite_back2    dc.b 0,0,0,0,0           ;static screen background
-Sprite_sback    dc.b 0,0,0,0,0 ;current screen background ( might include some other sprite tile that was laid down )
-Sprite_sback2   dc.b 0,0,0,0,0        
+Sprite_loc2     equ Sprite_loc+10 ;new screen loc
+Sprite_back     equ Sprite_loc2+10   ;background char before other sprites drawn
+Sprite_back2    equ Sprite_back+5         ;static screen background
+;;;current screen background ( might include some other sprite tile that was laid down )
+Sprite_sback    equ Sprite_back2+5 
+Sprite_sback2   equ Sprite_sback+5
 Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,GH3L      ;foreground char
 Sprite_src      dc.w PAC1,GHOST,GHOST,GHOST,GHOST ;sprite source bitmap
 Sprite_frame    dc.b 0,1,1,1,1 ;animation frame of sprite as offset from _src
@@ -850,14 +848,16 @@ Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; se
 ;Sprite_dir      dc.b 22,1,1,1,1 ;sprite direction 1(horiz),22(vert)
 Sprite_dir      dc.b 0,0,0,0,0
 Sprite_dir2     dc.b 22,1,1,1,1 ;sprite direction 1(horiz),22(vert)    
-Sprite_offset   dc.b 4,0,0,2,6  ;sprite bit offset in tiles
+Sprite_offset   dc.b 0,0,0,0,0  ;sprite bit offset in tiles
 Sprite_offset2  dc.b 4,0,0,2,6  ;sprite bit offset in tiles
+;;; offset table of ghosts in box
+inBoxTable      dc.b 4,0,0,2,6
 Sprite_speed    dc.b 10,10,10,10,10 ;your turn gets skipped every N loops of this
 ;Sprite_speed    dc.b 55,55,55,55,55 ;your turn gets skipped every N loops of this
 ;;; speeds when pacman is powered up
 eyeSpeed equ 2                  ;sprite_speed setting for eyes
 Sprite_speed2   dc.b 80,2,2,2,2
-Sprite_base     dc.b 10,10,10,10,10        
+Sprite_base     dc.b 10,10,10,10,10
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
@@ -872,7 +872,7 @@ BlinkyCruise      dc.b 6        ;2 = blinky fast mode 5-255 = off
         ;; if eyes heading toward ghost box
         ;; or in ghost box already
         ;; etc
-Sprite_mode    dc.b 1,0,1,0,0  ;in ghost box if false
+Sprite_mode    dc.b modeOutOfBox,0,modeOutOfBox,0,0  ;in ghost box if false
 masterSpeed      equ 8 ;master game delay
 #IFNCONST
 SAVE_OFFSET     dc.b 0
@@ -1502,6 +1502,8 @@ death subroutine
 .done
         ldx ResetPoint
         txs
+        lda #1
+        sta S1                  ;life lost resetmode
         jmp PacDeathEntry
         rts
 ;;; reset game after pacman death
@@ -1512,11 +1514,14 @@ reset_game subroutine
         store16 g3Start  , Sprite_loc2+[2*3] 
         store16 g4Start  , Sprite_loc2+[2*4]
         ldx #4
-        lda #0
 .0        
         sta Sprite_offset,X
+        lda inBoxTable,X
         sta Sprite_offset2,X
+        lda #0
         sta Sprite_sback,X
+        sta Sprite_mode,X
+
         dex
         bmi .1
         bpl .0
@@ -1536,6 +1541,17 @@ reset_game subroutine
         sta Sprite_dir2+1
         lda #dirVert
         sta Sprite_dir2+0
+        ;; sprites not in ghost box: pacman and blinky
+        lda #1
+        sta Sprite_mode+0
+        sta Sprite_mode+2
+
+        lda S1
+        beq .continue
+        ;; special logic for life lost reset
+;        jsr reset_game2
+.continue        
+        ;; 
         
         lda #8
         sta 36879               ; border and screen colors
@@ -1552,6 +1568,12 @@ reset_game subroutine
         CloseGhostBox
         ScatterMode         ;start ghosts out in scatter mode
         jsr install_isr
+        rts
+reset_game2 subroutine
+        lda #modeLeaving
+        sta Sprite_mode+1
+ ;       sta Sprite_mode+3
+;        sta Sprite_mode+4
         rts
 ;-------------------------------------------
 ; MAIN()
@@ -1581,6 +1603,7 @@ main SUBROUTINE
 ;        cli                     ; enable interrupts for jiffy clock
 
         lda #0
+        sta S1                  ;arg to reset_game below
         sta $9113               ;joy VIA to input
         sta DOTCOUNT            ;dot count to 0
         sta POWER_UP            ;power up to 0
@@ -1603,6 +1626,7 @@ main SUBROUTINE
 ;        LoadTrack 4,Vol1
         tsx
         stx ResetPoint
+
 PacDeathEntry                   ;code longjmp's here on pacman death
         jsr reset_game
         jmp .background
