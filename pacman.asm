@@ -1667,7 +1667,7 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         bne .notpac
         cmp #PWR
         bne .0
-        jsr PowerPill
+;        jsr PowerPill
 .0
         cmp #DOT
         beq .notpac
@@ -1684,7 +1684,7 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         bne .backloop
         cmp #PWR
         bne .backloop
-        jsr PowerPill
+;        jsr PowerPill
         ;; end collection of background tiles
         jmp .backloop
         
@@ -2538,6 +2538,20 @@ PossibleMoves SUBROUTINE
         sta GHOST_DIR       ;initialize best move to an invalid move
 
         jsr SaveSprite
+.checkright
+        ;; don't reverse
+        lda #motionLeft       
+        cmp Sprite_motion,X
+        beq .endright
+        ;; check if we can go right
+        jsr scroll_right            ;
+        bcs .endright
+        ;; we could go right
+        ldSprtTailPos Sprite_loc2,W1 ;correct
+        jsr CalcDistance             ;
+        jsr RestoreSprite            ;
+        IfFocus "R",1                ;
+.endright        
 .checkdown
         ;; don't reverse
         lda #motionUp
@@ -2566,20 +2580,6 @@ PossibleMoves SUBROUTINE
         jsr RestoreSprite            ;
         IfFocus "U",9            ;
 .endup        
-.checkright
-        ;; don't reverse
-        lda #motionLeft       
-        cmp Sprite_motion,X
-        beq .endright
-        ;; check if we can go right
-        jsr scroll_right            ;
-        bcs .endright
-        ;; we could go right
-        ldSprtTailPos Sprite_loc2,W1 ;correct
-        jsr CalcDistance             ;
-        jsr RestoreSprite            ;
-        IfFocus "R",1                ;
-.endright        
 .checkleft
         ;; don't reverse
         lda #motionRight
@@ -2663,7 +2663,7 @@ Ghost4AI SUBROUTINE
 ;        Display1 "X",3,GHOST_COL
         lda S3
         ;; < N and we are too close, flee
-        cmp #9
+        cmp #5
         beq .tooclose
         bcc .tooclose
         ;; not too close, pursue
@@ -2678,16 +2678,31 @@ Ghost4AI SUBROUTINE
         cmp #11
         bcs .paconright
         ;; pac on left
-        lda #4
-        sta  GHOST_TGTROW
         lda #22-5
         sta GHOST_TGTCOL
+        lda PACROW
+        cmp #11
+        bcs .paconbottom0
+        ;; pac on top
+        lda #15
+        sta  GHOST_TGTROW
+.paconbottom0
+        lda #4
+        sta  GHOST_TGTROW
         rts
 .paconright
-        lda #4
-        sta GHOST_TGTROW
         lda #5
         sta GHOST_TGTCOL
+        
+        lda PACROW
+        cmp #11
+        bcs .paconbottom
+        ;; pac on top
+        lda #15
+        sta GHOST_TGTROW
+.paconbottom        
+        lda #4
+        sta GHOST_TGTROW
         rts
 ;;;
 ;;; ghost 1
@@ -2731,6 +2746,7 @@ Ghost2AI  SUBROUTINE
         sta GHOST_TGTROW
         rts
 ;;; ghost 1 AI ( Pinky )
+outbound equ 4        
 Ghost3AI SUBROUTINE
         lda Sprite_dir
         ldy Sprite_motion
@@ -2748,17 +2764,18 @@ Ghost3AI SUBROUTINE
         ;; left
         lda PACCOL
         sec
-        sbc #4
-        sta GHOST_TGTCOL
         sbc #2
         sta GHOST1_TGTCOL
+        sbc #2
+        sta GHOST_TGTCOL
         rts
 .right
         lda PACCOL
         clc
-        adc #4
-        sta GHOST_TGTCOL
+        adc #2
         sta GHOST1_TGTCOL
+        adc #2
+        sta GHOST_TGTCOL
         rts
 .vert                           ; pacman is going vertical
         lda PACCOL
