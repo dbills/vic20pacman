@@ -1120,7 +1120,7 @@ drwsprt1 SUBROUTINE
         lda #MW
         sta screen+22*[outOfBoxRow+1]+outOfBoxCol
         ENDM
-;;; load reverse direction into a
+;;; load reverse direction into A
 ReverseDirection subroutine
         lda #modeOutOfBox
         sta Sprite_mode,X
@@ -1141,7 +1141,13 @@ ReverseDirection subroutine
         lda #motionLeft
         rts
 .up
+        ;; careful not to reverse ghosts that are coming
+        ;; out of the box
+        move16x Sprite_loc,W1
+        cmp16Im W1,[outOfBoxRow*22]+outOfBoxCol+screen
+        beq .down               ;put it back to up
         lda #motionDown
+.leave        
         rts
 .down
         lda #motionUp
@@ -1196,7 +1202,7 @@ PowerPillOff SUBROUTINE
 ;;; 
 PowerPill SUBROUTINE
 
-        lda #255                ;load powr pill on time
+        lda #210                ;load powr pill on time
         sta POWER_UP            ;store in timer
         ldy #SPRITES            ;init loop counter
         ;; install new speed map for all sprites
@@ -2730,7 +2736,16 @@ FrightAI SUBROUTINE
 ;        Display1 "Y",3,GHOST_TGTROW
         
         rts
-;;; 
+;;;
+;;; scatter / chase are
+;;; 7,20
+;;; 7,20
+;;; 5,20
+;;; 5, permanent
+;;; on level change after 2
+;;; 3d chase mode goes higher
+;;; next scatter to 1/60
+;;; level 5 scatter goes to 5 seconds
 ScatterGhostAI SUBROUTINE
         tya                     ;mul by 2
         lsr
