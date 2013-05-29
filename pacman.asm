@@ -58,6 +58,10 @@ motionDown      equ 45          ;" for down
 tunnelRow       equ 11          ;row number that tunnel lives on
 tunnelRCol      equ 20          ;column to start warp to left side
 tunnelLCol      equ 1           ;column to start warp to right side
+;;; the speed warp effect would start at tunnelLCol+tunnelLen
+;;; or tunnelRCol-tunnelLen
+tunnelLen       equ 3           ;length of tunnel
+tunnelSpeed     equ 2           ;Sprite_speed setting for tunnel
         
 BLACK        equ 0
 WHITE        equ 1
@@ -1171,6 +1175,9 @@ Timer1Expired SUBROUTINE
         rts
 
 PowerPillOff SUBROUTINE
+        lda #0
+        sta 36876,0
+        sta 36877,0
         ldy #SPRITES
 .loop        
         lda Sprite_base,Y
@@ -1252,6 +1259,8 @@ power_top equ 244
 power_bot equ 200        
 power_idx dc.b power_top
 vol_idx dc.b 14
+
+;;; power pill sound
 isr4 subroutine
         lda power_idx
         cmp #power_bot
@@ -2176,7 +2185,7 @@ UpdateMotion2 SUBROUTINE
         ;; Output: GHOST_ROW,GHOST_COL
         MAC CalcGhostRowCol
         
-        move16x Sprite_loc,W1
+        move16x Sprite_loc2,W1
         ScreenToColRow W1,GHOST_COL,GHOST_ROW
         
         ENDM
@@ -3296,17 +3305,36 @@ tail2tail SUBROUTINE
         sta Sprite_sback2,X
 .done
         rts
-;;; add the scroll value to a sprite
-;;; handles the different speeds
-        MAC AddScroll
-.again
-        clc
-        adc SCRL_VAL
+        ;; default ghost speed into A
+        MAC GetDefaultSpeed
+        lda Sprite_base,X
         ENDM
+        
+SetSpeed subroutine
+        sta Sprite_speed,X ;
+        lda #2             ;only 2 turns left
+        sta Sprite_turn,X
+        rts
 ;;; handle tunnel left side
 DecrementHPos SUBROUTINE
+        cpx #0   ;slowing/speeding only applies to ghosts
+        beq .1
+        cmp16Im W2,[tunnelRow*22]+tunnelRCol-tunnelLen+screen
+        bne .0
+        GetDefaultSpeed ; leaving tunnel from right, speed up
+        bne .set_speed
+.0        
+        cmp16Im W2,[tunnelRow*22]+tunnelLCol+tunnelLen+screen
+        bne .1
+        ;; entered from the left
+        lda #tunnelSpeed ;entered from left, slow down
+.set_speed
+        jsr SetSpeed
+        jmp .done
+.1        
         cmp16Im W2,[tunnelRow*22]+tunnelLCol+screen
         bne .done
+        ;; leaving from the left, warping to the right
         store16 [tunnelRow*22]+tunnelRCol+screen,W2
         rts
 .done
@@ -3314,13 +3342,35 @@ DecrementHPos SUBROUTINE
         rts
 ;;; handle tunnel right side
 IncrementHPos SUBROUTINE
+        cpx #0   ;slowing/speeding only applies to ghosts
+        beq .1
+        cmp16Im W2,[tunnelRow*22]+tunnelLCol+tunnelLen+screen
+        bne .0
+        GetDefaultSpeed        ; leaving tunnel from left, speed up
+        bne .set_speed
+.0        
+        cmp16Im W2,[tunnelRow*22]+tunnelRCol-tunnelLen+screen
+        bne .1
+        lda #tunnelSpeed         ; entered from the right
+.set_speed        
+        jsr SetSpeed
+        jmp .done
+.1        
         cmp16Im W2,[tunnelRow*22]+tunnelRCol+screen
         bne .done
+        ;; leaving from the left, warping to the right
         store16 [tunnelRow*22]+tunnelLCol+screen,W2
         rts
 .done
         Inc16 W2
         rts
+        ;; add the scroll value to a sprite
+        ;; handles the different speeds
+        MAC AddScroll
+        clc
+        adc SCRL_VAL
+        ENDM
+        
         ;; if blinky is in cruise elroy mode, he get's a plus one
         ;; advantage to his scroll value when course scrolling
         ;; account for that here
