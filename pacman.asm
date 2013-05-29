@@ -3,6 +3,7 @@
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 GHOSTS_ON   equ 1
+;GHPLAYER    equ 1              ; ghost as player
 _debug      equ 1              ; true for debugging
 cornerAdv   equ 1              ;pacman's cornering advantage in pixels
 voice1      equ 36874          ; sound registers
@@ -125,7 +126,9 @@ GHOST1_TGTROW   equ $27
 ;;amount sprite move routines can shave off during cornering
 ;;; pacman get +1 on corners, ghosts get 0
 CORNER_SHAVE    equ $28
-POWER_UP        equ $29         ;pacman is powered up
+;;; non zero when pacman is powred up, indicate 60s seconds
+;;; left in power mode
+POWER_UP        equ $29 
         ;; 47 48 are toast?
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
@@ -796,12 +799,15 @@ pacframes  equ #4            ; total number of pacman animation frames ( 1 based
 ;------------------------------------
 dirVert         equ 22            ;sprite oriented vertically
 dirHoriz        equ 1             ;sprite oriented horizontally
+modeInBox       equ 0
+modePacman      equ 5             ;mode only pacman has
+modeFright      equ 4
 modeOutOfBox    equ 1             ;see sprite_mode
 modeLeaving     equ 2             ;leavin the ghost box
 modeEaten       equ 3             ;ghost was chomped
 outOfBoxCol     equ 11            ;column at ghost box entry/exit
-outOfBoxRow     equ 9             ;row of tile above exit
-pinkyHomeCol    equ 3
+outOfBoxRow     equ 9             ;row of tile directly above exit
+pinkyHomeCol    equ 3             ;col of ghost box exit
 pinkyHomeRow    equ 3
 blinkyHomeCol   equ 22-3
 blinkyHomeRow   equ 3
@@ -820,9 +826,9 @@ nobody          equ 10
 focusGhost      equ nobody          ;ghost to print debugging for
 fruit1Dots      equ 70          ;dots to release fruit
 fruit2Dots      equ 120         ;dots to release fruit2
-clydeDots       equ 30          ;dots to release clyde ( about 33% )
-inkyDots        equ 10          ;dots to release inky  ( )
-pinkyDots       equ 20           ;dots to release pinky ( should be 1)
+clydeDots       equ 230          ;dots to release clyde ( about 33% )
+inkyDots        equ 210          ;dots to release inky  ( )
+pinkyDots       equ 220           ;dots to release pinky ( should be 1)
 pacStart        equ screen+22*7+5
 g1Start         equ screen+22*11+9
 g2Start         equ screen+22*(9+12)+11
@@ -855,7 +861,7 @@ inBoxTable      dc.b 4,0,0,2,6
 Sprite_speed    dc.b 10,10,10,10,10 ;your turn gets skipped every N loops of this
 ;Sprite_speed    dc.b 55,55,55,55,55 ;your turn gets skipped every N loops of this
 ;;; speeds when pacman is powered up
-eyeSpeed equ 2                  ;sprite_speed setting for eyes
+eyeSpeed equ 255                ;sprite_speed setting for eyes
 Sprite_speed2   dc.b 80,2,2,2,2
 Sprite_base     dc.b 10,10,10,10,10
 Sprite_turn     dc.b 5,4,4,4,4        
@@ -872,7 +878,7 @@ BlinkyCruise      dc.b 6        ;2 = blinky fast mode 5-255 = off
         ;; if eyes heading toward ghost box
         ;; or in ghost box already
         ;; etc
-Sprite_mode    dc.b modeOutOfBox,0,modeOutOfBox,0,0  ;in ghost box if false
+Sprite_mode    dc.b modePacman,0,modeOutOfBox,0,0  ;in ghost box if false
 masterSpeed      equ 8 ;master game delay
 #IFNCONST
 SAVE_OFFSET     dc.b 0
@@ -1036,7 +1042,12 @@ erasesprt SUBROUTINE
         ldy Sprite_color,X
         cpx #0                  ;pacman doesn't change colors
         beq .done
-        
+
+        lda Sprite_mode,X
+        cmp #modeFright
+        bne .done
+        ;; frightened ghosts are blue and flash
+        ;; as time runs out of power charge
         lda POWER_UP
         beq .done            ;not in power up mode
         ;; flash ghost color when power up is low
@@ -1160,9 +1171,16 @@ Timer1Expired SUBROUTINE
         rts
 
 PowerPillOff SUBROUTINE
+        ldy #SPRITES
 .loop        
         lda Sprite_base,Y
         sta Sprite_speed,Y
+        lda Sprite_mode,Y
+        cmp #modeFright
+        bne .0
+        lda #modeOutOfBox
+        sta Sprite_mode,Y
+.0        
         dey
         bmi .done
         jmp .loop
@@ -1179,6 +1197,13 @@ PowerPill SUBROUTINE
 .loop
         lda Sprite_speed2,Y
         sta Sprite_speed,Y
+        lda #modeOutOfBox       ;is this ghost in the mze
+        cmp Sprite_mode,Y
+        bne .0                  ;nope, skip
+        ;; ghost in the maze are now frightened
+        lda #modeFright
+        sta Sprite_mode,Y
+.0        
         dey
         bmi .done
         bpl .loop
@@ -1444,16 +1469,9 @@ sound1 SUBROUTINE
         sta S2
         resAll
         rts
-;;; pacman dies scene
-deathStart equ 220              ;death start note
-deathStep  equ 2                ;note step
-deathCount equ 5                ;iterations
-deathStop  equ deathStart-[deathCount*deathStep]
-        
-death subroutine
-        jsr uninstall_isr
-        ldx #0
-
+;;; clear the pacman sprite site playfield
+;;; to empty tiles
+ClearPacSite subroutine
         move16 Sprite_loc,W1
         lda #EMPTY
         sta Sprite_back
@@ -1464,11 +1482,27 @@ death subroutine
         sta (W1),Y
         ldy Sprite_dir
         sta (W1),Y
+        rts
+;;; pacman dies scene
+deathStartNote equ 220              ;death start note
+deathStep      equ 2                ;note step
+deathCount     equ 5                ;iterations
+deathStopNote  equ deathStartNote-[deathCount*deathStep]
+;;; 
+;;; called when pacman touches a ghost
+;;; performs death animation
+;;; is responsble for restoring correct playfield tiles on exit
+;;; which needs some work :(
+death subroutine
+        jsr uninstall_isr
+        ldx #0
+        stx POWER_UP            ;no more power mode
+
+        jsr ClearPacSite
         store16 PAC1,AUDIO  ;
-;        move16 PAC_UP1,Sprite_src
-        ;; inc 8x4 each time
-        lda #220
-        sta S3
+
+        lda #deathStartNote
+        sta S3                  ;initial note
         sta S4                  ;no zero = pitch mode for 'delay'
         lda #5
 .top
@@ -1490,7 +1524,7 @@ death subroutine
         lda S3
         sec
         sbc #deathStep
-        cmp #deathStop
+        cmp #deathStopNote
         beq .done
         sta S3
 
@@ -1500,6 +1534,9 @@ death subroutine
         store16 PAC1,AUDIO
         jmp .top
 .done
+        
+        jsr ClearPacSite
+        
         ldx ResetPoint
         txs
         lda #1
@@ -1508,13 +1545,18 @@ death subroutine
         rts
 ;;; reset game after pacman death
 reset_game subroutine
+        lda #0
+        sta wasdot
+        
         store16 pacStart , Sprite_loc2+[2*0]
         store16 g1Start  , Sprite_loc2+[2*1]
         store16 g2Start  , Sprite_loc2+[2*2] 
         store16 g3Start  , Sprite_loc2+[2*3] 
         store16 g4Start  , Sprite_loc2+[2*4]
         ldx #4
-.0        
+.0
+        jsr erasesprt
+        
         sta Sprite_offset,X
         lda inBoxTable,X
         sta Sprite_offset2,X
@@ -1543,8 +1585,9 @@ reset_game subroutine
         sta Sprite_dir2+0
         ;; sprites not in ghost box: pacman and blinky
         lda #1
-        sta Sprite_mode+0
         sta Sprite_mode+2
+        lda #modePacman
+        sta Sprite_mode+0
 
         lda S1
         beq .continue
@@ -1563,17 +1606,19 @@ reset_game subroutine
         lda JIFFYL
         sta r_seed
 
-        jsr mkmaze
 
-        CloseGhostBox
+
         ScatterMode         ;start ghosts out in scatter mode
         jsr install_isr
         rts
-reset_game2 subroutine
-        lda #modeLeaving
-        sta Sprite_mode+1
- ;       sta Sprite_mode+3
-;        sta Sprite_mode+4
+;;; full game reset
+reset_game0 subroutine
+        jsr mkmaze
+        lda #HWALL
+        sta [[outOfBoxRow+1]*22]+outOfBoxCol+screen
+        lda #CYAN
+        sta [[outOfBoxRow+1]*22]+outOfBoxCol+clrram
+        
         rts
 ;-------------------------------------------
 ; MAIN()
@@ -1627,6 +1672,7 @@ main SUBROUTINE
         tsx
         stx ResetPoint
 
+        jsr reset_game0
 PacDeathEntry                   ;code longjmp's here on pacman death
         jsr reset_game
         jmp .background
@@ -1691,7 +1737,7 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         bne .notpac
         cmp #PWR
         bne .0
-;        jsr PowerPill
+        jsr PowerPill
 .0
         cmp #DOT
         beq .notpac
@@ -1708,7 +1754,7 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         bne .backloop
         cmp #PWR
         bne .backloop
-;        jsr PowerPill
+        jsr PowerPill
         ;; end collection of background tiles
         jmp .backloop
         
@@ -1940,6 +1986,9 @@ scroll_right SUBROUTINE
 #if 1
 ;;; move ghost in its currently indicated direction
 MoveGhost SUBROUTINE
+#ifconst GHPLAYER
+        rts      ;keyboard is controlling ghost
+#endif        
         lda Sprite_mode,X       ;ghost in box don't get to move
         beq .exit
         lda Sprite_motion,X
@@ -2016,9 +2065,13 @@ MoveGhost SUBROUTINE
         sta Sprite_motion,X
 .done
         ENDM
-#if 0
+#if 1
 ;;; move a ghost using the keyboard
 GhostAsPlayer SUBROUTINE
+        cpx #blinky   ;only move blinky
+        beq .0   
+        rts
+.0        
         lda 197
         cmp #26
         beq .down
@@ -2224,8 +2277,9 @@ GhostTurn
         SetLeavingTargetTile
         bne .continue
 .normal
-        lda POWER_UP
-        beq .notfrightened
+        lda Sprite_mode,X
+        cmp #modeFright
+        bne .notfrightened
         jsr FrightAI
         jmp .continue
 .notfrightened        
@@ -2262,8 +2316,11 @@ GhostTurn
 
         jsr UpdateMotion
         jsr SpecialKeys
-;        jsr GhostAsPlayer
-.moveghost        
+#ifconst GHPLAYER        
+        jsr GhostAsPlayer
+#endif        
+.moveghost
+        
         jsr MoveGhost           ;
         
         jsr Collisions
@@ -2279,21 +2336,20 @@ GhostTurn
         
         rts
 ;;; open the door on the ghost box
-OpenGhostBox SUBROUTINE
-        lda #EMPTY
-        sta screen+22*[outOfBoxRow+1]+outOfBoxCol
-        lda #BLACK
-        sta clrram+22*[outOfBoxRow+1]+outOfBoxCol
-        rts
 LeaveBox SUBROUTINE
+;        lda POWER_UP
+;        bne .done               ;ghosts don't leave box when pacman is eating
+        lda #modeInBox
+        cmp Sprite_mode,X       ;is ghost in box?
+        bne .done               ;no, then already out, no need
         ;; make sure ghost has proper bitmap
         ;; in case if was the eaten eyes leaving the box
         store16x GHOST,Sprite_src
         ;; instruct the ghost to leave the box
         lda #modeLeaving
         sta Sprite_mode,X
-        ;; open the door on the box
-        jsr OpenGhostBox
+
+.done        
         rts
 ;;; 
 DotEaten SUBROUTINE
@@ -2305,30 +2361,28 @@ DotEaten SUBROUTINE
         iny
         sty DOTCOUNT
         cpy #pinkyDots
-        beq .pinkyexit
-        cpy  #fruit1Dots
-        beq .fruit
-        cpy #fruit2Dots
-        beq .fruit
-        cpy #inkyDots
-        beq .inkyexit           ;let inky out of the house
-        cpy #clydeDots
-        beq .clydeexit          ;let clyde out
-        rts
-.fruit
-        jsr Fruit
-        rts
-.inkyexit
-        ldx #inky
-        jsr LeaveBox
-        rts
-.clydeexit
-        ldx #clyde
-        jsr LeaveBox
-        rts
-.pinkyexit
+        bcc .0
         ldx #pinky
         jsr LeaveBox
+.0
+        cpy  #fruit1Dots
+        bne .1
+        jsr Fruit
+.1        
+        cpy #fruit2Dots
+        bne .2
+        jsr Fruit
+.2        
+        cpy #inkyDots
+        bcc .3
+        ldx #inky
+        jsr LeaveBox
+.3        
+        cpy #clydeDots
+        bcc .4
+        ldx #clyde
+        jsr LeaveBox
+.4        
         rts
 ;;; return true if character in A is a wall
 ;;; W2 ( candidate position )
@@ -2352,7 +2406,18 @@ IsWall SUBROUTINE
 .done        
 .notpacman
         pla
-        cmp #MW
+        cmp #HWALL              ;check for ghost box entrance char
+        bne .checkWall          ;not it, go to regular wall check
+        lda Sprite_mode,X       ;what mode is sprite in
+        cmp #modeOutOfBox       ;are we normal out of box mode?
+        beq .done1              ;
+        cmp #modeFright         ;are we frightened out of box mode?
+        beq .done1 
+        ;; we are eaten or leaving the box, this move is ok
+        rts                     ;Z=0, move is ok
+.checkWall        
+        cmp #MW                 ;check for regular wall character
+.done1        
         rts
         
 ;;; puta fruit out 
@@ -2562,34 +2627,6 @@ PossibleMoves SUBROUTINE
         sta GHOST_DIR       ;initialize best move to an invalid move
 
         jsr SaveSprite
-.checkright
-        ;; don't reverse
-        lda #motionLeft       
-        cmp Sprite_motion,X
-        beq .endright
-        ;; check if we can go right
-        jsr scroll_right            ;
-        bcs .endright
-        ;; we could go right
-        ldSprtTailPos Sprite_loc2,W1 ;correct
-        jsr CalcDistance             ;
-        jsr RestoreSprite            ;
-        IfFocus "R",1                ;
-.endright        
-.checkdown
-        ;; don't reverse
-        lda #motionUp
-        cmp Sprite_motion,X
-        beq .enddown
-        ;; check if we can go down
-        jsr scroll_down         ;
-        bcs .enddown
-        ;; we could go down
-        ldSprtTailPos Sprite_loc2,W1 ;correct
-        jsr CalcDistance
-        jsr RestoreSprite
-        IfFocus "D",13
-.enddown        
 .checkup                             ;
         ;; don't reverse
         lda #motionDown
@@ -2618,6 +2655,34 @@ PossibleMoves SUBROUTINE
         jsr RestoreSprite            ;
         IfFocus "L",5                ;
 .endleft        
+.checkdown
+        ;; don't reverse
+        lda #motionUp
+        cmp Sprite_motion,X
+        beq .enddown
+        ;; check if we can go down
+        jsr scroll_down         ;
+        bcs .enddown
+        ;; we could go down
+        ldSprtTailPos Sprite_loc2,W1 ;correct
+        jsr CalcDistance
+        jsr RestoreSprite
+        IfFocus "D",13
+.enddown        
+.checkright
+        ;; don't reverse
+        lda #motionLeft       
+        cmp Sprite_motion,X
+        beq .endright
+        ;; check if we can go right
+        jsr scroll_right            ;
+        bcs .endright
+        ;; we could go right
+        ldSprtTailPos Sprite_loc2,W1 ;correct
+        jsr CalcDistance             ;
+        jsr RestoreSprite            ;
+        IfFocus "R",1                ;
+.endright        
 .done
         rts
 ;;;  BlinkyRow,pacrow+2,inky target row
@@ -2687,7 +2752,7 @@ Ghost4AI SUBROUTINE
 ;        Display1 "X",3,GHOST_COL
         lda S3
         ;; < N and we are too close, flee
-        cmp #5
+        cmp #10
         beq .tooclose
         bcc .tooclose
         ;; not too close, pursue
@@ -2983,12 +3048,15 @@ Collisions SUBROUTINE
         cpy GHOST_ROW
         beq .special
         iny                     ;check if IN the box
-        iny                     ;which is two tiles down
         cpy GHOST_ROW
         bne .notspecial
-        ;; in the box
-        cmp #modeEaten
-        bne .notspecial
+        ;; in the box, but at least get to pixel > 4
+        lda #4
+        cmp Sprite_offset,X
+        bcc .notspecial         ;not in the box far enough yet
+        ;; we were eaten, and just returned to the box
+        lda #modeInBox          ;change mode to inbox
+        sta Sprite_mode,X       ;save it
         lda #motionUp           ;set upward, out of box
         sta Sprite_motion,X     ;store it on sprite
         jsr LeaveBox            ;send em right back out
@@ -2996,34 +3064,37 @@ Collisions SUBROUTINE
 .special                        ;above the box
         cmp #modeLeaving
         bne .eaten
-        CloseGhostBox
-        sta Sprite_back2,X
         lda #modeOutOfBox
         sta Sprite_mode,X
         jmp .notspecial
 .eaten
-        jsr OpenGhostBox
         lda #motionDown
         sta Sprite_motion,X
         jsr scroll_down
 .notspecial
+        ;; output: S1 = x pixels, S2 = y pixels
         TileToPixels GHOST_COL,GHOST_ROW,S1,S2
-        lda S1
+        lda S1                  ;x pixels
         sec
         sbc PACXPIXEL
         Abs
-        cmp #4
+        cmp #5
         bcs .done
 
-        lda S2
+        lda S2                  ;y pixels
         sec
         sbc PACYPIXEL
         Abs
-        cmp #4
+        cmp #5
         bcs .done
         ;; collision between pacman and ghost
-        lda POWER_UP
-        bne .ghost_eaten
+        lda Sprite_mode,X
+        cmp #modeFright
+        beq .ghost_eaten
+        cmp #modeOutOfBox       ;are we on the hunt?
+        ;;no, then nothing of interest, we were eyes for example
+        ;; passing pacman
+        bne .done             
         ;; pacman eaten
 ;        brk
         jsr death
@@ -3032,8 +3103,8 @@ Collisions SUBROUTINE
         lda #modeEaten
         cmp Sprite_mode,X
         beq .done               ;already eaten
-        jsr sound1
-        sta Sprite_mode,X
+        jsr sound1              ;play eaten sound
+        sta Sprite_mode,X       ;change mode to eaten
 ;        lda #WHITE
 ;        sta Sprite_color,X
         store16x BIT_EYES,Sprite_src
@@ -3233,7 +3304,7 @@ tail2tail SUBROUTINE
         adc SCRL_VAL
         ENDM
 ;;; handle tunnel left side
-DecrementPos SUBROUTINE
+DecrementHPos SUBROUTINE
         cmp16Im W2,[tunnelRow*22]+tunnelLCol+screen
         bne .done
         store16 [tunnelRow*22]+tunnelRCol+screen,W2
@@ -3242,7 +3313,7 @@ DecrementPos SUBROUTINE
         Dec16 W2
         rts
 ;;; handle tunnel right side
-IncrementPos SUBROUTINE
+IncrementHPos SUBROUTINE
         cmp16Im W2,[tunnelRow*22]+tunnelRCol+screen
         bne .done
         store16 [tunnelRow*22]+tunnelLCol+screen,W2
@@ -3264,12 +3335,12 @@ IncrementPos SUBROUTINE
         ;; 2 pixel increments when not at 0 or 8
         MAC ApplyScroll
         AddScroll
-        ;; ldy Sprite_mode,X
-        ;; cpy #modeEaten
-        ;; bne .done
-        ;; cmp END_SCRL_VAL
-        ;; beq .done
-        ;; AddScroll
+        ldy Sprite_mode,X
+        cpy #modeEaten
+        bne .done
+        cmp END_SCRL_VAL
+        beq .done
+        AddScroll
 .done        
         ENDM
 ;;; move sprite horizontal
@@ -3292,7 +3363,7 @@ scroll_horiz SUBROUTINE
         ;; going right
         lda #0                  ;push potential new sprite offset
         pha                     ;save it on stack
-        jsr IncrementPos        ;move over to right one tile
+        jsr IncrementHPos        ;move over to right one tile
         ldy #01                 ;
         lda (W2),Y              ;check for wall at pos + 2
         jsr IsWall              ;remember we are 2 tiles wide
@@ -3304,7 +3375,7 @@ scroll_horiz SUBROUTINE
 .left
         lda #8
         pha
-        jsr DecrementPos
+        jsr DecrementHPos
         ldy #0
         lda (W2),Y
         jsr IsWall
@@ -3538,7 +3609,6 @@ changehoriz SUBROUTINE
 
         clc                     ;return success
         rts
-
 ;;; change orientation of the 2 tiles that represent pacman
 ;;; to vertical
 ;;; C = true if failed
@@ -3574,7 +3644,7 @@ changevert SUBROUTINE
         adc CORNER_SHAVE        ; are we within shave distance
         cmp #8                  ; of end of tile?
         bcs .endtile
-.failed ; we can't change directions  in middle of tile
+ChangeVertFailed       ; we can't change directions  in middle of tile
         sec
         rts
 .begtile                        ;at beginning of tile
@@ -3586,7 +3656,7 @@ changevert SUBROUTINE
         ldy SPRT_LOCATOR
         lda (W2),Y
         jsr IsWall
-        beq .failed             ;we hit a wall, abort move
+        beq ChangeVertFailed    ;we hit a wall, abort move
         
         lda #22                 ;change direction to down
         sta Sprite_dir2,X
