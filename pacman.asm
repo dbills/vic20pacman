@@ -139,10 +139,10 @@ S5              equ $30
 S6              equ $31
 PACXPIXEL       equ $32
 PACYPIXEL       equ $33        
-#IFCONST _LOCAL_SAVEDIR
+
 GHOST_COL       equ $35        
 GHOST_ROW       equ $36
-#ENDIF
+
 SCORE_l         equ $37
 SCORE_h         equ $38        
 S7              equ $43
@@ -520,7 +520,7 @@ PACL            equ [GH3L+4]        ;pacman char number
 
         store16 110,TIMER1
 
-;        Display1 "S",10,TIMER1
+        Display1 "S",10,TIMER1
         lda #0
         sta CHASEMODE
         
@@ -805,13 +805,18 @@ dirVert         equ 22            ;sprite oriented vertically
 dirHoriz        equ 1             ;sprite oriented horizontally
 modeInBox       equ 0
 modePacman      equ 5             ;mode only pacman has
+;;;changes from scatter to chase cause reverse for example
+modeReverse     equ 6            
 modeFright      equ 4
 modeOutOfBox    equ 1             ;see sprite_mode
 modeLeaving     equ 2             ;leavin the ghost box
 modeEaten       equ 3             ;ghost was chomped
 outOfBoxCol     equ 11            ;column at ghost box entry/exit
 outOfBoxRow     equ 9             ;row of tile directly above exit
-pinkyHomeCol    equ 3             ;col of ghost box exit
+pacStartRow     equ outOfBoxRow+8 ;pacman start row
+pacStartCol     equ outOfBoxCol        
+pacStart        equ screen+22*pacStartRow+pacStartCol
+pinkyHomeCol    equ 3        
 pinkyHomeRow    equ 3
 blinkyHomeCol   equ 22-3
 blinkyHomeRow   equ 3
@@ -830,12 +835,11 @@ nobody          equ 10
 focusGhost      equ nobody          ;ghost to print debugging for
 fruit1Dots      equ 70          ;dots to release fruit
 fruit2Dots      equ 120         ;dots to release fruit2
-clydeDots       equ 230          ;dots to release clyde ( about 33% )
-inkyDots        equ 210          ;dots to release inky  ( )
-pinkyDots       equ 220           ;dots to release pinky ( should be 1)
-pacStart        equ screen+22*7+5
+clydeDots       equ 30          ;dots to release clyde ( about 33% )
+inkyDots        equ 10          ;dots to release inky  ( )
+pinkyDots       equ 20           ;dots to release pinky ( should be 1)
 g1Start         equ screen+22*11+9
-g2Start         equ screen+22*(9+12)+11
+g2Start         equ screen+22*outOfBoxRow+outOfBoxCol
 g3Start         equ screen+22*11+10
 g4Start         equ screen+22*11+12
 ;;; 
@@ -848,6 +852,10 @@ Sprite_back2    equ Sprite_back+5         ;static screen background
 ;;;current screen background ( might include some other sprite tile that was laid down )
 Sprite_sback    equ Sprite_back2+5 
 Sprite_sback2   equ Sprite_sback+5
+Sprite_dir      equ Sprite_sback2+5 ;h
+Sprite_dir2     equ Sprite_dir+5 ;sprite direction 1(horiz),22(vert)    
+Sprite_offset   equ Sprite_dir2+5   ;sprite bit offset in tiles
+Sprite_offset2  equ Sprite_offset+5 ;upcoming sprite bit offset in tiles
 Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,GH3L      ;foreground char
 Sprite_src      dc.w PAC1,GHOST,GHOST,GHOST,GHOST ;sprite source bitmap
 Sprite_frame    dc.b 0,1,1,1,1 ;animation frame of sprite as offset from _src
@@ -855,23 +863,18 @@ Sprite_frame    dc.b 0,1,1,1,1 ;animation frame of sprite as offset from _src
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8)     , mychars+(GH2L*8)     , mychars+(GH3L*8)    
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16), mychars+(GH2L*8)+(16),mychars+(GH3L*8)+(16)
 Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; see motion defines
-;Sprite_dir      dc.b 22,1,1,1,1 ;sprite direction 1(horiz),22(vert)
-Sprite_dir      dc.b 0,0,0,0,0
-Sprite_dir2     dc.b 22,1,1,1,1 ;sprite direction 1(horiz),22(vert)    
-Sprite_offset   dc.b 0,0,0,0,0  ;sprite bit offset in tiles
-Sprite_offset2  dc.b 4,0,0,2,6  ;sprite bit offset in tiles
 ;;; offset table of ghosts in box
-inBoxTable      dc.b 4,0,0,2,6
+inBoxTable      dc.b 0,0,0,2,6
 Sprite_speed    dc.b 10,10,10,10,10 ;your turn gets skipped every N loops of this
-;Sprite_speed    dc.b 55,55,55,55,55 ;your turn gets skipped every N loops of this
 ;;; speeds when pacman is powered up
 eyeSpeed equ 255                ;sprite_speed setting for eyes
 Sprite_speed2   dc.b 80,2,2,2,2
+;;; default speeds for sprites for current level
 Sprite_base     dc.b 10,10,10,10,10
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
-BlinkyCruise      dc.b 6        ;2 = blinky fast mode 5-255 = off
+BlinkyCruise      dc.b 2        ;2 = blinky fast mode 5-255 = off
 
         ;; in order of exit 
         ;; red=blinky ( starts outside of ghost house )
@@ -884,16 +887,6 @@ BlinkyCruise      dc.b 6        ;2 = blinky fast mode 5-255 = off
         ;; etc
 Sprite_mode    dc.b modePacman,0,modeOutOfBox,0,0  ;in ghost box if false
 masterSpeed      equ 8 ;master game delay
-#IFNCONST
-SAVE_OFFSET     dc.b 0
-SAVE_OFFSET2    dc.b 0
-SAVE_DIR        dc.b 0
-SAVE_DIR2       dc.b 0
-GHOST_COL       dc.b 0
-GHOST_ROW       dc.b 0
-DIV22_RSLT      dc.b 0
-DIV22_WORK      dc.w 0
-#ENDIF        
 ;;; 
 ;;; division table for division by 22
 Div22Table      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
@@ -1127,12 +1120,10 @@ drwsprt1 SUBROUTINE
         lda #MW
         sta screen+22*[outOfBoxRow+1]+outOfBoxCol
         ENDM
-ReverseGhost SUBROUTINE
-        InitSpriteLoop          ;foreach sprite
-.loop        
-        dec SPRITEIDX
-        beq .done
-        ldx SPRITEIDX
+;;; load reverse direction into a
+ReverseDirection subroutine
+        lda #modeOutOfBox
+        sta Sprite_mode,X
         lda Sprite_motion,X
         cmp #motionRight
         beq .right
@@ -1145,32 +1136,40 @@ ReverseGhost SUBROUTINE
         brk
 .left
         lda #motionRight
-        sta Sprite_motion,X
-        bne .loop
+        rts
 .right
         lda #motionLeft
-        sta Sprite_motion,X
-        bne .loop
+        rts
 .up
         lda #motionDown
-        sta Sprite_motion,X
-        bne .loop
+        rts
 .down
         lda #motionUp
-        sta Sprite_motion,X
+        rts
+        
+ReverseGhosts SUBROUTINE
+        InitSpriteLoop          ;foreach sprite
+.loop        
+        dec SPRITEIDX
+        beq .done
+        ldx SPRITEIDX
+        lda Sprite_mode,X
+        cmp #modeOutOfBox
         bne .loop
+        lda #modeReverse
+        sta Sprite_mode,X
 .done
         rts
 Timer1Expired SUBROUTINE
-;        jsr ReverseGhost
+        jsr ReverseGhosts
         lda CHASEMODE
-        beq .chase
+        beq .chase ;were we not in chase mode?  then switch to it
 
-        ScatterMode
+        ScatterMode ;were were in chase mode, switch to scatter
 
         beq .done
 .chase        
-        ChaseMode
+        ChaseMode ;switch to chase mode
 .done
         rts
 
@@ -1572,12 +1571,19 @@ reset_game subroutine
         lda #0
         sta Sprite_sback,X
         sta Sprite_mode,X
-
+        lda #dirHoriz
+        sta Sprite_dir2,X
+        lda Sprite_base,X  ;load base sprite speed
+        sta Sprite_speed,X ;store it
+        cpx #0             ;are we pacman
+        beq .skip_bmap     ;skip setting bitmap
+        store16x GHOST,Sprite_src ;set bitmap for ghosts
+.skip_bmap
         dex
         bmi .1
         bpl .0
 .1
-        lda #motionUp
+        lda #motionLeft
         sta Sprite_motion
         lda #motionRight
         sta Sprite_motion+1
@@ -1585,13 +1591,6 @@ reset_game subroutine
         lda #motionLeft
         sta Sprite_motion+2
         sta Sprite_motion+4
-        lda #dirHoriz
-        sta Sprite_dir2+4
-        sta Sprite_dir2+3
-        sta Sprite_dir2+2
-        sta Sprite_dir2+1
-        lda #dirVert
-        sta Sprite_dir2+0
         ;; sprites not in ghost box: pacman and blinky
         lda #1
         sta Sprite_mode+2
@@ -2123,7 +2122,7 @@ UpdateMotion SUBROUTINE
         lda GHOST_DIR
         sta Sprite_motion,X
         rts
-#if 1        
+#if 0        
 ;;; update motion but don't reverse
 UpdateMotion2 SUBROUTINE        
         lda GHOST_DIR
@@ -2274,11 +2273,17 @@ ailoop0
         jmp .loop              ;no he doesn't
 GhostTurn
         lda Sprite_mode,X
+        cmp #modeReverse
+        beq .reversing
         cmp #modeLeaving
         beq .leaving
         cmp #modeEaten
         beq .eaten
         jmp .normal
+.reversing
+        jsr ReverseDirection
+        sta Sprite_motion,X
+        jmp .moveghost
 .eaten                          ;load target tile for eaten ghosts
         SetEatenTargetTile
         bne .continue
@@ -2292,10 +2297,10 @@ GhostTurn
         jsr FrightAI
         jmp .continue
 .notfrightened        
-        ;; lda CHASEMODE
-        ;; bne .chasing
-        ;; jsr ScatterGhostAI
-        ;; jmp .continue
+        lda CHASEMODE
+        bne .chasing
+        jsr ScatterGhostAI
+        jmp .continue
 .chasing        
         ;; switch on ghost # to get ai routine
         cpx #4
@@ -2708,12 +2713,6 @@ PossibleMoves SUBROUTINE
         sta {3}
         ENDM
 
-        MAC TryMove
-        lda MotionTable,Y
-        sta GHOST_DIR
-        jsr UpdateMotion2
-        jsr MoveGhost
-        ENDM
 ;;; ghost running away AI
 ;;; random turns selected
 FrightAI SUBROUTINE
