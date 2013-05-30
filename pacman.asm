@@ -819,23 +819,26 @@ render_sprite SUBROUTINE
 ;;; figure out what pacman might be eating
 ;;; A = consumed playfield tile
 CheckFood subroutine
+        cmp #PWR
+        beq .power_pill
+.0
         cmp #DOT
-        bne .0
-        pha
-;        jsr DotEaten
-        pla
+        bne .done
+
+        jsr DotEaten
+
         ;; handle eating dots
         ;; and figuring out if the level is over
         dec DOTCOUNT
-        bne .0
-        ;; end_level                      
+        bne .done
+        ;; end_level
+        brk
         jsr uninstall_isr
         JmpReset 1
-
-.0      cmp #PWR
-        bne .1
+        ;; control never reaches here
+.power_pill        
         jsr PowerPill
-.1        
+.done        
         rts
 ;;; X = sprite to erase
 erasesprt SUBROUTINE
@@ -845,10 +848,11 @@ erasesprt SUBROUTINE
         lda #4
         cmp Sprite_offset
         bne .notpac
-        ;; lda Sprite_back
-        ;; jsr CheckFood
-        ;; lda Sprite_back2
-        ;; jsr CheckFood
+
+        lda Sprite_back
+        jsr CheckFood
+        lda Sprite_back2
+        jsr CheckFood
 
         lda #EMPTY
         sta Sprite_back
@@ -1340,10 +1344,11 @@ sound1 SUBROUTINE
 ;;; clear the pacman sprite site playfield
 ;;; to empty tiles
 ClearPacSite subroutine
+        rts
         move16 Sprite_loc,W1
         lda #EMPTY
-        sta Sprite_back
-        sta Sprite_sback
+;        sta Sprite_back
+;       sta Sprite_sback
         sta Sprite_back2
         sta Sprite_sback2
         ldy #0
@@ -1639,7 +1644,7 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         jmp .playerloop
 
 .loopend
-;        Display1 "D",0,DOTCOUNT
+        Display1 "D",0,DOTCOUNT
         jmp .loop
         brk
         
@@ -2199,8 +2204,6 @@ GhostTurn
         rts
 ;;; open the door on the ghost box
 LeaveBox SUBROUTINE
-;        lda POWER_UP
-;        bne .done               ;ghosts don't leave box when pacman is eating
         lda #modeInBox
         cmp Sprite_mode,X       ;is ghost in box?
         bne .done               ;no, then already out, no need
@@ -2215,6 +2218,7 @@ LeaveBox SUBROUTINE
         rts
 ;;; 
 DotEaten SUBROUTINE
+        saveX
 ;        jsr SoundOn
         lda #1
         sta wasdot
@@ -2242,7 +2246,8 @@ DotEaten SUBROUTINE
         bcs .4
         ldx #clyde
         jsr LeaveBox
-.4        
+.4
+        resX
         rts
 ;;; return true if character in A is a wall
 ;;; W2 ( candidate position )
