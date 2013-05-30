@@ -213,6 +213,14 @@ PACL            equ [GH3L+4]        ;pacman char number
         eor {1}         ; 0 = 1
         sta {1}         ; or 1 = 0
         ENDM
+        MAC saveY
+        tya
+        pha
+        ENDM
+        MAC resY
+        pla
+        tay
+        ENDM
         ;; save X
         MAC saveX
         txa
@@ -287,6 +295,13 @@ PACL            equ [GH3L+4]        ;pacman char number
         MAC InitSpriteLoop
         lda #SPRITES
         sta SPRITEIDX
+        ENDM
+        ;; jump to game reset point
+        ;; mode={1}
+        MAC JmpReset
+        lda #{1}
+        sta S1
+        jsr longJmp
         ENDM
 ;;; display a single byte {3} at offset {2} on top line prefixed by char {1}
         MAC Display1
@@ -525,12 +540,15 @@ PACL            equ [GH3L+4]        ;pacman char number
         sta CHASEMODE
         
         ENDM
+        ;; increment dot count
+        ;; checking for end of level
+
 ;;; find the character font address of the tile
 ;;; underneath a sprite
 ;;; on entry: A = tile in question
 ;;; W4 (out) font address of tile underneath
 ;;; uses S5,S6,W5
-        mac mergeTile 
+        MAC mergeTile 
         sta S5
         lda #8
         sta S6
@@ -542,7 +560,7 @@ PACL            equ [GH3L+4]        ;pacman char number
         lda W5+1
         adc #mychars >> 8
         sta W4+1
-        endm
+        ENDM
 ;; beq on joy right A has bit 7 of last reading from JOY0B
         MAC onjoyr
         lda #127
@@ -577,203 +595,11 @@ PACL            equ [GH3L+4]        ;pacman char number
         ;; brk
         lda #0
         sta S7
-    jmp main
+
+        jmp main
 
     INCLUDE "music.asm"
-
-MazeB
-
-    dc.b %00000000
-    dc.b %00000000
-    dc.b %00000000
-    dc.b %00000000
-    dc.b %00000000
-    dc.b %00000000
-    dc.b %00000000
-    dc.b %00000000
-    dc.b %00000001
-    dc.b %00100100
-    dc.b %10010010
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10010010
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10010000
-    dc.b %01010010
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10010001
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10010010
-    dc.b %01000100
-    dc.b %00010110
-    dc.b %01001010
-    dc.b %00100100
-    dc.b %10010100
-    dc.b %01010001
-    dc.b %00100100
-    dc.b %10100010
-    dc.b %01011001
-    dc.b %00000101
-    dc.b %00010010
-    dc.b %10001001
-    dc.b %00100101
-    dc.b %00010100
-    dc.b %01001001
-    dc.b %00101000
-    dc.b %10010100
-    dc.b %01000001
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10010010
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10010010
-    dc.b %01001001
-    dc.b %00010000
-    dc.b %01010001
-    dc.b %00101000
-    dc.b %10100010
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10100010
-    dc.b %10001001
-    dc.b %01000100
-    dc.b %00010100
-    dc.b %10010010
-    dc.b %00101001
-    dc.b %00100100
-    dc.b %01010010
-    dc.b %01001000
-    dc.b %10100100
-    dc.b %10010001
-    dc.b %00000100
-    dc.b %10010010
-    dc.b %10001001
-    dc.b %00100101
-    dc.b %00010100
-    dc.b %01001001
-    dc.b %00101000
-    dc.b %10010010
-    dc.b %01000000
-    dc.b %00000000
-    dc.b %10100010
-    dc.b %00000000
-    dc.b %00000000
-    dc.b %00000000
-    dc.b %00001010
-    dc.b %00100000
-    dc.b %00000000
-    dc.b %01001001
-    dc.b %00101000
-    dc.b %10000010
-    dc.b %01001000
-    dc.b %00100100
-    dc.b %10000010
-    dc.b %10001001
-    dc.b %00100100
-    dc.b %00000000
-    dc.b %00000010
-    dc.b %00000000
-    dc.b %10000000
-    dc.b %00000000
-    dc.b %00100000
-    dc.b %00100000
-    dc.b %00000000
-    dc.b %00000100
-    dc.b %10010010
-    dc.b %10001000
-    dc.b %00100100
-    dc.b %10010010
-    dc.b %01001000
-    dc.b %00101000
-    dc.b %10010010
-    dc.b %01000000
-    dc.b %00000000
-    dc.b %10100010
-    dc.b %00000000
-    dc.b %00000000
-    dc.b %00000000
-    dc.b %00001010
-    dc.b %00100000
-    dc.b %00000000
-    dc.b %01001001
-    dc.b %00101000
-    dc.b %10100010
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10100010
-    dc.b %10001001
-    dc.b %00100100
-    dc.b %00010100
-    dc.b %10010010
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %01010010
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10010001
-    dc.b %00000101
-    dc.b %00010010
-    dc.b %10001001
-    dc.b %00100101
-    dc.b %00010100
-    dc.b %01001001
-    dc.b %00101000
-    dc.b %10010100
-    dc.b %01000001
-    dc.b %01001000
-    dc.b %10100100
-    dc.b %10010010
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10010010
-    dc.b %00101001
-    dc.b %00010000
-    dc.b %01001010
-    dc.b %00101000
-    dc.b %10100010
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10100010
-    dc.b %10001010
-    dc.b %00100100
-    dc.b %00010110
-    dc.b %10010010
-    dc.b %00101001
-    dc.b %00100100
-    dc.b %01010010
-    dc.b %01001000
-    dc.b %10100100
-    dc.b %10011001
-    dc.b %00000101
-    dc.b %00010010
-    dc.b %01001001
-    dc.b %00100101
-    dc.b %00010100
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10010100
-    dc.b %01000001
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10010010
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10010010
-    dc.b %01001001
-    dc.b %00010000
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10010010
-    dc.b %01001001
-    dc.b %00100100
-    dc.b %10010010
-    dc.b %01001001
-    dc.b %00100100
-MazeX
+    INCLUDE "maze.asm"        
 
 
 pacframes  equ #4            ; total number of pacman animation frames ( 1 based )
@@ -816,6 +642,7 @@ outOfBoxRow     equ 9             ;row of tile directly above exit
 pacStartRow     equ outOfBoxRow+8 ;pacman start row
 pacStartCol     equ outOfBoxCol        
 pacStart        equ screen+22*pacStartRow+pacStartCol
+testDot         equ pacStart+4        
 pinkyHomeCol    equ 3        
 pinkyHomeRow    equ 3
 blinkyHomeCol   equ 22-3
@@ -832,12 +659,14 @@ blinky          equ 2
 pinky           equ 3
 clyde           equ 4
 nobody          equ 10        
-focusGhost      equ nobody          ;ghost to print debugging for
-fruit1Dots      equ 70          ;dots to release fruit
-fruit2Dots      equ 120         ;dots to release fruit2
-clydeDots       equ 30          ;dots to release clyde ( about 33% )
-inkyDots        equ 10          ;dots to release inky  ( )
-pinkyDots       equ 20           ;dots to release pinky ( should be 1)
+focusGhost      equ nobody       ;ghost to print debugging for
+totalDots       equ $A6          ;total dots in maze
+fruit1Dots      equ 70           ;dots to release fruit
+fruit2Dots      equ 120          ;dots to release fruit2
+clydeDots       equ totalDots-30 ;dots to release clyde ( about 33% )
+inkyDots        equ totalDots-10 ;dots to release inky  ( )
+pinkyDots       equ totalDots-20 ;dots to release pinky ( should be 1)
+
 g1Start         equ screen+22*11+9
 g2Start         equ screen+22*outOfBoxRow+outOfBoxCol
 g3Start         equ screen+22*11+10
@@ -987,19 +816,43 @@ render_sprite SUBROUTINE
 .vert
         jsr blitd
         rts
+;;; figure out what pacman might be eating
+;;; A = consumed playfield tile
+CheckFood subroutine
+        cmp #DOT
+        bne .0
+        pha
+;        jsr DotEaten
+        pla
+        ;; handle eating dots
+        ;; and figuring out if the level is over
+        dec DOTCOUNT
+        bne .0
+        ;; end_level                      
+        jsr uninstall_isr
+        JmpReset 1
+
+.0      cmp #PWR
+        bne .1
+        jsr PowerPill
+.1        
+        rts
 ;;; X = sprite to erase
 erasesprt SUBROUTINE
         cpx #0
         bne .notpac
+;        Display1 "O",3,Sprite_offset
         lda #4
         cmp Sprite_offset
         bne .notpac
+        ;; lda Sprite_back
+        ;; jsr CheckFood
+        ;; lda Sprite_back2
+        ;; jsr CheckFood
+
         lda #EMPTY
         sta Sprite_back
-        sta Sprite_back2
-        lda wasdot
-        beq .notpac
-        jsr SoundOn
+        sta Sprite_back2   
 .notpac        
         move16x Sprite_loc,W1   ;sprite location to W1
         ldy #0
@@ -1201,7 +1054,7 @@ PowerPillOff SUBROUTINE
 ;;; called when a power pill is activated
 ;;; 
 PowerPill SUBROUTINE
-
+;        saveY
         lda #210                ;load powr pill on time
         sta POWER_UP            ;store in timer
         ldy #SPRITES            ;init loop counter
@@ -1221,7 +1074,8 @@ PowerPill SUBROUTINE
         bpl .loop
 ;        lda #11
 ;        sta 36879
-.done        
+.done
+;        resY
         rts
         
 sirenBot equ 211+5-3
@@ -1502,6 +1356,13 @@ deathStartNote equ 220              ;death start note
 deathStep      equ 2                ;note step
 deathCount     equ 5                ;iterations
 deathStopNote  equ deathStartNote-[deathCount*deathStep]
+        ;; perform a C style longjmp
+        ;; to {2} using {1} as saved stack
+        ;; with death mode {3} stored in S1
+longJmp subroutine
+        ldx ResetPoint
+        txs
+        jmp PacDeathEntry
 ;;; 
 ;;; called when pacman touches a ghost
 ;;; performs death animation
@@ -1550,12 +1411,9 @@ death subroutine
 .done
         
         jsr ClearPacSite
-        
-        ldx ResetPoint
-        txs
-        lda #1
-        sta S1                  ;life lost resetmode
-        jmp PacDeathEntry
+        JmpReset 0              ;reset game, pacman died mode
+
+end_level subroutine
         rts
 ;;; reset game after pacman death
 reset_game subroutine
@@ -1605,8 +1463,8 @@ reset_game subroutine
 
         lda S1
         beq .continue
-        ;; special logic for life lost reset
-;        jsr reset_game2
+        ;; special logic for level reset
+        jsr reset_game0
 .continue        
         ;; 
         
@@ -1662,9 +1520,7 @@ main SUBROUTINE
 ;        cli                     ; enable interrupts for jiffy clock
 
         lda #0
-        sta S1                  ;arg to reset_game below
         sta $9113               ;joy VIA to input
-        sta DOTCOUNT            ;dot count to 0
         sta POWER_UP            ;power up to 0
 
         jsr copychar            ; copy our custom char set
@@ -1678,15 +1534,11 @@ main SUBROUTINE
         bne .top
 .done
 
-;        LoadTrack 1,TrackBass
-;        LoadTrack 2,TrackHigh
-;         LoadTrack 3,Track1
-;        LoadTrack 2,Track1x
-;        LoadTrack 4,Vol1
         tsx
         stx ResetPoint
 
-        jsr reset_game0
+        lda #1
+        sta S1                  ;arg to reset_game below
 PacDeathEntry                   ;code longjmp's here on pacman death
         jsr reset_game
         jmp .background
@@ -1747,20 +1599,6 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         ldy #0
         lda (W1),Y
         sta Sprite_back,X
-        cpx #0
-        bne .notpac
-        cmp #PWR
-        bne .0
-        jsr PowerPill
-.0
-        cmp #DOT
-        beq .notpac
-        saveX
-        ldx #3
-
-;        HaltTrack
-        resX
-.notpac
         ldy Sprite_dir,X
         lda (W1),Y
         sta Sprite_back2,X
@@ -1801,6 +1639,7 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         jmp .playerloop
 
 .loopend
+;        Display1 "D",0,DOTCOUNT
         jmp .loop
         brk
         
@@ -1836,6 +1675,8 @@ mkmaze SUBROUTINE
         inc16 W1                ;move pointer forward
         cmp16Im W1,MazeX
         bne .begin
+        lda #totalDots
+        sta DOTCOUNT            ;dot count to 0
         rts
 .begin        
         ldy #0                  ;8 bit counter to 0
@@ -1898,6 +1739,7 @@ process_code SUBROUTINE
         rts
 .dot
         lda #DOT
+;        lda #EMPTY
         ldx #WHITE
         rts
 .space
@@ -2378,10 +2220,8 @@ DotEaten SUBROUTINE
         sta wasdot
         lda #modeLeaving
         ldy DOTCOUNT
-        iny
-        sty DOTCOUNT
         cpy #pinkyDots
-        bcc .0
+        bcs .0
         ldx #pinky
         jsr LeaveBox
 .0
@@ -2394,12 +2234,12 @@ DotEaten SUBROUTINE
         jsr Fruit
 .2        
         cpy #inkyDots
-        bcc .3
+        bcs .3
         ldx #inky
         jsr LeaveBox
 .3        
         cpy #clydeDots
-        bcc .4
+        bcs .4
         ldx #clyde
         jsr LeaveBox
 .4        
@@ -2407,25 +2247,6 @@ DotEaten SUBROUTINE
 ;;; return true if character in A is a wall
 ;;; W2 ( candidate position )
 IsWall SUBROUTINE
-        pha
-        cpx #0
-        bne .notpacman
-        ;; pacman gets some extra checks
-        ;; like to turn sound on and off
-        ;; and maybe fruits if I do them are here
-        cmp #DOT
-        bne .notdot
-        saveX
-        jsr DotEaten
-        resX
-        jmp .done
-.notdot
-        cmp #EMPTY              ;have we eaten here?
-        bne .done               ;must have been a wall
-        jsr SoundOff
-.done        
-.notpacman
-        pla
         cmp #HWALL              ;check for ghost box entrance char
         bne .checkWall          ;not it, go to regular wall check
         lda Sprite_mode,X       ;what mode is sprite in
@@ -3120,8 +2941,8 @@ Collisions SUBROUTINE
         bne .done             
         ;; pacman eaten
 ;        brk
-        jsr death
-        jmp .done
+        jsr death               ;
+        rts
 .ghost_eaten
         lda #modeEaten
         cmp Sprite_mode,X
@@ -3479,9 +3300,6 @@ SoundOff SUBROUTINE
         sta eat_halt
         cli
 
-        ;; ldx #3
-        ;; HaltTrack
-        ;; ldx #0
         rts
 ;;; clear all bits to 0
 ;;; W2 = top half font ram

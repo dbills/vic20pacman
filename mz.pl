@@ -20,7 +20,7 @@ foreach(@LINES) {
     }
 }
 $len = length($output);
-print "len = $len\n";
+print ";;len = $len\n";
 $output=$output."00";
 print "MazeB\n";
 for($i=0;$i<length($output);$i++) {
@@ -30,4 +30,5 @@ for($i=0;$i<length($output);$i++) {
     print substr($output,$i,1);
         
 }
+print "\nMazeX\n";
 #print "\n$output\n";
