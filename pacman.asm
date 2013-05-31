@@ -193,8 +193,8 @@ PWR2            equ [BIT_PWR0-CHAR_BEGIN]/8
 PWR             equ [BIT_PWR1-CHAR_BEGIN]/8
 TEEBOT          equ [BIT_TEEBOT-CHAR_BEGIN]/8       ;bottom tee
 DOT             equ [BIT_DOT-CHAR_BEGIN]/8
-HWALL           equ DOT+1
-VWALL           equ HWALL+1
+HWALL           equ [BIT_HWALL-CHAR_BEGIN]/8
+VWALL           equ [BIT_VWALL-CHAR_BEGIN]/8
 GHOST_WALL      equ [BIT_GHWALL-CHAR_BEGIN]/8        
 GHL             equ [GHOST_BEGIN-CHAR_BEGIN]/8
 GH1L            equ [GHL+4]
@@ -1465,7 +1465,8 @@ reset_game subroutine
         lda S1
         beq .continue
         ;; special logic for level reset
-        jsr reset_game0
+;        jsr reset_game0
+        jsr splash
 .continue        
         ;; 
         
@@ -1478,7 +1479,7 @@ reset_game subroutine
         sta PACFRAMED
         lda JIFFYL
         sta r_seed
-#if 0
+#if 1
 .loop0
         nop
         jmp .loop0
@@ -3620,6 +3621,36 @@ scroll_down2 SUBROUTINE
         lda #PURPLE
         sta clrram,X
         ENDM
+;;; message box in center of screen
+splash subroutine
+        
+        ldx #21
+        ldy #0
+        stx S6
+        store16 clrram,W2
+        store16 screen,W1
+.loop0
+        cmp16Im W2,clrram+22*23
+        beq .0
+        lda #BLUE
+        sta (W2),Y
+        lda #EMPTY
+        sta (W1),Y
+        inc16 W2
+        inc16 W1
+        jmp .loop0
+.0        
+
+.loop        
+        lda #HWALL
+        sta screen+[tunnelRow-1]*22,x
+        sta screen+[tunnelRow+1]*22,x
+
+        dex
+        beq .done
+        bne .loop
+.done        
+        rts
 ;;; 
 ;;; Display a BCD number
 DisplayBCD SUBROUTINE
@@ -3757,6 +3788,7 @@ BIT_TEEBOT
         dc.b %11111111
         dc.b %00000000
         dc.b %00000000
+BIT_HWALL        
         ;; horizontal wall
         dc.b %00000000
         dc.b %00000000
@@ -3766,6 +3798,7 @@ BIT_TEEBOT
         dc.b %11111111
         dc.b %00000000
         dc.b %00000000
+BIT_VWALL        
         ;; vertical wall
         dc.b %00100100
         dc.b %00100100
