@@ -188,15 +188,15 @@ VV              equ $02         ;testing, voice 2
 ;; misc constants
 ;;
 charTop         equ 63          ;max user def chars
-EMPTY           equ $03
-DOT             equ $04
-WALLCH          equ $05
-MW              equ $05            ;maze wall character
-PWR             equ $06
-PWR2            equ PWR+1
-HWALL           equ PWR2+1
-VWALL           equ HWALL+1        
-GHL             equ VWALL+1         ; ghost char number
+EMPTY           equ [BIT_EMPTY-CHAR_BEGIN]/8
+PWR2            equ $03
+PWR             equ PWR2+1
+TEEBOT          equ [BIT_TEEBOT-CHAR_BEGIN]/8       ;bottom tee
+DOT             equ [BIT_DOT-CHAR_BEGIN]/8
+HWALL           equ DOT+1
+VWALL           equ HWALL+1
+GHOST_WALL      equ [BIT_GHWALL-CHAR_BEGIN]/8        
+GHL             equ [GHOST_BEGIN-CHAR_BEGIN]/8
 GH1L            equ [GHL+4]
 GH2L            equ [GH1L+4]
 GH3L            equ [GH2L+4]    
@@ -968,15 +968,6 @@ drwsprt1 SUBROUTINE
 
 ; INCLUDE "audio.asm"
 
-        ;;
-        ;;close the ghost box door
-        ;; A=box cover character on exit
-        MAC CloseGhostBox
-        lda #BLUE
-        sta clrram+22*[outOfBoxRow+1]+outOfBoxCol
-        lda #MW
-        sta screen+22*[outOfBoxRow+1]+outOfBoxCol
-        ENDM
 ;;; load reverse direction into A
 ReverseDirection subroutine
         lda #modeOutOfBox
@@ -1482,8 +1473,11 @@ reset_game subroutine
         sta PACFRAMED
         lda JIFFYL
         sta r_seed
-
-
+#if 0
+.loop0
+        nop
+        jmp .loop0
+#endif
 
         ScatterMode         ;start ghosts out in scatter mode
         jsr install_isr
@@ -1491,7 +1485,7 @@ reset_game subroutine
 ;;; full game reset
 reset_game0 subroutine
         jsr mkmaze
-        lda #HWALL
+        lda #GHOST_WALL
         sta [[outOfBoxRow+1]*22]+outOfBoxCol+screen
         lda #CYAN
         sta [[outOfBoxRow+1]*22]+outOfBoxCol+clrram
@@ -1652,29 +1646,19 @@ PacDeathEntry                   ;code longjmp's here on pacman death
 ;;;  copy the stock character set
 ;;;
 copychar    SUBROUTINE
-    store16 chrom1+[8*GHL],W2
-    store16 mychars+[8*GHL],W3
-    store16 charcnt-[8*GHL],W1
-
-;    jsr movedown
-
     lda VICSCRN
     and #$f0
     ora #$0f                    ;char ram pointer is lower 4 bits
     sta VICSCRN
-
     rts
 ;;; 
 ;;; Create the maze
 ;;; 
 mkmaze SUBROUTINE
-        
+
         store16 MazeB-1,W1
         store16 screen,W2
         store16 clrram,W3
-
-        ldx #0                  ;3 bit counter to 0
-        stx S1                  ;3 bit accumulator start at 0
 
 .fetch_byte
         inc16 W1                ;move pointer forward
@@ -1685,71 +1669,38 @@ mkmaze SUBROUTINE
         rts
 .begin        
         ldy #0                  ;8 bit counter to 0
-        lda (W1),Y              ;load compressed byte
-        sta S2                  ;save working byte
+        lda (W1),Y              ;fetch high nibble
+        and #$f0
+        lsr
+        lsr
+        lsr
+        lsr
+        jsr process_nibble
 
-.loop
-        asl S2                  ;strip off leading bit
-        rol S1                  ;rotate in the new bit
-        inx                     ;increment 3 bit counter
-        cpx #3                  ;have we read all three bits?
-        bne .continue           ;no, keep reading
-        jsr process_code0       ;yes, process the compressed code
-.continue                       
-        iny                     ;increment the 8 bit counter
-        cpy #8                  ;have we process 8 bits?
-        beq .fetch_byte         ;yes, fetch the next byte
-        bne .loop               ;no, read another bit
+        lda (W1),Y              ;fetch low  nibble
+        and #$0f
 
-process_code0 SUBROUTINE
-        tya                     ;save Y
-        pha
-        ldy #0
-        jsr process_code        ;dcode the char
-        sta (W2),Y              ;store decoded char to screen
-        txa
-        sta (W3),Y
-        sty S1                  ;reset 3  bit accumulator to 0
-        ldx #0                  ;reset 3 bit counter
-        pla                     ;restore Y
-        tay
-        inc16 W2                ;increment screen pos pointer
+        inc16 W2
+        inc16 W3                ;inc color ram pointer
+
+        jsr process_nibble
+
+        inc16 W2                ;inc screen pointer
         inc16 W3
-        rts
-        
-process_code SUBROUTINE
-        lda S1                  ;pull 3 bit code
-        beq .space
-        cmp #%010
-        beq .dot
-        cmp #%001
-        beq .wall
-        cmp #%100
-        beq .hwall              ;horizontal wall section
-        cmp #%011
-        beq .pdot
-        lda #EMPTY              ;default to space
-        rts
-.pdot
-        lda #PWR
-        ldx #WHITE
-        rts
-.hwall
-        lda #HWALL
-        ldx #BLUE
-        rts
-.wall
-        lda #MW                 ;wall character
-        ldx #BLUE
-        rts
-.dot
-        lda #DOT
-;        lda #EMPTY
-        ldx #WHITE
-        rts
-.space
-        lda #EMPTY
-        ldx #BLACK
+        jmp .fetch_byte
+
+process_nibble subroutine
+        clc
+        adc #6
+        sta (W2),Y
+        ldy #WHITE
+        cmp #DOT
+        beq .isdot
+        ldy #BLUE
+.isdot
+        tya
+        ldy #0
+        sta (W3),Y              ;clrram
         rts
 #if 0        
 ; Move memory down
@@ -1784,6 +1735,7 @@ md4
         RTS
 #endif
 
+#if 0
 ;;; waits for joystick to be pressed
 ;;; and released
 WaitFire SUBROUTINE
@@ -1805,7 +1757,7 @@ WaitFire SUBROUTINE
         jmp .loop1
 .fire
         rts
-
+#endif
 scroll_down SUBROUTINE
         lda #motionDown
         sta SPRT_LOCATOR
@@ -1926,7 +1878,7 @@ MoveGhost SUBROUTINE
         sta Sprite_motion,X
 .done
         ENDM
-#if 1
+#ifconst GHPLAYER
 ;;; move a ghost using the keyboard
 GhostAsPlayer SUBROUTINE
         cpx #blinky   ;only move blinky
@@ -2249,21 +2201,32 @@ DotEaten SUBROUTINE
 .4
         resX
         rts
-;;; return true if character in A is a wall
+;;; return true ( Z=1 ) if character in A is a wall
 ;;; W2 ( candidate position )
 IsWall SUBROUTINE
-        cmp #HWALL              ;check for ghost box entrance char
+        cmp #GHOST_WALL          ;check for ghost box entrance char
         bne .checkWall          ;not it, go to regular wall check
         lda Sprite_mode,X       ;what mode is sprite in
         cmp #modeOutOfBox       ;are we normal out of box mode?
-        beq .done1              ;
+        beq .done1              ;yes, then its considered a wall
         cmp #modeFright         ;are we frightened out of box mode?
-        beq .done1 
+        beq .done1              ;yes, then its considered a wall
+        cmp #modePacman         ;and pacman ain't allowed in here
+        beq .done1
         ;; we are eaten or leaving the box, this move is ok
         rts                     ;Z=0, move is ok
-.checkWall        
-        cmp #MW                 ;check for regular wall character
-.done1        
+.checkWall
+        cmp #TEEBOT
+        bcc .ok                 ;less the TEEBOT tile
+        cmp #EMPTY
+        bcs .ok                 ;or greater than EMPTY
+        ;; move isn't ok, set Z=1
+        lda #0
+        rts
+.ok        
+        ;; move is ok, set Z=0
+        lda #1
+.done1
         rts
         
 ;;; puta fruit out 
@@ -3743,25 +3706,17 @@ done:
 ;;;
 ;;; 
         org $1c00
+CHAR_BEGIN        
         ds 8*4,0
-        ;; regular eating dot
-        dc.b 0
-        dc.b 0
-        dc.b 0
-        dc.b 24
-        dc.b 24
-        dc.b 0
-        dc.b 0
-        dc.b 0
-        ;; maze wall
-        dc.b $ff
-        dc.b $ff
-        dc.b $ff
-        dc.b $ff
-        dc.b $ff
-        dc.b $ff
-        dc.b $ff
-        dc.b $ff
+        ;; power pellet2
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00011000
+        dc.b %00111100
+        dc.b %00111100
+        dc.b %00011000
+        dc.b %00000000
+        dc.b %00000000
         ;; power pellet
         dc.b %00000000
         dc.b %00011000
@@ -3771,13 +3726,24 @@ done:
         dc.b %00111100
         dc.b %00011000
         dc.b %00000000
-        ;; power pellet2
+BIT_DOT 
+        ;; regular eating dot
+        dc.b 0
+        dc.b 0
+        dc.b 0
+        dc.b 24
+        dc.b 24
+        dc.b 0
+        dc.b 0
+        dc.b 0
+BIT_TEEBOT        
+        ;; tee bottom
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %11000011
         dc.b %00000000
         dc.b %00000000
-        dc.b %00011000
-        dc.b %00111100
-        dc.b %00111100
-        dc.b %00011000
+        dc.b %11111111
         dc.b %00000000
         dc.b %00000000
         ;; horizontal wall
@@ -3798,7 +3764,125 @@ done:
         dc.b %00100100
         dc.b %00100100
         dc.b %00100100
-        
+        ;; left top
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00011111
+        dc.b %00100000
+        dc.b %00100000
+        dc.b %00100011
+        dc.b %00100100
+        dc.b %00100100
+        ;; right top
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %11111000
+        dc.b %00000100
+        dc.b %00000100
+        dc.b %11000100
+        dc.b %00100100
+        dc.b %00100100
+        ;; bot left   
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100011
+        dc.b %00100000
+        dc.b %00100000
+        dc.b %00011111
+        dc.b %00000000
+        dc.b %00000000
+        ;; bot right
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %11000100
+        dc.b %00000100
+        dc.b %00000100
+        dc.b %11111000
+        dc.b %00000000
+        dc.b %00000000
+        ;; top cap
+        dc.b %00000000
+        dc.b %00011000
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        ;; bot cap
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00011000
+        dc.b %00000000
+        ;; left cap
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00111111
+        dc.b %01000000
+        dc.b %01000000
+        dc.b %00111111
+        dc.b %00000000
+        dc.b %00000000
+        ;; right cap
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %11111100
+        dc.b %00000010
+        dc.b %00000010
+        dc.b %11111100
+        dc.b %00000000
+        dc.b %00000000
+        ;; top tee
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %11111111
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %11000011
+        dc.b %00100100
+        dc.b %00100100
+        ;; left facing tee
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100011
+        dc.b %00100000
+        dc.b %00100000
+        dc.b %00100011
+        dc.b %00100100
+        dc.b %00100100
+        ;; right facing tee
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %11000100
+        dc.b %00000100
+        dc.b %00000100
+        dc.b %11000100
+        dc.b %00100100
+        dc.b %00100100
+BIT_EMPTY        
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00000000
+BIT_GHWALL
+        ;; ghost wall
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %11111111
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00000000
+GHOST_BEGIN        
         ;; 5 sprites * 4 tiles per sprite * 8 bytes
         ;;  need to clean this up a bit
         
@@ -3989,7 +4073,7 @@ PAC_L4
     ds 1,%00001111
     ds 1,%01111110
     ds 1,%00111100
-PAC_LAST        
+PAC_LAST
 #if 0
 ;;; scratch text for debugging thoughts
 ;; 0 @

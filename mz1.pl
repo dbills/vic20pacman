@@ -2,20 +2,24 @@
 # col * rows at two bytes, + line ending characters
 use Switch;
 
-$left_top="/";
-$left_bot="L";
-$right_bot="R";
-$right_top="\\";
-$tee_top="T";   
-$left_cap="[";
-$right_cap="]";
-$top_cap="^";
-$bot_cap="v";
-$tee_left="}";
-$tee_right="{";
-$hwall="=";
-$vwall="|";
-$power="*";
+$power2    ="0000"; #4
+$power     ="0000"; #5
+$dot       ="0000"; #6
+$tee_bot   ="0001";
+$hwall     ="0010";   
+$vwall     ="0011";   
+$left_top  ="0100";
+$right_top ="0101";
+$left_bot  ="0110";
+$right_bot ="0111";
+$top_cap   ="1000";
+$bot_cap   ="1001";
+$left_cap  ="1010";
+$right_cap ="1011";
+$tee_top   ="1100";   
+$tee_left  ="1101";
+$tee_right ="1110";
+$space     ="1111";
 
 
 @LINES=<STDIN>;
@@ -27,12 +31,26 @@ foreach(@LINES) {
     for($i=0;$i<$len;$i++) {
         $char=substr($_,$i,1);
         switch($char) {
-            case "#" { $output=$output."001" }
-            case "." { $output=$output."010" }
-            case "*" { $output=$output."011" }
-            case " " { $output=$output."000" }
-            case "=" { $output=$output."100" }
-            else { die("huh?"); }
+            case "/" { $output=$output.$left_top;}
+            case "L" {$output=$output.$left_bot;}
+            case "R" {$output=$output.$right_bot;}
+            case "\\" {$output=$output.$right_top;}
+            case "T" {$output=$output.$tee_top;}
+            case "[" {$output=$output.$left_cap;}
+            case "]" {$output=$output.$right_cap;}
+            case "^" {$output=$output.$top_cap;}
+            case "v" {$output=$output.$bot_cap;}
+            case "}" {$output=$output.$tee_left;}
+            case "-" {$output=$output.$tee_bot;}
+            case "{" {$output=$output.$tee_right;}
+            case "=" {$output=$output.$hwall;}
+            case "|" {$output=$output.$vwall;}
+#            case "*" {$output=$output.$power;}
+            case "*" {$output=$output.$space;}
+            case "." {$output=$output.$dot; }
+            case "*" {$output=$output.$power; }
+            case " " {$output=$output.$space; }
+            else { die("huh? - $char -"); }
         }
     }
 }
