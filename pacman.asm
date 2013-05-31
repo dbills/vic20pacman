@@ -189,8 +189,8 @@ VV              equ $02         ;testing, voice 2
 ;;
 charTop         equ 63          ;max user def chars
 EMPTY           equ [BIT_EMPTY-CHAR_BEGIN]/8
-PWR2            equ $03
-PWR             equ PWR2+1
+PWR2            equ [BIT_PWR0-CHAR_BEGIN]/8
+PWR             equ [BIT_PWR1-CHAR_BEGIN]/8
 TEEBOT          equ [BIT_TEEBOT-CHAR_BEGIN]/8       ;bottom tee
 DOT             equ [BIT_DOT-CHAR_BEGIN]/8
 HWALL           equ DOT+1
@@ -598,7 +598,7 @@ PACL            equ [GH3L+4]        ;pacman char number
 
         jmp main
 
-    INCLUDE "music.asm"
+;    INCLUDE "music.asm"
     INCLUDE "maze.asm"        
 
 
@@ -695,6 +695,7 @@ Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; se
 ;;; offset table of ghosts in box
 inBoxTable      dc.b 0,0,0,2,6
 Sprite_speed    dc.b 10,10,10,10,10 ;your turn gets skipped every N loops of this
+;Sprite_speed    dc.b 100,100,100,100,100 ;your turn gets skipped every N loops of this
 ;;; speeds when pacman is powered up
 eyeSpeed equ 255                ;sprite_speed setting for eyes
 Sprite_speed2   dc.b 80,2,2,2,2
@@ -1027,6 +1028,8 @@ Timer1Expired SUBROUTINE
 .done
         rts
 
+;;; called when a power pill is de-activated
+;;; 
 PowerPillOff SUBROUTINE
         lda #0
         sta 36876,0
@@ -1073,8 +1076,8 @@ PowerPill SUBROUTINE
 ;        resY
         rts
         
-sirenBot equ 211+5-3
-sirenTop equ 222+5
+sirenBot equ 211+5-3+5
+sirenTop equ 222+5+5
 SirenIdx
         dc.b sirenBot+1
 SirenDir dc.b 1       
@@ -1336,6 +1339,7 @@ sound1 SUBROUTINE
 ;;; to empty tiles
 ClearPacSite subroutine
         rts
+#if 0        
         move16 Sprite_loc,W1
         lda #EMPTY
 ;        sta Sprite_back
@@ -1347,6 +1351,7 @@ ClearPacSite subroutine
         ldy Sprite_dir
         sta (W1),Y
         rts
+#endif        
 ;;; pacman dies scene
 deathStartNote equ 220              ;death start note
 deathStep      equ 2                ;note step
@@ -1522,8 +1527,10 @@ main SUBROUTINE
         sta $9113               ;joy VIA to input
         sta POWER_UP            ;power up to 0
 
-        jsr copychar            ; copy our custom char set
-
+        lda VICSCRN
+        and #$f0
+        ora #$0f                    ;char ram pointer is lower 4 bits
+        sta VICSCRN
 
         ldx #22
         lda #WHITE
@@ -1642,15 +1649,14 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         jmp .loop
         brk
         
-;;;
-;;;  copy the stock character set
-;;;
-copychar    SUBROUTINE
-    lda VICSCRN
-    and #$f0
-    ora #$0f                    ;char ram pointer is lower 4 bits
-    sta VICSCRN
-    rts
+;;; place power pellets
+;;; W1 pointer
+        MAC placePellets
+        sta {1}+22*3+2
+        sta {1}+22*3+22-2
+        sta {1}+22*17+2
+        sta {1}+22*17+22-2
+        ENDM
 ;;; 
 ;;; Create the maze
 ;;; 
@@ -1666,6 +1672,10 @@ mkmaze SUBROUTINE
         bne .begin
         lda #totalDots
         sta DOTCOUNT            ;dot count to 0
+        lda #PWR
+        placePellets screen
+        lda #WHITE
+        placePellets clrram
         rts
 .begin        
         ldy #0                  ;8 bit counter to 0
@@ -1693,13 +1703,12 @@ process_nibble subroutine
         clc
         adc #6
         sta (W2),Y
-        ldy #WHITE
+        ldx #WHITE
         cmp #DOT
         beq .isdot
-        ldy #BLUE
+        ldx #BLUE
 .isdot
-        tya
-        ldy #0
+        txa
         sta (W3),Y              ;clrram
         rts
 #if 0        
@@ -3708,6 +3717,7 @@ done:
         org $1c00
 CHAR_BEGIN        
         ds 8*4,0
+BIT_PWR0        
         ;; power pellet2
         dc.b %00000000
         dc.b %00000000
@@ -3717,6 +3727,7 @@ CHAR_BEGIN
         dc.b %00011000
         dc.b %00000000
         dc.b %00000000
+BIT_PWR1        
         ;; power pellet
         dc.b %00000000
         dc.b %00011000
