@@ -705,6 +705,13 @@ Sprite_turn     dc.b 5,4,4,4,4
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
 BlinkyCruise      dc.b 2        ;2 = blinky fast mode 5-255 = off
+;;; resolution of my software timer ( looks to be about 1/30 second right now with the
+;;; current code speed )
+softTimerRes   equ 30
+;;; chase table is the initial scatter/chase phases for each level
+;;; they change as levels go on
+;;; 7 seconds, 20 seconds, etc...
+ChaseTable     dc.w  7*softTimerRes,20*softTimerRes,7*softTimerRes,20*softTimerRes,5*softTimerRes,(5*60)*softTimerRes
 
         ;; in order of exit 
         ;; red=blinky ( starts outside of ghost house )
@@ -824,7 +831,7 @@ CheckFood subroutine
         beq .power_pill
 .0
         cmp #DOT
-        bne .done
+        bne .notdot
 
         jsr DotEaten
 
@@ -839,6 +846,7 @@ CheckFood subroutine
         ;; control never reaches here
 .power_pill        
         jsr PowerPill
+.notdot
 .done        
         rts
 ;;; X = sprite to erase
@@ -1105,12 +1113,14 @@ isr3 subroutine
         ora #1
         sta SirenDir
         jmp .add
-wasdot
-        dc.b 0
+
+;;; signals to stop the waka sound after completion of next cylce
+;;; see SoundOn 0 = halted 1 = not halted
 eat_halt
-        dc.b  1
+        dc.b  0
+;;; signals that the waka sound is stopped
 eat_halted
-        dc.b 1
+        dc.b 0
         
 power_top equ 244
 power_bot equ 200        
@@ -1418,8 +1428,6 @@ end_level subroutine
         rts
 ;;; reset game after pacman death
 reset_game subroutine
-        lda #0
-        sta wasdot
         
         store16 pacStart , Sprite_loc2+[2*0]
         store16 g1Start  , Sprite_loc2+[2*1]
@@ -1465,8 +1473,8 @@ reset_game subroutine
         lda S1
         beq .continue
         ;; special logic for level reset
-;        jsr reset_game0
-        jsr splash
+        jsr reset_game0
+;        jsr splash
 .continue        
         ;; 
         
@@ -1479,7 +1487,7 @@ reset_game subroutine
         sta PACFRAMED
         lda JIFFYL
         sta r_seed
-#if 1
+#if 0
 .loop0
         nop
         jmp .loop0
@@ -1548,6 +1556,11 @@ main SUBROUTINE
         sta S1                  ;arg to reset_game below
 PacDeathEntry                   ;code longjmp's here on pacman death
         jsr reset_game
+        
+        store16 screen+22*17+9,W1      ;post the player ready message
+        store16 ready_msg,W2
+        jsr getReady
+        
         jmp .background
 .loop
         lda #masterSpeed
@@ -2181,9 +2194,8 @@ LeaveBox SUBROUTINE
 ;;; 
 DotEaten SUBROUTINE
         saveX
-;        jsr SoundOn
-        lda #1
-        sta wasdot
+        jsr SoundOn
+
         lda #modeLeaving
         ldy DOTCOUNT
         cpy #pinkyDots
@@ -2233,7 +2245,15 @@ IsWall SUBROUTINE
         ;; move isn't ok, set Z=1
         lda #0
         rts
-.ok        
+.ok
+        cpx #0
+        bne .notpac
+        ;; pacman gets check to see if he has eaten here already,
+        ;; if so then turn off eating sound
+        cmp #EMPTY
+        bne .done1              ;we must be covering dots
+        jsr SoundOff
+.notpac        
         ;; move is ok, set Z=0
         lda #1
 .done1
@@ -3254,12 +3274,11 @@ scroll_horiz SUBROUTINE
         clc
         rts
 ;;; attempt to turn the dot eating sound back on
+;;; green border = eating
 SoundOn SUBROUTINE
-        lda #8
+        lda #13
         sta 36879
-        ;; ldx #3
-        ;; UnHaltTrack
-        ;; ldx #0
+
         sei
         lda #1
         sta eat_halt
@@ -3268,16 +3287,12 @@ SoundOn SUBROUTINE
         rts
 ;;; attempt to turn the dot eating sound off
 SoundOff SUBROUTINE
-        lda #0                  
-        sta wasdot
-        
-        lda #13
+        lda #8
         sta 36879
         sei
         lda #0
         sta eat_halt
         cli
-
         rts
 ;;; clear all bits to 0
 ;;; W2 = top half font ram
@@ -3621,14 +3636,59 @@ scroll_down2 SUBROUTINE
         lda #PURPLE
         sta clrram,X
         ENDM
+
+
+mkletter eqm [..-"A"+1|$80]
+ready_msg        
+        dv.b mkletter "R","E","A","D","Y"
+        dc.b 0
+end_ready_msg        
+;;; print the get ready and delay
+;;; W1=screen loc
+;;; W2=text to print
+;;; Y = length
+getReady subroutine
+        ldy #0
+.0
+        lda (W1),Y              ;save char underneath
+        sta screen,Y
+        lda (W2),y              ;load text to print
+        beq .wait
+        sta (W1),Y
+        iny
+        bne .0
+.wait
+        lda JIFFYL
+        clc
+        adc #60*3               ;3 seconds
+.gettime        
+        cmp JIFFYL
+        bne .gettime
+.1
+        lda screen,y
+        sta (W1),Y
+        dey
+        bmi .done
+        bpl .1
+.done
+        rts
+#if 0
+
+TEXTS        
+        dv.b mkletter "C","O","D","E"
+        dc.b 58|$80
+        dv.b mkletter "D","A","N","E"
+        dv.b mkletter "M","U","S","I","C"
+        dc.b 58|$80
+        dv.b mkletter "J","E","F","F"
+
+TEXTE        
 ;;; message box in center of screen
 splash subroutine
-        
-        ldx #21
-        ldy #0
-        stx S6
+
         store16 clrram,W2
         store16 screen,W1
+        ldy #0
 .loop0
         cmp16Im W2,clrram+22*23
         beq .0
@@ -3641,6 +3701,13 @@ splash subroutine
         jmp .loop0
 .0        
 
+        store16 screen+22*4,W1
+;        add16Im W1,22
+;        jsr print
+        store16 ready_msg,W2
+        jsr getReady
+        
+        ldx #21
 .loop        
         lda #HWALL
         sta screen+[tunnelRow-1]*22,x
@@ -3649,8 +3716,10 @@ splash subroutine
         dex
         beq .done
         bne .loop
+
 .done        
         rts
+#endif        
 ;;; 
 ;;; Display a BCD number
 DisplayBCD SUBROUTINE
