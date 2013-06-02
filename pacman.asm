@@ -132,7 +132,9 @@ GHOST1_TGTROW   equ $27
 CORNER_SHAVE    equ $28
 ;;; non zero when pacman is powred up, indicate 60s seconds
 ;;; left in power mode
-POWER_UP        equ $89 
+POWER_UP        equ $29
+BlinkyS1        equ $2a
+BlinkyS2        equ $2b        
         ;; 47 48 are toast?
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
@@ -685,6 +687,8 @@ fruit2Dots      equ 120          ;dots to release fruit2
 clydeDots       equ totalDots-30 ;dots to release clyde ( about 33% )
 inkyDots        equ totalDots-10 ;dots to release inky  ( )
 pinkyDots       equ totalDots-20 ;dots to release pinky ( should be 1)
+blinkyS1Dots    equ totalDots-[totalDots/4]*3  ;dots eaten for blinky speedup1
+blinkyS2Dots    equ [totalDots/4]*3
 
 g1Start         equ screen+22*11+9
 g2Start         equ screen+22*outOfBoxRow+outOfBoxCol
@@ -714,9 +718,10 @@ Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; se
 ;;; offset table of ghosts in box
 inBoxTable      dc.b 0,0,0,2,6
 Sprite_speed    dc.b 10,10,10,10,10 ;your turn gets skipped every N loops of this
-;Sprite_speed    dc.b 100,100,100,100,100 ;your turn gets skipped every N loops of this
 ;;; speeds when pacman is powered up
 eyeSpeed equ 255                ;sprite_speed setting for eyes
+blinky1  equ 8                  ;sprite speed setting for blinky speed 1
+blinky2  equ 10                 ;sprite speed setting for blinky speed 2 ( fastest)
 Sprite_speed2   dc.b 80,2,2,2,2
 ;;; default speeds for sprites for current level
 Sprite_base     dc.b 10,10,10,10,10
@@ -1127,8 +1132,10 @@ SirenIdx
 SirenDir dc.b 1       
 isr3 subroutine
         ldy SirenIdx
+XsirenTop                       ;self modifying code
         cpy #sirenTop
         bcs .reverse
+XsirenBot                       ;self modifying code
         cpy #sirenBot
         bcc .reverse
 .add
@@ -1577,6 +1584,10 @@ reset_game1 subroutine
         sta LevelsComplete
         lda #255
         sta PowerPillTime
+        lda blinkyS1Dots
+        sta BlinkyS1
+        lda blinkyS2Dots
+        sta BlinkyS2
         rts
 ;-------------------------------------------
 ; MAIN()
@@ -1622,6 +1633,8 @@ main SUBROUTINE
         bne .top
 .done
 
+        jsr reset_game1
+        
         tsx
         stx ResetPoint
 
@@ -2250,6 +2263,20 @@ LeaveBox SUBROUTINE
         sta Sprite_mode,X
 
 .done        
+        rts                     ;
+        ;; increase blinky speed
+IncreaseBlinky subroutine
+        brk
+        lda #2
+        sta BlinkyCruise
+        lda XsirenTop+1
+        clc
+        adc #5
+        sta XsirenTop+1
+        lda XsirenBot+1
+        clc
+        adc #5
+        sta XsirenBot+1
         rts
 ;;; 
 DotEaten SUBROUTINE
@@ -2258,6 +2285,10 @@ DotEaten SUBROUTINE
 
         lda #modeLeaving
         ldy DOTCOUNT
+        cpy BlinkyS1
+        bcs .00
+        jsr IncreaseBlinky
+.00        
         cpy #pinkyDots
         bcs .0
         ldx #pinky
