@@ -132,7 +132,7 @@ GHOST1_TGTROW   equ $27
 CORNER_SHAVE    equ $28
 ;;; non zero when pacman is powred up, indicate 60s seconds
 ;;; left in power mode
-POWER_UP        equ $29 
+POWER_UP        equ $89 
         ;; 47 48 are toast?
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
@@ -245,13 +245,26 @@ PACL            equ [GH3L+4]        ;pacman char number
         tax
         pla
         ENDM
+        ;; test if jiffy timer == timer1
+        MAC HasTimer1Expired
+        
+        lda JIFFYM
+        cmp TIMER1+1
+        bcc .done
+        lda JIFFYL
+        cmp TIMER1
+        bcc .done
+        ;; notify timer1 expired
+        jsr Timer1Expired
+.done
+        ENDM
         ;; compare {1} with #{2} 
         MAC cmp16Im
-        lda {1}
-        cmp #[{2}] & $ff    ; load low byte
-        bne .done
         lda {1}+1
         cmp #{2} >> 8     ; load high byte
+        bne .done
+        lda {1}
+        cmp #[{2}] & $ff    ; load low byte
 .done        
         ENDM
         ;; make a number negative ( if it isn't ) by creating the 2's complement of it
@@ -302,6 +315,30 @@ PACL            equ [GH3L+4]        ;pacman char number
         lda #{1}
         sta S1
         jsr longJmp
+        ENDM
+        MAC Display2
+        pha                     ;save A
+        txa
+        pha
+        
+        lda #[{1}-"A"+1 | $80]
+        ldx #{2}
+        sta screen,X
+
+        lda {3}
+        sta BCD
+        jsr DisplayBCD
+
+        inx
+        lda {4}
+        sta BCD
+        jsr DisplayBCD
+
+
+        pla
+        tax
+
+        pla                     ;restore A
         ENDM
 ;;; display a single byte {3} at offset {2} on top line prefixed by char {1}
         MAC Display1
@@ -381,13 +418,14 @@ PACL            equ [GH3L+4]        ;pacman char number
     sta [{1}]
     stx [{1}]+ 1
     endm
-
-    mac dec16
-    LDA [{1}]+0
-    BNE .done
-    DEC [{1}]+1
-.done    DEC [{1}]+0
-    endm
+        ;; duh, you can't use beq with this
+        MAC dec16
+        lda  [{1}]+0
+        bne .done
+        dec [{1}]+1
+.done
+        dec [{1}]+0
+        ENDM
 
     mac inc16
     INC [{1}]+0
@@ -455,7 +493,7 @@ PACL            equ [GH3L+4]        ;pacman char number
     pla
     tax
     endm
-    ;; 16 bit add W1+W2 result in W1
+    ;; 16 bit add {1}+{2} result in {1}
     mac add
         CLC                     ;Ensure carry is clear
         LDA [{1}]+0             ;Add the two least significant bytes
@@ -518,27 +556,6 @@ PACL            equ [GH3L+4]        ;pacman char number
         lda {1}+1
         sbc #[{2}]>>8
         sta {1}+1
-        ENDM
-        ;; ghosts to chase mode
-        ;; important: Z false on exit
-        MAC ChaseMode
-
-        Display1 "C",10,#1
-        store16 255,TIMER1
-        lda #1
-        sta CHASEMODE
-        
-        ENDM
-        ;; ghosts to Scatter mode
-        ;; Z true on exit
-        MAC ScatterMode
-
-        store16 110,TIMER1
-
-        Display1 "S",10,TIMER1
-        lda #0
-        sta CHASEMODE
-        
         ENDM
         ;; increment dot count
         ;; checking for end of level
@@ -651,8 +668,9 @@ clydeHomeCol    equ 6
 clydeHomeRow    equ 23-2
 inkyHomeCol     equ 23-6
 inkyHomeRow     equ 23-2        
-;;; screen location of ghost box exit
-ghostBoxExit    cmp [screen+[22*outOfBoxRow]+outOfBoxCol]
+;;; screen location of ghost box exit, the block above it
+ghostBoxExit    equ [screen+[22*outOfBoxRow]+outOfBoxCol]
+ghostBoxHall    equ ghostBoxExit+22 
 ;;; the ghost's by X register offset
 inky            equ 1        
 blinky          equ 2
@@ -661,6 +679,7 @@ clyde           equ 4
 nobody          equ 10        
 focusGhost      equ nobody       ;ghost to print debugging for
 totalDots       equ $A6          ;total dots in maze
+;totalDots       equ 1          ;total dots in maze
 fruit1Dots      equ 70           ;dots to release fruit
 fruit2Dots      equ 120          ;dots to release fruit2
 clydeDots       equ totalDots-30 ;dots to release clyde ( about 33% )
@@ -705,14 +724,20 @@ Sprite_turn     dc.b 5,4,4,4,4
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
 BlinkyCruise      dc.b 2        ;2 = blinky fast mode 5-255 = off
-;;; resolution of my software timer ( looks to be about 1/30 second right now with the
-;;; current code speed )
-softTimerRes   equ 30
+;;; resolution of system timer in 1/x seconds
+softTimerRes   equ 60
 ;;; chase table is the initial scatter/chase phases for each level
 ;;; they change as levels go on
 ;;; 7 seconds, 20 seconds, etc...
-ChaseTable     dc.w  7*softTimerRes,20*softTimerRes,7*softTimerRes,20*softTimerRes,5*softTimerRes,(5*60)*softTimerRes
-
+;;; even values are scatter mode, odd are chase mode
+;;; iteration starts from end 
+ChaseTable     dc.w  (5*60)*softTimerRes,5*softTimerRes,20*softTimerRes,7*softTimerRes,20*softTimerRes,7*softTimerRes
+PowerPillTime  dc.b 255        
+ChaseTableEnd
+ChaseTableSz equ [[ChaseTableEnd-ChaseTable]/2]-1 ;entries in above table -1
+ChaseTableIdx dc.b ChaseTableSz
+LevelsComplete dc.b -1
+;LastUpgrade dc.b 0        
         ;; in order of exit 
         ;; red=blinky ( starts outside of ghost house )
         ;; green = pinky AI
@@ -840,7 +865,6 @@ CheckFood subroutine
         dec DOTCOUNT
         bne .done
         ;; end_level
-        brk
         jsr uninstall_isr
         JmpReset 1
         ;; control never reaches here
@@ -1001,7 +1025,7 @@ ReverseDirection subroutine
         ;; careful not to reverse ghosts that are coming
         ;; out of the box
         move16x Sprite_loc,W1
-        cmp16Im W1,[outOfBoxRow*22]+outOfBoxCol+screen
+        cmp16Im W1,ghostBoxExit
         beq .down               ;put it back to up
         lda #motionDown
 .leave        
@@ -1025,14 +1049,30 @@ ReverseGhosts SUBROUTINE
         rts
 Timer1Expired SUBROUTINE
         jsr ReverseGhosts
-        lda CHASEMODE
-        beq .chase ;were we not in chase mode?  then switch to it
-
-        ScatterMode ;were were in chase mode, switch to scatter
-
+        ldx ChaseTableIdx       ;move down to next table entry
+        dex
+        bpl .0                  ;branch positive
+        ;; < 0 wrapping around table
+initChaseTimer        
+        ldx #ChaseTableSz        ;reload table index to top of table
+.0
+        stx ChaseTableIdx
+        move16x ChaseTable,TIMER1   ;chase time to TIMER1
+        lda JIFFYL
+        clc
+        adc TIMER1
+        sta TIMER1
+        lda JIFFYM
+        adc TIMER1+1
+        sta TIMER1+1
+        
+        Display1 "S",10,#1
+        inx                     ;add 1 such that even/odd works the way we want
+        txa                     ;
+        and #1                  ;bit 0 controls chase or scatter even or odd
+        sta CHASEMODE
         beq .done
-.chase        
-        ChaseMode ;switch to chase mode
+        Display1 "C",10,#1
 .done
         rts
 
@@ -1053,15 +1093,14 @@ PowerPillOff SUBROUTINE
         sta Sprite_mode,Y
 .0        
         dey
-        bmi .done
-        jmp .loop
+        bpl .loop
 .done        
         rts
 ;;; called when a power pill is activated
 ;;; 
 PowerPill SUBROUTINE
-;        saveY
-        lda #210                ;load powr pill on time
+;        rts
+        lda PowerPillTime
         sta POWER_UP            ;store in timer
         ldy #SPRITES            ;init loop counter
         ;; install new speed map for all sprites
@@ -1076,12 +1115,9 @@ PowerPill SUBROUTINE
         sta Sprite_mode,Y
 .0        
         dey
-        bmi .done
         bpl .loop
-;        lda #11
-;        sta 36879
 .done
-;        resY
+
         rts
         
 sirenBot equ 211+5-3+5
@@ -1426,7 +1462,10 @@ death subroutine
 
 end_level subroutine
         rts
-;;; reset game after pacman death
+;;; 
+;;; reset game after pacman death, or level start
+;;; inputs: S1=0 causes us to draw the maze and do all initialization for a new level
+;;; 
 reset_game subroutine
         
         store16 pacStart , Sprite_loc2+[2*0]
@@ -1453,7 +1492,6 @@ reset_game subroutine
         store16x GHOST,Sprite_src ;set bitmap for ghosts
 .skip_bmap
         dex
-        bmi .1
         bpl .0
 .1
         lda #motionLeft
@@ -1493,17 +1531,52 @@ reset_game subroutine
         jmp .loop0
 #endif
 
-        ScatterMode         ;start ghosts out in scatter mode
         jsr install_isr
         rts
-;;; full game reset
+;;; level game reset
 reset_game0 subroutine
         jsr mkmaze
         lda #GHOST_WALL
         sta [[outOfBoxRow+1]*22]+outOfBoxCol+screen
         lda #CYAN
         sta [[outOfBoxRow+1]*22]+outOfBoxCol+clrram
-        
+
+        jsr initChaseTimer
+
+        ;; modify difficulty settings based on level
+        lda LevelsComplete
+        and #1                  ;odd numbered levels completed?
+        bne .1                  ;no, keep everything the same
+        ;; make level harder
+        ldx ChaseTableSz
+.0
+        move16x ChaseTable,W1
+        sub16Im W1,[2*softTimerRes]
+        cmp16Im W1,#0           ;did this number hit 0
+        bne .not0
+        store16 #2,W1           ;no lower on this number
+        move16x2 W1,ChaseTable
+.not0
+        dex
+        dex
+        bpl  .0
+        lda PowerPillTime
+        sec
+        sbc #60
+        bcs .pos
+        ;; store min
+        lda #2
+.pos
+        sta PowerPillTime
+.1  
+        inc LevelsComplete
+        rts
+;;; full game system reset
+reset_game1 subroutine
+        lda #-1
+        sta LevelsComplete
+        lda #255
+        sta PowerPillTime
         rts
 ;-------------------------------------------
 ; MAIN()
@@ -1552,7 +1625,7 @@ main SUBROUTINE
         tsx
         stx ResetPoint
 
-        lda #1
+        lda #1                  ;ask reset game to do full reset
         sta S1                  ;arg to reset_game below
 PacDeathEntry                   ;code longjmp's here on pacman death
         jsr reset_game
@@ -1573,11 +1646,6 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         bne .iloop
         ;; ok, we are at vertical blank, on one of the frames we want to render
         ;; here we go ...
-        ldx #3
-;        jsr VoiceTrack_svc          ; run sound engine
-        ldx #4
-;        jsr VoiceTrack_svc          ; run sound engine
-        
 
         Invert Sprite_page      ;dbl buffering, switch sprite tiles
 
@@ -1589,14 +1657,11 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         bne .skip
         jsr PowerPillOff
 .skip
-        cmp16Im TIMER1,#0
-        beq .start
-        DEC16 TIMER1
-        bne .start
-        ;; notify timer1 expired
-        jsr Timer1Expired
-.start        
-;        Display1 "T",0,TIMER1
+        HasTimer1Expired        ;test if Timer1 expired and notify
+
+        Display1 "P",0,PowerPillTime
+;        Display2 "T",0,TIMER1+1,TIMER1
+;        Display2 "J",5,JIFFYM,JIFFYL
 ;        Display1 "J",0,JIFFYL
         InitSpriteLoop          ;foreach sprite
 .eraseloop
@@ -1622,11 +1687,6 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         ldy Sprite_dir,X
         lda (W1),Y
         sta Sprite_back2,X
-        cpx #0
-        bne .backloop
-        cmp #PWR
-        bne .backloop
-        jsr PowerPill
         ;; end collection of background tiles
         jmp .backloop
         
@@ -1659,7 +1719,7 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         jmp .playerloop
 
 .loopend
-        Display1 "D",0,DOTCOUNT
+;        Display1 "D",0,DOTCOUNT
         jmp .loop
         brk
         
@@ -2226,17 +2286,6 @@ DotEaten SUBROUTINE
 ;;; return true ( Z=1 ) if character in A is a wall
 ;;; W2 ( candidate position )
 IsWall SUBROUTINE
-        cmp #GHOST_WALL          ;check for ghost box entrance char
-        bne .checkWall          ;not it, go to regular wall check
-        lda Sprite_mode,X       ;what mode is sprite in
-        cmp #modeOutOfBox       ;are we normal out of box mode?
-        beq .done1              ;yes, then its considered a wall
-        cmp #modeFright         ;are we frightened out of box mode?
-        beq .done1              ;yes, then its considered a wall
-        cmp #modePacman         ;and pacman ain't allowed in here
-        beq .done1
-        ;; we are eaten or leaving the box, this move is ok
-        rts                     ;Z=0, move is ok
 .checkWall
         cmp #TEEBOT
         bcc .ok                 ;less the TEEBOT tile
@@ -3406,8 +3455,7 @@ blith SUBROUTINE
         sta (W3),Y
 #endif        
         dey
-        bmi .done
-        jmp .nextbyte
+        bpl .nextbyte
 .done
     rts
 
@@ -3484,6 +3532,29 @@ changehoriz SUBROUTINE
 
         clc                     ;return success
         rts
+        ;; 
+        MAC CheckGhostBox
+        lda W2
+        clc
+        adc SPRT_LOCATOR
+        sta W1
+        lda W2+1
+        adc #0
+        sta W1+1
+        cmp16Im W1,ghostBoxHall
+        bne .done               ;not ghost box, ok to proceed
+        
+        lda Sprite_mode,X       ;what mode is sprite in
+        cmp #modeOutOfBox       ;are we normal out of box mode?
+        beq .done               ;yes, then its considered a wall
+        cmp #modeFright         ;are we frightened out of box mode?
+        beq .done               ;yes, then its considered a wall
+        cmp #modePacman         ;and pacman ain't allowed in here
+        beq .done
+        ;; we are eaten or leaving the box, this move is ok
+        ;note: Z=0
+.done        
+        ENDM
 ;;; change orientation of the 2 tiles that represent pacman
 ;;; to vertical
 ;;; C = true if failed
@@ -3527,6 +3598,9 @@ ChangeVertFailed       ; we can't change directions  in middle of tile
         sty S3                  ;update ORG offset
 .endtile                        ;end of tiles branch
         subxx W1,W2,S3          ;generate ORG address in W2
+
+        CheckGhostBox
+        beq ChangeVertFailed
         
         ldy SPRT_LOCATOR
         lda (W2),Y
@@ -3642,8 +3716,9 @@ mkletter eqm [..-"A"+1|$80]
 ready_msg        
         dv.b mkletter "R","E","A","D","Y"
         dc.b 0
-end_ready_msg        
-;;; print the get ready and delay
+end_ready_msg
+;;; 
+;;; print the get ready and delay before player gets control of a level
 ;;; W1=screen loc
 ;;; W2=text to print
 ;;; Y = length
@@ -3668,7 +3743,6 @@ getReady subroutine
         lda screen,y
         sta (W1),Y
         dey
-        bmi .done
         bpl .1
 .done
         rts
@@ -4238,7 +4312,21 @@ ghost AI
         set the target tile
 
         there are 171 dots in our maze
-        
+
+
+todo:
+
+        blinky cruise mode enable disable
+        siren tone change
+        better corerning advantage for pacman
+        sounds dont disengage when ending game
+        doesn't run under basic cuz of interrupt problems
+        collisions are too tight and also too wide sometimes
+        ghosts need to speed up
+        difficulty needs to speed them up
+        pacman needs to speed up
+        ghosts can't come out like gangbusters on first dot
+        but also need a timer
 #endif
 
         
