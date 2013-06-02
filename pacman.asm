@@ -132,7 +132,7 @@ GHOST1_TGTROW   equ $27
 CORNER_SHAVE    equ $28
 ;;; non zero when pacman is powred up, indicate 60s seconds
 ;;; left in power mode
-POWER_UP        equ $89 
+POWER_UP        equ $29 
         ;; 47 48 are toast?
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
@@ -683,7 +683,7 @@ totalDots       equ $A6          ;total dots in maze
 fruit1Dots      equ 70           ;dots to release fruit
 fruit2Dots      equ 120          ;dots to release fruit2
 clydeDots       equ totalDots-30 ;dots to release clyde ( about 33% )
-inkyDots        equ totalDots-10 ;dots to release inky  ( )
+inkyDots        equ totalDots-50 ;dots to release inky  ( )
 pinkyDots       equ totalDots-20 ;dots to release pinky ( should be 1)
 
 g1Start         equ screen+22*11+9
@@ -1236,25 +1236,6 @@ isr2 subroutine
 .nothalted        
         ldx #SirenTableEnd-SirenTable
         bne .0
-#if 0        
-isr1
-
-        pha
-        txa
-        pha
-        tya
-        pha
-        ldx #2
-        jsr VoiceTrack_svc
-        ldx #4
-        jsr VoiceTrack_svc
-        pla
-        tay
-        pla
-        tax
-        pla
-        jmp $eabf
-#endif
 uninstall_isr subroutine
         sei
         store16 defaultISR,$0314
@@ -1582,10 +1563,7 @@ reset_game1 subroutine
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
-        ;; cli
-        ;; lda #8
-        ;; sta 36878
-        ;; jsr sound1
+
 #if 0
         lda #$ea
         DoubleSigned
@@ -1598,12 +1576,7 @@ main SUBROUTINE
         jsr DisplayBCD
         brk
 #endif
-
-        ;; huh, not surprisingly, if you don't run the cli
-        ;; the keyboard doesn't work
-        ;; but who turned it off? weird
-        
-;        cli                     ; enable interrupts for jiffy clock
+        sei
 
         lda #0
         sta $9113               ;joy VIA to input
@@ -1632,7 +1605,7 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         
         store16 screen+22*17+9,W1      ;post the player ready message
         store16 ready_msg,W2
-        jsr getReady
+;        jsr getReady
         
         jmp .background
 .loop
@@ -1659,7 +1632,7 @@ PacDeathEntry                   ;code longjmp's here on pacman death
 .skip
         HasTimer1Expired        ;test if Timer1 expired and notify
 
-        Display1 "P",0,PowerPillTime
+;        Display1 "P",0,PowerPillTime
 ;        Display2 "T",0,TIMER1+1,TIMER1
 ;        Display2 "J",5,JIFFYM,JIFFYL
 ;        Display1 "J",0,JIFFYL
@@ -2058,6 +2031,7 @@ UpdateMotion2 SUBROUTINE
         ;; {1} as screen location
         ;; broken into col,row
         ;; stored in {2} , {3}
+        ;; uses: W1
         MAC ScreenToColRow
         sub16Im {1},screen
         jsr Divide22_16
@@ -2592,16 +2566,17 @@ PossibleMoves SUBROUTINE
 FrightAI SUBROUTINE
         ;; pick a random offset from pacman's location
         ;; to become our target tile
-        store16 screen,W1
+        store16 screen,W2       ;because ScreentoColRow uses W1
         jsr rand_8
-        add W1,r_seed
+        add W2,r_seed           ;
         jsr rand_8
-        add W1,r_seed
-;        W1 is the screen location of our target tile ;
+        add W2,r_seed
+        ;; W2 is the screen location of our target tile ;
 
-        ScreenToColRow W1,GHOST_TGTCOL,GHOST_TGTROW
+        ScreenToColRow W2,GHOST_TGTCOL,GHOST_TGTROW
 ;        Display1 "X",0,GHOST_TGTCOL ;
 ;        Display1 "Y",3,GHOST_TGTROW
+;        Display2 "W",0,W1+1,W1
         
         rts
 ;;;
