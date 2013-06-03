@@ -133,8 +133,11 @@ CORNER_SHAVE    equ $28
 ;;; non zero when pacman is powred up, indicate 60s seconds
 ;;; left in power mode
 POWER_UP        equ $29
-BlinkyS1        equ $2a
-BlinkyS2        equ $2b        
+BlinkyS1        equ $2a         
+BlinkyS2        equ $2b
+InkyDots        equ $2c
+PinkyDots       equ $2d
+ClydeDots       equ $2e        
         ;; 47 48 are toast?
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
@@ -146,7 +149,9 @@ GHOST_COL       equ $35
 GHOST_ROW       equ $36
 
 SCORE_l         equ $37
-SCORE_h         equ $38        
+SCORE_h         equ $38
+LevelStartTm    equ $39
+LevelStartTm_h  equ $3a        
 S7              equ $43
 W5              equ $32
 W6              equ $44
@@ -247,17 +252,17 @@ PACL            equ [GH3L+4]        ;pacman char number
         tax
         pla
         ENDM
-        ;; test if jiffy timer == timer1
-        MAC HasTimer1Expired
+        ;; test if jiffy timer > timer1
+        MAC HasTimerExpired
         
         lda JIFFYM
-        cmp TIMER1+1
+        cmp {1}+1
         bcc .done
         lda JIFFYL
-        cmp TIMER1
+        cmp {1}
         bcc .done
         ;; notify timer1 expired
-        jsr Timer1Expired
+        jsr {2}
 .done
         ENDM
         ;; compare {1} with #{2} 
@@ -685,9 +690,8 @@ totalDots       equ $A6          ;total dots in maze
 fruit1Dots      equ 70           ;dots to release fruit
 fruit2Dots      equ 120          ;dots to release fruit2
 clydeDots       equ totalDots-30 ;dots to release clyde ( about 33% )
-inkyDots        equ totalDots-50 ;dots to release inky  ( )
+inkyDots        equ totalDots-10 ;dots to release inky  ( )
 pinkyDots       equ totalDots-20 ;dots to release pinky ( should be 1)
-blinkyS1Dots    equ totalDots-[totalDots/4]*3  ;dots eaten for blinky speedup1
 blinkyS2Dots    equ [totalDots/4]*3
 
 g1Start         equ screen+22*11+9
@@ -717,6 +721,8 @@ Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*
 Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; see motion defines
 ;;; offset table of ghosts in box
 inBoxTable      dc.b 0,0,0,2,6
+;LastGhostLeft   dc.w 0              ;time of last ghost box exit, see LeaveBox
+boxTable        dc.b 0,10,50,100,150,200        
 Sprite_speed    dc.b 10,10,10,10,10 ;your turn gets skipped every N loops of this
 ;;; speeds when pacman is powered up
 eyeSpeed equ 255                ;sprite_speed setting for eyes
@@ -728,6 +734,8 @@ Sprite_base     dc.b 10,10,10,10,10
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
+blinkyCruiseOn equ 2
+blinkyCruiseOff equ 5        
 BlinkyCruise      dc.b 2        ;2 = blinky fast mode 5-255 = off
 ;;; resolution of system timer in 1/x seconds
 softTimerRes   equ 60
@@ -753,7 +761,7 @@ LevelsComplete dc.b -1
         ;; or in ghost box already
         ;; etc
 Sprite_mode    dc.b modePacman,0,modeOutOfBox,0,0  ;in ghost box if false
-masterSpeed      equ 8 ;master game delay
+masterSpeed      equ 1 ;master game delay
 ;;; 
 ;;; division table for division by 22
 Div22Table      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
@@ -1125,8 +1133,8 @@ PowerPill SUBROUTINE
 
         rts
         
-sirenBot equ 211+5-3+5
-sirenTop equ 222+5+5
+sirenBot equ 211+5-3
+sirenTop equ 222+5
 SirenIdx
         dc.b sirenBot+1
 SirenDir dc.b 1       
@@ -1501,8 +1509,38 @@ reset_game subroutine
         ;; special logic for level reset
         jsr reset_game0
 ;        jsr splash
-.continue        
-        ;; 
+.continue
+        ;; set up dot counts for releasing ghosts
+        ;; 41 is totalDots/4
+        ;; totalDots/8 = 20
+        ;; /16 = 20
+        lda DOTCOUNT
+        clc
+        lsr                     ;2
+        sta XBlinkyS1+1
+        lsr                     ;4
+        sta ClydeDots
+        lsr                     ;8
+        sta PinkyDots
+        lsr                     ;16
+        sta InkyDots
+        ;;
+        lda DOTCOUNT
+        tay
+        sec
+        sbc InkyDots
+        sta XInkyDots+1
+        tya
+        sbc PinkyDots
+        sta XPinkyDots+1
+        tya
+        sbc ClydeDots
+        sta XClydeDots+1
+        lda JIFFYL
+        sta LevelStartTm
+        lda JIFFYM
+        sta LevelStartTm+1
+
         
         lda #8
         sta 36879               ; border and screen colors
@@ -1530,7 +1568,8 @@ reset_game0 subroutine
         sta [[outOfBoxRow+1]*22]+outOfBoxCol+clrram
 
         jsr initChaseTimer
-
+        lda #blinkyCruiseOff
+        sta BlinkyCruise
         ;; modify difficulty settings based on level
         lda LevelsComplete
         and #1                  ;odd numbered levels completed?
@@ -1565,10 +1604,6 @@ reset_game1 subroutine
         sta LevelsComplete
         lda #255
         sta PowerPillTime
-        lda blinkyS1Dots
-        sta BlinkyS1
-        lda blinkyS2Dots
-        sta BlinkyS2
         rts
 ;-------------------------------------------
 ; MAIN()
@@ -1643,7 +1678,7 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         bne .skip
         jsr PowerPillOff
 .skip
-        HasTimer1Expired        ;test if Timer1 expired and notify
+        HasTimerExpired TIMER1,Timer1Expired        ;test if Timer1 expired and notify
 
 ;        Display1 "P",0,PowerPillTime
 ;        Display2 "T",0,TIMER1+1,TIMER1
@@ -2224,6 +2259,8 @@ GhostTurn
         jmp .loop
         
         rts
+
+lastLeft        dc.b 128
 ;;; open the door on the ghost box
 LeaveBox SUBROUTINE
         lda #modeInBox
@@ -2232,25 +2269,35 @@ LeaveBox SUBROUTINE
         ;; make sure ghost has proper bitmap
         ;; in case if was the eaten eyes leaving the box
         store16x GHOST,Sprite_src
-        ;; instruct the ghost to leave the box
+
+        ;; instruct ghost to leave box
         lda #modeLeaving
         sta Sprite_mode,X
-
+        
 .done        
         rts                     ;
         ;; increase blinky speed
+soundInc equ 3        
 IncreaseBlinky subroutine
-        brk
+
+        sei
+        
         lda #2
         sta BlinkyCruise
         lda XsirenTop+1
         clc
-        adc #5
+        adc #soundInc
         sta XsirenTop+1
         lda XsirenBot+1
         clc
-        adc #5
+        adc #soundInc
         sta XsirenBot+1
+        lda SirenIdx
+        clc
+        adc #soundInc
+        sta SirenIdx
+        
+        cli
         rts
 ;;; 
 DotEaten SUBROUTINE
@@ -2259,10 +2306,16 @@ DotEaten SUBROUTINE
 
         lda #modeLeaving
         ldy DOTCOUNT
-        cpy BlinkyS1
+        lda BlinkyCruise
+        cmp #blinkyCruiseOn
+        beq .00                 ;blinky is already cruising
+XBlinkyS1        
+        cpy #[totalDots/2]
         bcs .00
+
         jsr IncreaseBlinky
-.00        
+.00
+XPinkyDots        
         cpy #pinkyDots
         bcs .0
         ldx #pinky
@@ -2275,12 +2328,14 @@ DotEaten SUBROUTINE
         cpy #fruit2Dots
         bne .2
         jsr Fruit
-.2        
+.2
+XInkyDots        
         cpy #inkyDots
         bcs .3
         ldx #inky
         jsr LeaveBox
-.3        
+.3
+XClydeDots        
         cpy #clydeDots
         bcs .4
         ldx #clyde
@@ -2658,8 +2713,8 @@ Ghost4AI SUBROUTINE
         rts
 .tooclose
         ;; run away to opposite quadrant of pacman
-        lda #WHITE
-        sta Sprite_color,X
+;        lda #WHITE
+;        sta Sprite_color,X
         lda PACCOL
         cmp #11
         bcs .paconright
