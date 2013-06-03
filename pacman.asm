@@ -127,11 +127,11 @@ GHOST_TGTCOL    equ $24
 GHOST_TGTROW    equ $25
 GHOST1_TGTCOL   equ $26
 GHOST1_TGTROW   equ $27
-;;amount sprite move routines can shave off during cornering
+;;; amount sprite move routines can shave off during cornering
 ;;; pacman get +1 on corners, ghosts get 0
 CORNER_SHAVE    equ $28
-;;; non zero when pacman is powred up, indicate 60s seconds
-;;; left in power mode
+;;; non zero when pacman is powred up, indicate 'gameloop units' 
+;;; left in power mode, this does not use the jiffy timer
 POWER_UP        equ $29
 BlinkyS1        equ $2a         
 BlinkyS2        equ $2b
@@ -323,6 +323,9 @@ PACL            equ [GH3L+4]        ;pacman char number
         sta S1
         jsr longJmp
         ENDM
+        ;; 
+        ;; display 16 bits debugging
+        ;; 
         MAC Display2
         pha                     ;save A
         txa
@@ -653,6 +656,9 @@ pacframes  equ #4            ; total number of pacman animation frames ( 1 based
 ;------------------------------------
 dirVert         equ 22            ;sprite oriented vertically
 dirHoriz        equ 1             ;sprite oriented horizontally
+modeEndLevel    equ 1             ;see JmpReset
+modePacDeath    equ 0             ;see JmpReset
+modeRstGame     equ 2             ;see JmpReset
 modeInBox       equ 0
 modePacman      equ 5             ;mode only pacman has
 ;;;changes from scatter to chase cause reverse for example
@@ -734,9 +740,15 @@ Sprite_base     dc.b 10,10,10,10,10
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
-blinkyCruiseOn equ 2
-blinkyCruiseOff equ 5        
-BlinkyCruise      dc.b 2        ;2 = blinky fast mode 5-255 = off
+blinkyCruise1 equ 1
+blinkyCruise2 equ 2
+blinkyCruiseOff equ 0
+;;; controls the speed of blinky
+;;; the lower 4 bits control which ghost gets the speed boost
+;;; if BlinkyCruise & 0x7 == ghost then cruise mode on
+;;; bit 7 controls cruise mode 1 or 2
+;;; 
+BlinkyCruise      dc.b 0        ;1 = fast,2=faster
 ;;; resolution of system timer in 1/x seconds
 softTimerRes   equ 60
 ;;; chase table is the initial scatter/chase phases for each level
@@ -879,7 +891,7 @@ CheckFood subroutine
         bne .done
         ;; end_level
         jsr uninstall_isr
-        JmpReset 1
+        JmpReset modeEndLevel
         ;; control never reaches here
 .power_pill        
         jsr PowerPill
@@ -1093,8 +1105,8 @@ initChaseTimer
 ;;; 
 PowerPillOff SUBROUTINE
         lda #0
-        sta 36876,0
-        sta 36877,0
+        sta 36876
+        sta 36877
         ldy #SPRITES
 .loop        
         lda Sprite_base,Y
@@ -1399,9 +1411,9 @@ deathStartNote equ 220              ;death start note
 deathStep      equ 2                ;note step
 deathCount     equ 5                ;iterations
 deathStopNote  equ deathStartNote-[deathCount*deathStep]
+        ;; 
         ;; perform a C style longjmp
-        ;; to {2} using {1} as saved stack
-        ;; with death mode {3} stored in S1
+        ;; no return from this method
 longJmp subroutine
         ldx ResetPoint
         txs
@@ -1415,9 +1427,10 @@ death subroutine
         jsr uninstall_isr
         ldx #0
         stx POWER_UP            ;no more power mode
+        jsr PowerPillOff        ;call off routine to clean up
 
-        jsr ClearPacSite
-        store16 PAC1,AUDIO  ;
+        jsr ClearPacSite        ;make a clear screen for the death animation
+        store16 PAC1,AUDIO  
 
         lda #deathStartNote
         sta S3                  ;initial note
@@ -1454,7 +1467,7 @@ death subroutine
 .done
         
         jsr ClearPacSite
-        JmpReset 0              ;reset game, pacman died mode
+        JmpReset modePacDeath   ;reset level, pacman died mode
 
 end_level subroutine
         rts
@@ -1505,12 +1518,12 @@ reset_game subroutine
         sta Sprite_mode+0
 
         lda S1
-        beq .continue
-        ;; special logic for level reset
-        jsr reset_game0
-;        jsr splash
+        beq .continue           ;anything greater than 0 is modePacDeath or modeRstGame
+        jsr reset_game0         ; special logic for level reset
 .continue
         ;; set up dot counts for releasing ghosts
+        ;; this is self modifying code, as we are overwriting
+        ;; the cpy instruction's argument elsewhere in the code
         ;; 41 is totalDots/4
         ;; totalDots/8 = 20
         ;; /16 = 20
@@ -1520,6 +1533,7 @@ reset_game subroutine
         sta XBlinkyS1+1
         lsr                     ;4
         sta ClydeDots
+        sta XBlinkyS2+1         ;blinky to full speed at 75% of dots eaten
         lsr                     ;8
         sta PinkyDots
         lsr                     ;16
@@ -1528,14 +1542,16 @@ reset_game subroutine
         lda DOTCOUNT
         tay
         sec
-        sbc InkyDots
-        sta XInkyDots+1
+        sbc InkyDots            ;subtract inky dots from totalDots
+        sta XInkyDots+1         ;store in compare instruction
         tya
-        sbc PinkyDots
-        sta XPinkyDots+1
+        sbc PinkyDots           ;subtract pinky dots from totalDots
+        sta XPinkyDots+1        ;store in compare instruction
         tya
-        sbc ClydeDots
-        sta XClydeDots+1
+        sbc ClydeDots           ;subtract clyde dots from totalDots
+        sta XClydeDots+1        ;store in compare instruction
+
+        ;; store the time the level was started
         lda JIFFYL
         sta LevelStartTm
         lda JIFFYM
@@ -1560,6 +1576,9 @@ reset_game subroutine
         jsr install_isr
         rts
 ;;; level game reset
+;;; or possibly full game reset
+;;; #modePacDeath or #modeRstGame
+;;; 
 reset_game0 subroutine
         jsr mkmaze
         lda #GHOST_WALL
@@ -1568,8 +1587,8 @@ reset_game0 subroutine
         sta [[outOfBoxRow+1]*22]+outOfBoxCol+clrram
 
         jsr initChaseTimer
-        lda #blinkyCruiseOff
-        sta BlinkyCruise
+        jsr ResetBlinky
+
         ;; modify difficulty settings based on level
         lda LevelsComplete
         and #1                  ;odd numbered levels completed?
@@ -2277,28 +2296,33 @@ LeaveBox SUBROUTINE
 .done        
         rts                     ;
         ;; increase blinky speed
+
+ResetBlinky subroutine
+        lda #sirenTop
+        sta XsirenTop+1
+        lda #sirenBot
+        sta XsirenBot+1
+        lda #sirenBot+1
+        sta SirenIdx
+        rts
+;;;
+;;; Increase blinky speed to make things harder
+;;; 
 soundInc equ 3        
 IncreaseBlinky subroutine
-
-        sei
         
-        lda #2
+        sei
+
         sta BlinkyCruise
-        lda XsirenTop+1
-        clc
-        adc #soundInc
-        sta XsirenTop+1
-        lda XsirenBot+1
-        clc
-        adc #soundInc
-        sta XsirenBot+1
-        lda SirenIdx
-        clc
-        adc #soundInc
-        sta SirenIdx
+        inc XsirenTop+1
+        inc XsirenBot+1
+        inc SirenIdx
         
         cli
         rts
+;;;
+;;; self modifying code
+;;; for blinky speed
 ;;; 
 DotEaten SUBROUTINE
         saveX
@@ -2307,14 +2331,22 @@ DotEaten SUBROUTINE
         lda #modeLeaving
         ldy DOTCOUNT
         lda BlinkyCruise
-        cmp #blinkyCruiseOn
+        cmp #blinkyCruise1      ;already in cruise mode 1?
         beq .00                 ;blinky is already cruising
 XBlinkyS1        
-        cpy #[totalDots/2]
-        bcs .00
-
-        jsr IncreaseBlinky
+        cpy #[totalDots/2]      ;time to go into mode 1
+        bcs .00                 ;nope, skip mode 1
+        lda #blinkyCruise1      ;select speed mode
+        jsr IncreaseBlinky      ;invoke
 .00
+        cmp #blinkyCruise2      ;already in cruise mode 2?
+        beq .01                 ;skip the increase in speed
+XBlinkyS2
+        cpy #[totalDots/3]      ;time to go into mode 2?
+        bcs .01                 ;nope, skip mode2
+        lda #blinkyCruise2      ;select speed mode into A
+        jsr IncreaseBlinky      ;invoke
+.01        
 XPinkyDots        
         cpy #pinkyDots
         bcs .0
@@ -2562,10 +2594,10 @@ RestoreSprite SUBROUTINE
         ;; {1}=display letter {2}=offset
         ;; displays distance from target tile
         MAC IfFocus
-        cpx #focusGhost
-        bne .not
-        Display1 {1},{2},S3            ;
-.not        
+;;         cpx #focusGhost
+;;         bne .not
+;;         Display1 {1},{2},S3            ;
+;; .not        
         ENDM
 ;;; X ghost to check
 ;;; locals: S3,S4,S0 current min distance
@@ -2970,6 +3002,7 @@ PacManTurn
         jsr scroll_right
         bcc .moveok
         jmp .uselast
+
 .moveok
 
         lda LASTJOY
@@ -3030,7 +3063,7 @@ Collisions SUBROUTINE
         sec
         sbc PACXPIXEL
         Abs
-        cmp #5
+        cmp #5                  ;
         bcs .done
 
         lda S2                  ;y pixels
@@ -3049,7 +3082,7 @@ Collisions SUBROUTINE
         bne .done             
         ;; pacman eaten
 ;        brk
-        jsr death               ;
+;        jsr death               ;
         rts
 .ghost_eaten
         lda #modeEaten
@@ -3252,7 +3285,10 @@ tail2tail SUBROUTINE
         MAC GetDefaultSpeed
         lda Sprite_base,X
         ENDM
-        
+;;; set the speed for an individual ghost
+;;; X = ghost to set
+;;; A = new speed
+;;; note: Z != 0 on exit please
 SetSpeed subroutine
         sta Sprite_speed,X ;
         lda #2             ;only 2 turns left
@@ -3273,7 +3309,7 @@ DecrementHPos SUBROUTINE
         lda #tunnelSpeed ;entered from left, slow down
 .set_speed
         jsr SetSpeed
-        jmp .done
+        bne .done
 .1        
         cmp16Im W2,[tunnelRow*22]+tunnelLCol+screen
         bne .done
@@ -3285,11 +3321,11 @@ DecrementHPos SUBROUTINE
         rts
 ;;; handle tunnel right side
 IncrementHPos SUBROUTINE
-        cpx #0   ;slowing/speeding only applies to ghosts
+        cpx #0                ;slowing/speeding only applies to ghosts
         beq .1
         cmp16Im W2,[tunnelRow*22]+tunnelLCol+tunnelLen+screen
         bne .0
-        GetDefaultSpeed        ; leaving tunnel from left, speed up
+        GetDefaultSpeed         ; leaving tunnel from left, speed up
         bne .set_speed
 .0        
         cmp16Im W2,[tunnelRow*22]+tunnelRCol-tunnelLen+screen
@@ -3297,7 +3333,7 @@ IncrementHPos SUBROUTINE
         lda #tunnelSpeed         ; entered from the right
 .set_speed        
         jsr SetSpeed
-        jmp .done
+        bne .done
 .1        
         cmp16Im W2,[tunnelRow*22]+tunnelRCol+screen
         bne .done
@@ -3317,11 +3353,28 @@ IncrementHPos SUBROUTINE
         ;; if blinky is in cruise elroy mode, he get's a plus one
         ;; advantage to his scroll value when course scrolling
         ;; account for that here
+        ;; do not use A in this routine unless you restore it
         MAC ApplyBlinkyBonus
-        cpx BlinkyCruise
-        bne .done
+        tay
+        cpx #blinky
+        bne .done1
+        lda BlinkyCruise
+        cmp #2
+        beq .0
+        cmp #1
+        bne .done0
+        lda {1}
+        and #1
+        bne .done0
+.0
+        tya
+;        brk
         AddScroll
-.done        
+        jmp .done1
+;        bcc .done1
+.done0
+        tya
+.done1        
         ENDM
         ;; extra speed bonus for eyes
         ;; nearly double speed
@@ -3376,7 +3429,7 @@ scroll_horiz SUBROUTINE
 .continue
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla                      ;pull new sprite offset from the stack
-        ApplyBlinkyBonus
+        ApplyBlinkyBonus W2
 .draw
         ApplyScroll
 
@@ -3386,19 +3439,21 @@ scroll_horiz SUBROUTINE
 ;;; attempt to turn the dot eating sound back on
 ;;; green border = eating
 SoundOn SUBROUTINE
-        lda #13
-        sta 36879
-
+;        lda #13
+;        sta 36879
+        lda eat_halt
+        bne .done
         sei
         lda #1
         sta eat_halt
         sta eat_halted
         cli
+.done        
         rts
 ;;; attempt to turn the dot eating sound off
 SoundOff SUBROUTINE
-        lda #8
-        sta 36879
+;        lda #8
+;        sta 36879
         sei
         lda #0
         sta eat_halt
@@ -3413,7 +3468,6 @@ blitc SUBROUTINE
 .loop
     dey
     sta (W2),Y
-    beq .done
     bne .loop
 .done
     rts
@@ -3748,7 +3802,7 @@ scroll_down2 SUBROUTINE
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla
 
-        ApplyBlinkyBonus        ;blinky's speed bonus on course scrolls
+        ApplyBlinkyBonus W2       ;blinky's speed bonus on course scrolls
 .fine
         ApplyScroll
         sta Sprite_offset2,X
