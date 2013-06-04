@@ -3,7 +3,7 @@
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 GHOSTS_ON   equ 1
-;GHPLAYER    equ 1              ; ghost as player
+GHPLAYER    equ 1              ; ghost as player
 _debug      equ 1              ; true for debugging
 cornerAdv   equ 1              ;pacman's cornering advantage in pixels
 voice1      equ 36874          ; sound registers
@@ -137,7 +137,8 @@ BlinkyS1        equ $2a
 BlinkyS2        equ $2b
 InkyDots        equ $2c
 PinkyDots       equ $2d
-ClydeDots       equ $2e        
+ClydeDots       equ $2e
+PacSaveSpd      equ $2f         ;pacman previous speed when slowed by dots
         ;; 47 48 are toast?
 ;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
 S5              equ $30
@@ -731,9 +732,10 @@ inBoxTable      dc.b 0,0,0,2,6
 boxTable        dc.b 0,10,50,100,150,200        
 Sprite_speed    dc.b 10,10,10,10,10 ;your turn gets skipped every N loops of this
 ;;; speeds when pacman is powered up
-eyeSpeed equ 255                ;sprite_speed setting for eyes
-blinky1  equ 8                  ;sprite speed setting for blinky speed 1
-blinky2  equ 10                 ;sprite speed setting for blinky speed 2 ( fastest)
+eyeSpeed        equ 255                ;sprite_speed setting for eyes
+pacEatSpeed     equ 10   
+;blinky1  equ 8                  ;sprite speed setting for blinky speed 1
+;blinky2  equ 10                 ;sprite speed setting for blinky speed 2 ( fastest)
 Sprite_speed2   dc.b 80,2,2,2,2
 ;;; default speeds for sprites for current level
 Sprite_base     dc.b 10,10,10,10,10
@@ -780,7 +782,7 @@ Div22Table      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 MotionTable     dc.b motionUp,motionDown,motionLeft,motionRight
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1 ;15
-sirenBase equ 222
+sirenBase equ 223
 sirenStep equ 5
 WakaIdx dc.b 0
 WakaTimer dc.b 2        
@@ -881,22 +883,22 @@ CheckFood subroutine
         beq .power_pill
 .0
         cmp #DOT
-        bne .notdot
+        bne .done
 
         jsr DotEaten
 
         ;; handle eating dots
         ;; and figuring out if the level is over
         dec DOTCOUNT
-        bne .done
-        ;; end_level
+        beq .end_level
+.done        
+        rts
+.end_level        
         jsr uninstall_isr
         JmpReset modeEndLevel
         ;; control never reaches here
 .power_pill        
         jsr PowerPill
-.notdot
-.done        
         rts
 ;;; X = sprite to erase
 erasesprt SUBROUTINE
@@ -1149,7 +1151,11 @@ sirenBot equ 211+5-3
 sirenTop equ 222+5
 SirenIdx
         dc.b sirenBot+1
-SirenDir dc.b 1       
+SirenDir dc.b 1
+;;; 
+;;; run the siren soundtrack
+;;; siren changes pitch when blinky gets faster
+;;; 
 isr3 subroutine
         ldy SirenIdx
 XsirenTop                       ;self modifying code
@@ -1164,9 +1170,6 @@ XsirenBot                       ;self modifying code
         adc SirenDir
         sta SirenIdx
         sta 36876
-;        clc
-;        adc #17                 ;
-;        sta 36875
 .done
 ;        jmp $eabf
         rts
@@ -1175,7 +1178,7 @@ XsirenBot                       ;self modifying code
         eor SirenDir
         ora #1
         sta SirenDir
-        jmp .add
+        bne .add                ;sirendir is never 0
 
 ;;; signals to stop the waka sound after completion of next cylce
 ;;; see SoundOn 0 = halted 1 = not halted
@@ -1217,17 +1220,16 @@ isr4 subroutine
         lda #power_top
         sta power_idx
         bne .done
-        ;; indirect jmp = 5 cycles
-        ;; bne + jmp = 5 cycles
+;;; 
+;;; pacman eating sound
+;;; 
 isr2 subroutine
-        lda #3
-        sta 36878
         lda POWER_UP
         beq .not_power
-        jsr isr4
-        jmp .waka       
+        jsr isr4                ;power up sound
+        jmp .waka               ;skip the siren
 .not_power        
-        jsr isr3
+        jsr isr3                ;run the siren
 .waka        
         lda eat_halted
         beq .done2
@@ -1236,9 +1238,6 @@ isr2 subroutine
 .0        
         ldy SirenTable,X
         sty 36877
-        iny
-        iny
-        sty 36875
         lda WakaTimer
         bne .done
         dex
@@ -1248,30 +1247,31 @@ isr2 subroutine
 .done
         dec WakaTimer
 .done2
-        lda #0
-        sta 36875
         lda #8
         sta 36878
         jmp $eabf
 .reset
         lda eat_halt
         bne .nothalted
-        sta eat_halted
-        sta 36877
-        sta 36875
+        sta eat_halted          ;A is 0
+        sta 36877               ;stop noise channel with 0
         beq .done2
 .nothalted        
         ldx #SirenTableEnd-SirenTable
-        bne .0
+        bne .0                  ;jmp .0
+;;;
+;;; remove current sound service routine
 uninstall_isr subroutine
         sei
-        store16 defaultISR,$0314
-        lda #0
+        store16 defaultISR,$0314 ;replace standard isr
+        lda #0                   ;stop all sound channels
         sta 36877
         sta 36876
         sta 36875
-        cli
+        cli                     ;reenable interrupts
         rts
+;;;
+;;; install a sound service routine
 install_isr SUBROUTINE
         sei
 ;        store16 isr1,$0314
@@ -1389,23 +1389,6 @@ sound1 SUBROUTINE
         sta S2
         resAll
         rts
-;;; clear the pacman sprite site playfield
-;;; to empty tiles
-ClearPacSite subroutine
-        rts
-#if 0        
-        move16 Sprite_loc,W1
-        lda #EMPTY
-;        sta Sprite_back
-;       sta Sprite_sback
-        sta Sprite_back2
-        sta Sprite_sback2
-        ldy #0
-        sta (W1),Y
-        ldy Sprite_dir
-        sta (W1),Y
-        rts
-#endif        
 ;;; pacman dies scene
 deathStartNote equ 220              ;death start note
 deathStep      equ 2                ;note step
@@ -1429,7 +1412,6 @@ death subroutine
         stx POWER_UP            ;no more power mode
         jsr PowerPillOff        ;call off routine to clean up
 
-        jsr ClearPacSite        ;make a clear screen for the death animation
         store16 PAC1,AUDIO  
 
         lda #deathStartNote
@@ -1466,11 +1448,8 @@ death subroutine
         jmp .top
 .done
         
-        jsr ClearPacSite
         JmpReset modePacDeath   ;reset level, pacman died mode
 
-end_level subroutine
-        rts
 ;;; 
 ;;; reset game after pacman death, or level start
 ;;; inputs: S1=0 causes us to draw the maze and do all initialization for a new level
@@ -1825,38 +1804,6 @@ process_nibble subroutine
         txa
         sta (W3),Y              ;clrram
         rts
-#if 0        
-; Move memory down
-;
-; W2 = source start address
-;   W3 = destination start address
-; SIZE = number of bytes to move
-;
-movedown SUBROUTINE
-        LDY #0
-        LDX W1+1
-        BEQ md2
-md1
-        LDA ( W2 ),Y ; move a page at a time
-        STA ( W3 ),Y
-        INY
-        BNE md1
-        INC W2+1
-        INC W3+1
-        DEX
-        BNE md1
-md2
-        LDX W1
-        BEQ md4
-md3
-        LDA ( W2 ),Y ; move the remaining bytes
-        STA ( W3 ),Y
-        INY
-        DEX
-        BNE md3
-md4
-        RTS
-#endif
 
 #if 0
 ;;; waits for joystick to be pressed
@@ -1951,56 +1898,7 @@ MoveGhost SUBROUTINE
         jsr scroll_down
         rts
 #endif
-;;; move sprite side to side
-        MAC moveS
-        lda Sprite_motion,X
-        cmp #01
-        beq .right
-        scroll_left
-        bcs .reverse
-        bcc .done
-.right
-        scroll_right
-        bcs .reverse
-        bcc .done
-.reverse
-        lda Sprite_motion,X
-        bmi .add
-        lda #$fd
-.add
-        clc
-        adc #$02
-;        brk
-        sta Sprite_motion,X
-.done        
-        ENDM
         
-;;; move sprite up and down
-        MAC moveD
-        lda Sprite_motion,X
-        cmp #22
-        beq .down
-        jsr scroll_up
-        bcs .reverse
-        bcc .done
-.down
-        jsr scroll_down
-        bcs .reverse
-        bcc .done
-.reverse
-        lda Sprite_motion,X
-        cmp #22
-        beq .0
-        bne .1
-.0
-        lda #$EA                 ;-22
-        jmp .store
-.1
-        lda #22
-.store        
-        sta Sprite_motion,X
-.done
-        ENDM
 #ifconst GHPLAYER
 ;;; move a ghost using the keyboard
 GhostAsPlayer SUBROUTINE
@@ -2046,10 +1944,10 @@ SpecialKeys SUBROUTINE
         rts
 
         
-UpdateMotion SUBROUTINE
+        MAC UpdateMotion 
         lda GHOST_DIR
         sta Sprite_motion,X
-        rts
+        ENDM
 #if 0        
 ;;; update motion but don't reverse
 UpdateMotion2 SUBROUTINE        
@@ -2120,9 +2018,18 @@ UpdateMotion2 SUBROUTINE
         ;; pac upcoming row col into variables
         ;; OUTPUT: PACCOL,PACROW
         MAC CalcPacRowCol
-        
-        move16 Sprite_loc2,W1
-        sub16Im W1,screen
+        ;; alternate to save a few bytes from below
+        lda Sprite_loc
+        sec
+        sbc #screen&$ff
+        sta W1
+        lda Sprite_loc+1
+        sbc #screen>>8
+        sta W1+1
+        ;; 
+;        move16 Sprite_loc2,W1
+;        sub16Im W1,screen
+        ;;      
         jsr Divide22_16
         lda W1
         sta PACCOL              ;store tile column
@@ -2180,9 +2087,6 @@ UpdateMotion2 SUBROUTINE
         lda #outOfBoxRow
         sta GHOST_TGTROW
         ENDM
-        ;; on double turn eligible, jmp to {1}
-        MAC CheckDoubleTurn
-        ENDM
 ;;; animate a ghost back and forth
 GhostAI SUBROUTINE
         lda #0
@@ -2208,11 +2112,13 @@ GhostTurn
         beq .leaving
         cmp #modeEaten
         beq .eaten
-        jmp .normal
+;        jmp .normal
+        bne .normal
 .reversing
         jsr ReverseDirection
         sta Sprite_motion,X
-        jmp .moveghost
+;        jmp .moveghost
+        bne .moveghost
 .eaten                          ;load target tile for eaten ghosts
         SetEatenTargetTile
         bne .continue
@@ -2257,7 +2163,7 @@ GhostTurn
 ;        Display1 "G",17,GHOST_DIR
 .notfocus
 
-        jsr UpdateMotion
+        UpdateMotion
         jsr SpecialKeys
 #ifconst GHPLAYER        
         jsr GhostAsPlayer
@@ -2274,13 +2180,10 @@ GhostTurn
         lda #1                  ;reset frame counter
         sta Sprite_frame,X
 .done
-        CheckDoubleTurn ailoop0   ;does this ghost get a second turn?
         jmp .loop
-        
-        rts
-
-lastLeft        dc.b 128
+;;; 
 ;;; open the door on the ghost box
+;;; 
 LeaveBox SUBROUTINE
         lda #modeInBox
         cmp Sprite_mode,X       ;is ghost in box?
@@ -2296,8 +2199,12 @@ LeaveBox SUBROUTINE
 .done        
         rts                     ;
         ;; increase blinky speed
-
+;;;
+;;;take blinky out of cruise mode
+;;; 
 ResetBlinky subroutine
+        lda #blinkyCruiseOff
+        sta BlinkyCruise
         lda #sirenTop
         sta XsirenTop+1
         lda #sirenBot
@@ -2305,18 +2212,26 @@ ResetBlinky subroutine
         lda #sirenBot+1
         sta SirenIdx
         rts
+
 ;;;
 ;;; Increase blinky speed to make things harder
-;;; 
+;;; X = blinky mode
 soundInc equ 3        
 IncreaseBlinky subroutine
         
         sei
 
-        sta BlinkyCruise
-        inc XsirenTop+1
-        inc XsirenBot+1
-        inc SirenIdx
+        stx BlinkyCruise
+        clc
+        lda XsirenTop+1
+        adc #soundInc
+        sta XsirenTop+1
+        lda XsirenBot+1
+        adc #soundInc
+        sta XsirenBot+1
+        lda SirenIdx
+        adc #soundInc
+        sta SirenIdx
         
         cli
         rts
@@ -2327,26 +2242,28 @@ IncreaseBlinky subroutine
 DotEaten SUBROUTINE
         saveX
         jsr SoundOn
-
-        lda #modeLeaving
+        lda #2
+        sta Sprite_speed
+        sta Sprite_turn         ;for pac to slow down 1 frame per dot
+        ;; 
         ldy DOTCOUNT
         lda BlinkyCruise
-        cmp #blinkyCruise1      ;already in cruise mode 1?
-        beq .00                 ;blinky is already cruising
+        cmp #blinkyCruise2      ;already in cruise mode 2?
+        beq .01                 ;yes, no checking needed
+        cmp #blinkyCruise1
+        beq XBlinkyS2
 XBlinkyS1        
         cpy #[totalDots/2]      ;time to go into mode 1
-        bcs .00                 ;nope, skip mode 1
-        lda #blinkyCruise1      ;select speed mode
+        bcs XBlinkyS2           ;nope, skip mode 1
+        ldx #blinkyCruise1      ;select speed mode
         jsr IncreaseBlinky      ;invoke
-.00
-        cmp #blinkyCruise2      ;already in cruise mode 2?
-        beq .01                 ;skip the increase in speed
 XBlinkyS2
         cpy #[totalDots/3]      ;time to go into mode 2?
         bcs .01                 ;nope, skip mode2
-        lda #blinkyCruise2      ;select speed mode into A
+        ldx #blinkyCruise2      ;select speed mode into A
         jsr IncreaseBlinky      ;invoke
 .01        
+        lda #modeLeaving
 XPinkyDots        
         cpy #pinkyDots
         bcs .0
@@ -2403,6 +2320,7 @@ IsWall SUBROUTINE
 ;;; puta fruit out 
 Fruit SUBROUTINE
         rts
+#if 0        
 ;;; display a number in A on screen
 ;;; bit 7 on will call to reverse characters
 ;;; X location to display
@@ -2450,8 +2368,13 @@ ones:
         lda #PURPLE
         sta clrram,X
         rts
-;;; update {1} with min of A or {1} store Y, which is the considered 'move'
+#endif        
+;;; update {1} with min of A or {1} store SPRT_LOCATOR, which is the considered 'move'
 ;;; in {2} if it was the best move so far
+;;; INPUTS: SPRT_LOCATOR
+;;; locator is set from the scroll_up, scroll_down, etc routines
+;;; a litte remote in locality of reference for the reader, not happy about it
+;;; but there it is
         MAC UpdateMinDist
         cmp {1}
         bpl .done
@@ -3443,21 +3366,38 @@ SoundOn SUBROUTINE
 ;        sta 36879
         lda eat_halt
         bne .done
-        sei
         lda #1
+        sei
         sta eat_halt
         sta eat_halted
         cli
+#if 0        
+        ;; adjust pacman speed
+        lda Sprite_speed        ;load pacman current speed
+        sta PacSaveSpd          ;save it for layer
+        lda pacEatSpeed         ;load pac eating speed
+        sta Sprite_speed        ;store in speed buffer
+        lda #2
+        sta Sprite_turn         ;cause speed to take effect soon
+#endif        
 .done        
         rts
 ;;; attempt to turn the dot eating sound off
 SoundOff SUBROUTINE
+        lda eat_halted
+        beq .done
 ;        lda #8
 ;        sta 36879
-        sei
+;        lda PacSaveSpd          ;load previous pac speed
+;        sta Sprite_speed        ;install it
+        lda Sprite_base
+        sta Sprite_speed
+        
         lda #0
+        sei
         sta eat_halt
         cli
+.done        
         rts
 ;;; clear all bits to 0
 ;;; W2 = top half font ram
