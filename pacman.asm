@@ -3,7 +3,7 @@
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 GHOSTS_ON   equ 1
-GHPLAYER    equ 1              ; ghost as player
+;GHPLAYER    equ 1              ; ghost as player
 _debug      equ 1              ; true for debugging
 cornerAdv   equ 1              ;pacman's cornering advantage in pixels
 voice1      equ 36874          ; sound registers
@@ -139,9 +139,7 @@ InkyDots        equ $2c
 PinkyDots       equ $2d
 ClydeDots       equ $2e
 PacSaveSpd      equ $2f         ;pacman previous speed when slowed by dots
-        ;; 47 48 are toast?
-;;; e.g. if pacman successfully moves up, then switch to PAC_UP1 set of source 
-S5              equ $30
+S5              equ $30         ;scratch 5
 S6              equ $31
 PACXPIXEL       equ $32
 PACYPIXEL       equ $33        
@@ -153,20 +151,11 @@ SCORE_l         equ $37
 SCORE_h         equ $38
 LevelStartTm    equ $39
 LevelStartTm_h  equ $3a        
-S7              equ $43
 W5              equ $32
+S7              equ $43
 W6              equ $44
-        ;; $45 has fucked me, not sure why, memmap lists it
-        ;; as current variable name, sure sounds like a basic
-        ;; interpreter thing to me 
-        ;; 
-
-;;; sentinal character, used in tile background routine
-;;; to indicate tile background hasn't been copied into _sback yet
-NOTCOPY         equ $fd
-;;; used by the AI engine to indicate the worst possible choice
-noChoice        equ $7f
-        
+W6_h            equ $45       
+PowerPillTime   equ $46
 ;;;offset for normalizing a 9x9 sprite movement block to the upper left block
 ;;; used by the sprite orientation changing routines
 SPRT_LOCATOR    equ $47
@@ -178,11 +167,13 @@ SCRL_VAL        equ $49
 LASTJOY         equ $4a
 LASTJOYDIR      equ $4b         ;last joy reading that had a switch thrown
 MOVEMADE        equ $4c         ;true if last pacman move was successful
-TIMER1          equ $4d         ;decrement by main game loop every other trip
+TIMER1          equ $4d         ;compared against jiffy clock for chase/scatter modes
 TIMER1_h        equ $4e         ;timer1 high byte
 r_seed          equ $4f
+Div22Table      equ $50
+;;; ----------- 10 bytes
+PacLives        equ $5a        
 AUDIO           equ $66         ;sound routines work register ( on isr )
-
          
 #IFCONST _LOCAL_SAVEDIR
 SAVE_OFFSET     equ $ab
@@ -191,7 +182,12 @@ SAVE_DIR        equ $ad
 SAVE_DIR2       equ $ae
 #endif
         
-VV              equ $02         ;testing, voice 2
+;;; sentinal character, used in tile background routine
+;;; to indicate tile background hasn't been copied into _sback yet
+NOTCOPY         equ $fd
+;;; used by the AI engine to indicate the worst possible choice
+noChoice        equ $7f
+
 ;;
 ;; misc constants
 ;;
@@ -203,6 +199,8 @@ TEEBOT          equ [BIT_TEEBOT-CHAR_BEGIN]/8       ;bottom tee
 DOT             equ [BIT_DOT-CHAR_BEGIN]/8
 HWALL           equ [BIT_HWALL-CHAR_BEGIN]/8
 VWALL           equ [BIT_VWALL-CHAR_BEGIN]/8
+;;; character we use for pacman life indicator
+PACLIFE         equ [BIT_PACRIGHTOPEN-CHAR_BEGIN]/8
 GHOST_WALL      equ [BIT_GHWALL-CHAR_BEGIN]/8        
 GHL             equ [GHOST_BEGIN-CHAR_BEGIN]/8
 GH1L            equ [GHL+4]
@@ -351,6 +349,7 @@ PACL            equ [GH3L+4]        ;pacman char number
 
         pla                     ;restore A
         ENDM
+;;; display in hex
 ;;; display a single byte {3} at offset {2} on top line prefixed by char {1}
         MAC Display1
         pha                     ;save A
@@ -627,7 +626,8 @@ PACL            equ [GH3L+4]        ;pacman char number
         jmp main
 
 ;    INCLUDE "music.asm"
-    INCLUDE "maze.asm"        
+        INCLUDE "maze.asm"
+        INCLUDE "debug.asm"
 
 
 pacframes  equ #4            ; total number of pacman animation frames ( 1 based )
@@ -703,11 +703,12 @@ blinkyS2Dots    equ [totalDots/4]*3
 
 g1Start         equ screen+22*11+9
 g2Start         equ screen+22*outOfBoxRow+outOfBoxCol
+;;; debug location, buttom row
+;g2Start         equ screen+22*21+2
 g3Start         equ screen+22*11+10
 g4Start         equ screen+22*11+12
 ;;; 
 Sprite_page     dc.b 0        
-ResetPoint      dc.b 0           ;stack reset location for game reset ( longjmp )
 Sprite_loc      equ cassStart
 Sprite_loc2     equ Sprite_loc+10 ;new screen loc
 Sprite_back     equ Sprite_loc2+10   ;background char before other sprites drawn
@@ -715,10 +716,16 @@ Sprite_back2    equ Sprite_back+5         ;static screen background
 ;;;current screen background ( might include some other sprite tile that was laid down )
 Sprite_sback    equ Sprite_back2+5 
 Sprite_sback2   equ Sprite_sback+5
-Sprite_dir      equ Sprite_sback2+5 ;h
-Sprite_dir2     equ Sprite_dir+5 ;sprite direction 1(horiz),22(vert)    
+Sprite_dir      equ Sprite_sback2+5 ;
+Sprite_dir2     equ Sprite_dir+5    ;sprite direction 1(horiz),22(vert)    
 Sprite_offset   equ Sprite_dir2+5   ;sprite bit offset in tiles
 Sprite_offset2  equ Sprite_offset+5 ;upcoming sprite bit offset in tiles
+PlayerScore_h   equ Sprite_offset2+5 ;3 byte BCD player score, MSB order
+PlayerScore_m   equ PlayerScore_h+1
+PlayerScore_l   equ PlayerScore_m+1
+ResetPoint      equ PlayerScore_l+1           ;stack reset location for game reset ( longjmp )
+LevelsComplete  equ ResetPoint+1              ;length 1
+Sprite_mode     equ LevelsComplete+1              ;length 5
 Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,GH3L      ;foreground char
 Sprite_src      dc.w PAC1,GHOST,GHOST,GHOST,GHOST ;sprite source bitmap
 Sprite_frame    dc.b 0,1,1,1,1 ;animation frame of sprite as offset from _src
@@ -728,17 +735,13 @@ Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*
 Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; see motion defines
 ;;; offset table of ghosts in box
 inBoxTable      dc.b 0,0,0,2,6
-;LastGhostLeft   dc.w 0              ;time of last ghost box exit, see LeaveBox
-boxTable        dc.b 0,10,50,100,150,200        
 Sprite_speed    dc.b 10,10,10,10,10 ;your turn gets skipped every N loops of this
 ;;; speeds when pacman is powered up
 eyeSpeed        equ 255                ;sprite_speed setting for eyes
 pacEatSpeed     equ 10   
-;blinky1  equ 8                  ;sprite speed setting for blinky speed 1
-;blinky2  equ 10                 ;sprite speed setting for blinky speed 2 ( fastest)
 Sprite_speed2   dc.b 80,2,2,2,2
 ;;; default speeds for sprites for current level
-Sprite_base     dc.b 10,10,10,10,10
+Sprite_base     dc.b 255,255,255,255,255
 Sprite_turn     dc.b 5,4,4,4,4        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
@@ -759,11 +762,9 @@ softTimerRes   equ 60
 ;;; even values are scatter mode, odd are chase mode
 ;;; iteration starts from end 
 ChaseTable     dc.w  (5*60)*softTimerRes,5*softTimerRes,20*softTimerRes,7*softTimerRes,20*softTimerRes,7*softTimerRes
-PowerPillTime  dc.b 255        
 ChaseTableEnd
-ChaseTableSz equ [[ChaseTableEnd-ChaseTable]/2]-1 ;entries in above table -1
+ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
 ChaseTableIdx dc.b ChaseTableSz
-LevelsComplete dc.b -1
 ;LastUpgrade dc.b 0        
         ;; in order of exit 
         ;; red=blinky ( starts outside of ghost house )
@@ -774,11 +775,11 @@ LevelsComplete dc.b -1
         ;; if eyes heading toward ghost box
         ;; or in ghost box already
         ;; etc
-Sprite_mode    dc.b modePacman,0,modeOutOfBox,0,0  ;in ghost box if false
-masterSpeed      equ 1 ;master game delay
+masterSpeed      equ 8 ;master game delay
 ;;; 
 ;;; division table for division by 22
-Div22Table      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
+;Div22Table_i      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
+Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 MotionTable     dc.b motionUp,motionDown,motionLeft,motionRight
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1 ;15
@@ -968,7 +969,7 @@ erasesprt SUBROUTINE
         cmp #20                 
         bcc .near_end
         ldy #BLUE
-        jmp .done
+        bne .done               ;jmp .done
 .near_end                       ;almost out of power time
         ldy #WHITE              ;show white
         lda #4                  ;but flash blue when 
@@ -999,7 +1000,6 @@ UpdateColorRam SUBROUTINE
         ldy Sprite_dir,X        ;write tail tile color ram 
         sta (W1),Y
 .singletile        
-        rts
         rts
 ;;; 
 ;;; X = sprite to move
@@ -1081,7 +1081,7 @@ Timer1Expired SUBROUTINE
         bpl .0                  ;branch positive
         ;; < 0 wrapping around table
 initChaseTimer        
-        ldx #ChaseTableSz        ;reload table index to top of table
+        ldx #ChaseTableSz-1        ;reload table index to top of table
 .0
         stx ChaseTableIdx
         move16x ChaseTable,TIMER1   ;chase time to TIMER1
@@ -1307,14 +1307,14 @@ delay SUBROUTINE
         lda VolTable,X
         sta volume
 
-        ldy S4
-        beq .no_raise
+        ldy S4                  ;are we in raise pitch mode?
+        beq .no_raise           ;nope, skip it
         clc
         adc S3
-        sta 36875
+        sta 36875               ;raise pitch slightly for warble
 .no_raise        
         inx
-        cpx #VolTableSz
+        cpx #VolTableSz         ;have we hit end of table?
         beq .done
 ;        bcs .done
 
@@ -1340,7 +1340,9 @@ delay SUBROUTINE
         pla
         tax
         rts
-sound1 SUBROUTINE
+;;;
+;;; ghost eaten sound
+SoundGhostEaten SUBROUTINE
         saveAll
         lda S2
         pha
@@ -1529,13 +1531,14 @@ reset_game subroutine
         tya
         sbc ClydeDots           ;subtract clyde dots from totalDots
         sta XClydeDots+1        ;store in compare instruction
-
+#if 0
         ;; store the time the level was started
         lda JIFFYL
         sta LevelStartTm
         lda JIFFYM
         sta LevelStartTm+1
-
+#endif
+        jsr DecrementLives
         
         lda #8
         sta 36879               ; border and screen colors
@@ -1573,7 +1576,7 @@ reset_game0 subroutine
         and #1                  ;odd numbered levels completed?
         bne .1                  ;no, keep everything the same
         ;; make level harder
-        ldx ChaseTableSz
+        ldx ChaseTableSz-1
 .0
         move16x ChaseTable,W1
         sub16Im W1,[2*softTimerRes]
@@ -1602,12 +1605,55 @@ reset_game1 subroutine
         sta LevelsComplete
         lda #255
         sta PowerPillTime
+        lda #0
+        sta PlayerScore_l
+        sta PlayerScore_m
+        sta PlayerScore_h
+        sta POWER_UP            ;power up to 0
+
+        lda #4
+        sta PacLives
+BLARGO1
+        ldx #4
+.loop
+        move16xx Div22Table_i,Div22Table
+        dex
+        bpl .loop
+        
+        rts
+;;; 
+;;; -1 pacman lives
+;;; and update dislay
+lifeStart equ 22*[22-5]
+DecrementLives subroutine
+        dec PacLives
+        bne .00
+        ;; game is over
+        brk
+.00
+        ldx PacLives
+        ldy #0
+.0
+        lda #PACLIFE             ;load 'life' character tile
+        sta screen+lifeStart,Y
+        lda #YELLOW
+        sta clrram+lifeStart,Y
+        tya
+        clc
+        adc #44
+        tay
+        dex
+        bpl .0
+.done        
         rts
 ;-------------------------------------------
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
-
+        ;; jsr BLARGO1
+        ;; store16 66,W1
+        ;; jsr Divide22_16
+        ;; brk
 #if 0
         lda #$ea
         DoubleSigned
@@ -1624,7 +1670,6 @@ main SUBROUTINE
 
         lda #0
         sta $9113               ;joy VIA to input
-        sta POWER_UP            ;power up to 0
 
         lda VICSCRN
         and #$f0
@@ -1750,6 +1795,19 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         sta {1}+22*17+2
         sta {1}+22*17+22-2
         ENDM
+;;; split a byte into nybbles
+;;; A=input
+;;; A=low x=high
+SplitByte subroutine
+        pha
+        lsr
+        lsr
+        lsr
+        lsr
+        tax
+        pla
+        and #$f
+        rts
 ;;; 
 ;;; Create the maze
 ;;; 
@@ -1773,15 +1831,11 @@ mkmaze SUBROUTINE
 .begin        
         ldy #0                  ;8 bit counter to 0
         lda (W1),Y              ;fetch high nibble
-        and #$f0
-        lsr
-        lsr
-        lsr
-        lsr
+        jsr SplitByte
+        pha
+        txa
         jsr process_nibble
-
-        lda (W1),Y              ;fetch low  nibble
-        and #$0f
+        pla                     ;pull low nibble
 
         inc16 W2
         inc16 W3                ;inc color ram pointer
@@ -2007,7 +2061,7 @@ UpdateMotion2 SUBROUTINE
         
         ENDM
         ;; calculate the ghost in X's
-        ;; currently displayed row and column
+        ;; about to be display row and column
         ;; Output: GHOST_ROW,GHOST_COL
         MAC CalcGhostRowCol
         
@@ -2112,13 +2166,11 @@ GhostTurn
         beq .leaving
         cmp #modeEaten
         beq .eaten
-;        jmp .normal
-        bne .normal
+        bne .normal             ;jmp .normal
 .reversing
         jsr ReverseDirection
         sta Sprite_motion,X
-;        jmp .moveghost
-        bne .moveghost
+        bne .moveghost          ;jmp .moveghost
 .eaten                          ;load target tile for eaten ghosts
         SetEatenTargetTile
         bne .continue
@@ -2242,8 +2294,11 @@ IncreaseBlinky subroutine
 DotEaten SUBROUTINE
         saveX
         jsr SoundOn
+
+        lda #$10
+        jsr UpdateScore
+        
         lda #2
-        sta Sprite_speed
         sta Sprite_turn         ;for pac to slow down 1 frame per dot
         ;; 
         ldy DOTCOUNT
@@ -2425,7 +2480,7 @@ ones:
         asl
         sta {4}
         lda Sprite_offset2,X
-        ldy Sprite_dir,X
+        ldy Sprite_dir2,X
         cpy #dirVert
         beq .vert
         cpy #dirHoriz
@@ -2491,7 +2546,7 @@ CalcDistance SUBROUTINE
         rts
 ;;; save some properties of a sprite that will be damaged
 ;;; during AI calcs
-SaveSprite SUBROUTINE
+        MAC SaveSprite 
         lda Sprite_offset2,X
         sta SAVE_OFFSET2
         lda Sprite_offset,X
@@ -2500,7 +2555,7 @@ SaveSprite SUBROUTINE
         sta SAVE_DIR
         lda Sprite_dir2,X
         sta SAVE_DIR2
-        rts
+        ENDM
 ;;; restore some damaged properties of a ghost sprite
 ;;; after doing the AI calcs
 RestoreSprite SUBROUTINE
@@ -2529,7 +2584,7 @@ PossibleMoves SUBROUTINE
         sta GHOST_DIST      ;initialize least distance to a big number
         sta GHOST_DIR       ;initialize best move to an invalid move
 
-        jsr SaveSprite
+        SaveSprite              ;save sprite data into tempvars
 .checkup                             ;
         ;; don't reverse
         lda #motionDown
@@ -2640,6 +2695,7 @@ ScatterGhostAI SUBROUTINE
         lda GhosthomeTable,Y
         sta GHOST_TGTROW
         rts
+
 ;;; 
 ;;; the ghost the runs away when pacman is too close
 ;;; sue or clyde
@@ -2732,6 +2788,7 @@ Ghost1AI SUBROUTINE
         resX
         
         rts
+        
 ;;; 
 ;;; simple hot pursuit ( Blinky )
 ;;; 
@@ -2742,7 +2799,6 @@ Ghost2AI  SUBROUTINE
         sta GHOST_TGTROW
         rts
 ;;; ghost 1 AI ( Pinky )
-outbound equ 4        
 Ghost3AI SUBROUTINE
         lda Sprite_dir
         ldy Sprite_motion
@@ -2809,7 +2865,7 @@ Divide22_16 SUBROUTINE
         
         lda #$00
         sta DIV22_RSLT      ;Init the result variable
-        ldx #0
+        ldx #4
 .loop
         move16x Div22Table,DIV22_WORK
         cmp16 W1,DIV22_WORK
@@ -2817,10 +2873,8 @@ Divide22_16 SUBROUTINE
         sub16 W1,DIV22_WORK
 .1
         rol DIV22_RSLT
-        inx
-        cpx #5
-        beq .done
-        bne .loop
+        dex
+        bpl .loop
 .done
         pla
         tax
@@ -3005,13 +3059,13 @@ Collisions SUBROUTINE
         bne .done             
         ;; pacman eaten
 ;        brk
-;        jsr death               ;
-        rts
+        jsr death               ;long jumps to level restart
+        ;; control cannot reach here
 .ghost_eaten
         lda #modeEaten
         cmp Sprite_mode,X
         beq .done               ;already eaten
-        jsr sound1              ;play eaten sound
+        jsr SoundGhostEaten     ;play eaten sound
         sta Sprite_mode,X       ;change mode to eaten
 ;        lda #WHITE
 ;        sta Sprite_color,X
@@ -3371,15 +3425,6 @@ SoundOn SUBROUTINE
         sta eat_halt
         sta eat_halted
         cli
-#if 0        
-        ;; adjust pacman speed
-        lda Sprite_speed        ;load pacman current speed
-        sta PacSaveSpd          ;save it for layer
-        lda pacEatSpeed         ;load pac eating speed
-        sta Sprite_speed        ;store in speed buffer
-        lda #2
-        sta Sprite_turn         ;cause speed to take effect soon
-#endif        
 .done        
         rts
 ;;; attempt to turn the dot eating sound off
@@ -3388,10 +3433,6 @@ SoundOff SUBROUTINE
         beq .done
 ;        lda #8
 ;        sta 36879
-;        lda PacSaveSpd          ;load previous pac speed
-;        sta Sprite_speed        ;install it
-        lda Sprite_base
-        sta Sprite_speed
         
         lda #0
         sei
@@ -3513,7 +3554,41 @@ blith SUBROUTINE
         bpl .nextbyte
 .done
     rts
-
+;;; update player score
+;;; value to add is in A
+UpdateScore subroutine
+        sed                     ;decimal mode
+        clc
+        adc PlayerScore_l
+        sta PlayerScore_l
+        bcc .0
+        lda PlayerScore_m
+        adc #0
+        sta PlayerScore_m
+        bcc .0
+        lda PlayerScore_h
+        adc #0
+        sta PlayerScore_h
+.0
+        cld                     ;clear dec mode
+        
+        ldy #5
+.loop
+        tya
+        lsr
+        tax
+        lda PlayerScore_h,X
+        jsr SplitByte            ;A=high nibble on exit, S1=low
+        clc
+        adc #48 | $80
+        sta screen+20-6,y
+        txa                     ;high nibble
+        adc #48 | $80
+        dey
+        sta screen+20-6,y
+        dey
+        bpl .loop
+        rts
 ;;; change orientation to horizontal
 ;;; X sprite to attempt change on
 ;;; SPRT_LOCATOR direction to change to ( 22=left 24=right)
@@ -3563,25 +3638,30 @@ changehoriz SUBROUTINE
         jsr IsWall
         beq .failed             ;we hit a wall, abort move
         
-        lda #1                  ;change direction to horiz
+        lda #1                  ;change orientation to horiz
         sta Sprite_dir2,X
 
-        lda #0                  ;assume moving right
-        sta Sprite_offset,X     ;sprite offset = 0
-
-        lda #23                 ;offset from ORG for new sprite pos
-        sta S3                  ;if moving right
 
         lda SPRT_LOCATOR        ;moving right?
         cmp #motionRight
         beq .isright            ;branch moving right
-
+.isleft
         lda #8                  ;going left, sprite offset = 8
+;        sec
+;        sbc CORNER_SHAVE        ;bonus for pacman if applic
         sta Sprite_offset,X
 
         lda #22                 ;offset from ORG for new sprite pos
-        sta S3                  ;if moving left
+        bne .continue           ;jmp .continue
 .isright
+        lda #0                  ;assume moving right
+;        clc
+;        adc CORNER_SHAVE        ;bonus for pacman if applic
+        sta Sprite_offset,X     ;sprite offset = 0
+
+        lda #23                 ;offset from ORG for new sprite pos
+.continue        
+        sta S3                  
         addxx W2,W1,S3          ;update new sprite pos
         move16x2 W1,Sprite_loc2
 
@@ -3662,25 +3742,29 @@ ChangeVertFailed       ; we can't change directions  in middle of tile
         jsr IsWall
         beq ChangeVertFailed    ;we hit a wall, abort move
         
-        lda #22                 ;change direction to down
+        lda #dirVert            ;change orientation to vertical
         sta Sprite_dir2,X
-
-        lda #1                  ;assume going down
-        sta Sprite_offset2,X     
-
-        lda #23                 ;offset from ORG for new sprite pos
-        sta S3                  ;if moving down
 
         lda SPRT_LOCATOR        ;moving down?
         cmp #motionDown
         beq .isdown             ;branch down
-
-        lda #7                  ;going up, sprite offset = 8
-        sta Sprite_offset2,X
+.isup
+        lda #7                  ;going up
+;        sec
+;        sbc CORNER_SHAVE         ;bonus for pacman if applicable
+        sta Sprite_offset2,X    ;this would be new sprite offset
 
         lda #1                  ;offset from ORG for new sprite pos
-        sta S3                  ;if moving up
+        bne .continue           ;jmp .continue
 .isdown
+        lda #1                  ;going down
+;        clc
+;        adc CORNER_SHAVE        ;bonus for pacman if applicable
+        sta Sprite_offset2,X    ;this would be new sprite offset
+
+        lda #23                 ;offset from ORG for new sprite pos
+.continue        
+        sta S3                  
         addxx W2,W1,S3          ;update new sprite pos
         move16x2 W1,Sprite_loc2
         clc                     ;return success
@@ -4186,6 +4270,7 @@ PAC2
     ds 1,%11111111
     ds 1,%01111110
     ds 1,%00111100
+BIT_PACRIGHTOPEN        
 PAC3
     ds 1,%00111100
     ds 1,%01111110
