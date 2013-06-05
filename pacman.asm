@@ -172,7 +172,9 @@ TIMER1_h        equ $4e         ;timer1 high byte
 r_seed          equ $4f
 Div22Table      equ $50
 ;;; ----------- 10 bytes
-PacLives        equ $5a        
+PacLives        equ $5a
+SirenIdx        equ $5b        
+;TurnLost        equ $5b         ;incremented 
 PACDEATH        equ $66         ;pacman death animation pointer
          
 #IFCONST _LOCAL_SAVEDIR
@@ -749,9 +751,11 @@ ghostEasySpeed  equ 160
 ;;; the speed of ghosts on harder levels
 Sprite_speed2   dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed
 ;;; default speeds for sprites for current level
-Sprite_base     dc.b 80,40,40,40,40
+;;; rational: small difference might help them from not clumping up
+;;; blinky is fastest, then pinky, then inky, then clyde
+Sprite_base     dc.b 40,20,20,20,20
 Sprite_hard     dc.b 80,255,255,255,255        
-Sprite_turn     dc.b 5,4,4,4,4        
+Sprite_turn     dc.b 5,9,6,3,7        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
 blinkyCruise1 equ 1
@@ -784,7 +788,7 @@ ChaseTableIdx dc.b ChaseTableSz
         ;; if eyes heading toward ghost box
         ;; or in ghost box already
         ;; etc
-masterSpeed      equ 8 ;master game delay
+masterSpeed      equ 1 ;master game delay
 ;;; 
 ;;; division table for division by 22
 ;Div22Table_i      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
@@ -1135,7 +1139,8 @@ PowerPillOff SUBROUTINE
 ;;; called when a power pill is activated
 ;;; 
 PowerPill SUBROUTINE
-;        rts
+        lda #$50                ;bcd '50' points
+        jsr UpdateScore 
         lda PowerPillTime
         sta POWER_UP            ;store in timer
         ldy #SPRITES            ;init loop counter
@@ -1158,8 +1163,6 @@ PowerPill SUBROUTINE
         
 sirenBot equ 211+5-3
 sirenTop equ 222+5
-SirenIdx
-        dc.b sirenBot+1
 SirenDir dc.b 1
 ;;; 
 ;;; run the siren soundtrack
@@ -1169,10 +1172,10 @@ isr3 subroutine
         ldy SirenIdx
 XsirenTop                       ;self modifying code
         cpy #sirenTop
-        bcs .reverse
+        beq .reverse
 XsirenBot                       ;self modifying code
         cpy #sirenBot
-        bcc .reverse
+        beq .reverse
 .add
         tya
         clc
@@ -1204,6 +1207,7 @@ vol_idx dc.b 14
 
 ;;; power pill sound
 isr4 subroutine
+        sei
         lda power_idx
         cmp #power_bot
         bcc .reset
@@ -1281,8 +1285,8 @@ stopSound subroutine
 uninstall_isr subroutine
         sei
         store16 defaultISR,$0314 ;replace standard isr
-        jsr stopSound
         cli                     ;reenable interrupts
+        jsr stopSound
         rts
 ;;;
 ;;; install a sound service routine
@@ -1588,7 +1592,7 @@ reset_game0 subroutine
         lda #CYAN
         sta [[outOfBoxRow+1]*22]+outOfBoxCol+clrram
 
-        jsr initChaseTimer
+;        jsr initChaseTimer
         jsr ResetBlinky
 
         ;; modify difficulty settings based on level
@@ -1621,9 +1625,11 @@ reset_game0 subroutine
         rts
 ;;; full game system reset
 reset_game1 subroutine
+        lda #sirenBot+1
+        sta SirenIdx
         lda #-1
         sta LevelsComplete
-        lda #255
+        lda #245
         sta PowerPillTime
         lda #0
         sta PlayerScore_l
@@ -1740,6 +1746,7 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         store16 screen+leftMargin+22*pacStartRow+21/2-ready_msg_sz/2,W1      ;post the player ready message
         store16 ready_msg,W2
         jsr getReady
+        jsr initChaseTimer
         
         jmp .background
 .loop
@@ -2299,6 +2306,7 @@ LeaveBox SUBROUTINE
 ;;;take blinky out of cruise mode
 ;;; 
 ResetBlinky subroutine
+        sei
         lda #blinkyCruiseOff
         sta BlinkyCruise
         lda #sirenTop
@@ -2307,6 +2315,7 @@ ResetBlinky subroutine
         sta XsirenBot+1
         lda #sirenBot+1
         sta SirenIdx
+        cli
         rts
 
 ;;;
@@ -2314,12 +2323,10 @@ ResetBlinky subroutine
 ;;; X = blinky mode
 soundInc equ 3        
 IncreaseBlinky subroutine
-        
         sei
-
         stx BlinkyCruise
-        clc
         lda XsirenTop+1
+        clc
         adc #soundInc
         sta XsirenTop+1
         lda XsirenBot+1
@@ -2341,9 +2348,13 @@ DotEaten SUBROUTINE
 
         lda #$10
         jsr UpdateScore
-        
+
+        lda #1
+        bit DOTCOUNT
+        bne .noslowdown         ;penalize pacman every other dot
         lda #2
         sta Sprite_turn         ;for pac to slow down 1 frame per dot
+.noslowdown        
         ;; 
         ldy DOTCOUNT
         lda BlinkyCruise
@@ -3078,20 +3089,21 @@ Collisions SUBROUTINE
         sta Sprite_motion,X
         jsr scroll_down
 .notspecial
+DeathDistance equ 5
         ;; output: S1 = x pixels, S2 = y pixels
         TileToPixels GHOST_COL,GHOST_ROW,S1,S2
         lda S1                  ;x pixels
         sec
         sbc PACXPIXEL
         Abs
-        cmp #5                  ;
+        cmp #DeathDistance
         bcs .done
 
         lda S2                  ;y pixels
         sec
         sbc PACYPIXEL
         Abs
-        cmp #5
+        cmp #DeathDistance
         bcs .done
         ;; collision between pacman and ghost
         lda Sprite_mode,X
@@ -3105,6 +3117,7 @@ Collisions SUBROUTINE
 ;        brk
         jsr death               ;long jumps to level restart
         ;; control cannot reach here
+        rts                     ;leave this here for debugging and commenting jsr death out
 .ghost_eaten
         lda #modeEaten
         cmp Sprite_mode,X
@@ -3616,7 +3629,7 @@ UpdateScore subroutine
 .0
         cld                     ;clear dec mode
         
-        ldy #5
+        ldy #5                  ;six score digits
 .loop
         tya
         lsr
@@ -4550,7 +4563,8 @@ todo:
 
         pacman is slower when eating
 
-        
+        clyde DOES need the timer to come out toward the end if you
+        die
       
 #endif
 
