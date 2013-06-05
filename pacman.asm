@@ -1,5 +1,17 @@
         org $0400
         processor 6502
+;BASIC equ 1                     ;launch from basic
+#ifconst BASIC
+Sprite_page     dc.b 0
+;;; inject code for a BASIC 'sys' command
+        HEX 0c 04 0a 00  9e 20
+        dc.b  "1","0","3","8"
+        HEX 00 00 00
+        jmp main
+#else
+        jmp main
+Sprite_page     dc.b 0
+#endif        
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 GHOSTS_ON   equ 1
@@ -18,32 +30,32 @@ clrram      equ $9600           ; color ram for screen
 clroffset   equ $78             ;offset from screen to color ram
 defaultISR  equ $eabf           ;os default IRQ
 defaultVol  equ 8               ;default volume for app
-VICRASTER equ $9004        
-VICSCRN   equ $9005             ;vic chip character generator pointer
-LIGHPENX  equ $9006             ;used for random number
-VIA1DDR   equ $9113
-VIA2DDR   equ $9122             ; ?
-JOY0      equ $9111
-JOY0B     equ $9120             ; output register B VIA #2
-JOYUP     equ $4                ; joy up bit
-JOYDWN    equ $8                ; joy down
-JOYL      equ $10               ; joy left
-JOYT      equ $20               ; joy fire
-JOYR      equ $80               ; joy right bit
+VICRASTER   equ $9004        
+VICSCRN     equ $9005             ;vic chip character generator pointer
+LIGHPENX    equ $9006             ;used for random number
+VIA1DDR     equ $9113
+VIA2DDR     equ $9122             ; ?
+JOY0        equ $9111
+JOY0B       equ $9120             ; output register B VIA #2
+JOYUP       equ $4                ; joy up bit
+JOYDWN      equ $8                ; joy down
+JOYL        equ $10               ; joy left
+JOYT        equ $20               ; joy fire
+JOYR        equ $80               ; joy right bit
 
-JIIFYH    equ $a0               ; jiffy clock lsb - msb
-JIFFYM    equ $a1
-JIFFYL    equ $a2
+JIIFYH      equ $a0               ; jiffy clock lsb - msb
+JIFFYM      equ $a1
+JIFFYL      equ $a2
 
-chrom1    equ $8000             ; upper case character rom
-chrom2    equ $8400             ; upper case reversed
-chrom3    equ $8c00             ; upper lower reversed
-chrom4    equ $8800             ; upper lower
-cassStart equ $033d             ;start of cassette buffer ( 190 bytes)
+chrom1      equ $8000             ; upper case character rom
+chrom2      equ $8400             ; upper case reversed
+chrom3      equ $8c00             ; upper lower reversed
+chrom4      equ $8800             ; upper lower
+cassStart   equ $033d             ;start of cassette buffer ( 190 bytes)
         ;; Sprite_loc first 10 bytes
         ;; 0347
         ;; sprite_loc2 second 10
-cassEnd   equ $03fb
+cassEnd     equ $03fb
 
 ;; vic-I chip registers
 chrst           equ $9003       ; font map pointer
@@ -169,11 +181,12 @@ LASTJOYDIR      equ $4b         ;last joy reading that had a switch thrown
 MOVEMADE        equ $4c         ;true if last pacman move was successful
 TIMER1          equ $4d         ;compared against jiffy clock for chase/scatter modes
 TIMER1_h        equ $4e         ;timer1 high byte
-r_seed          equ $4f
-;Div22Table      equ $50
+r_seed          equ $4f         ;
+Div22Table      equ $50         ;
 ;;; ----------- 10 bytes
-PacLives        equ $6a
-SirenIdx        equ $6b        
+PacLives        equ $6a ;
+SirenIdx        equ $6b ;
+EatenIdx        equ $6c ; number of ghosts eaten since power pill
 ;TurnLost        equ $5b         ;incremented 
 PACDEATH        equ $66         ;pacman death animation pointer
          
@@ -624,9 +637,7 @@ PACL            equ [GH3L+4]        ;pacman char number
         ;; brk
 
 
-        jmp main
 
-;    INCLUDE "music.asm"
         INCLUDE "debug.asm"
 
 
@@ -703,15 +714,20 @@ pinkyDots       equ totalDots-20 ;dots to release pinky ( should be 1)
 blinkyS2Dots    equ [totalDots/4]*3
 
 maxLives        equ 4           ;max lives ever possible on left display
-pacLives        equ 4           ;default starting lives for pacman
+pacLives        equ 3           ;default starting lives for pacman
 g1Start         equ screen+22*11+9
 g2Start         equ screen+22*outOfBoxRow+outOfBoxCol
 ;;; debug location, buttom row
 ;g2Start         equ screen+22*21+2
 g3Start         equ screen+22*11+10
 g4Start         equ screen+22*11+12
-;;; 
-Sprite_page     dc.b 0        
+;;;
+;;; make number code useable for basic 'tokens'
+;;; I use this to generate the 'sys' command to start
+;;; the program
+mknumber0 eqm [..-1]
+
+        
 Sprite_loc      equ cassStart
 Sprite_loc2     equ Sprite_loc+10 ;new screen loc
 Sprite_back     equ Sprite_loc2+10   ;background char before other sprites drawn
@@ -740,6 +756,7 @@ Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*
 Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; see motion defines
 ;;; table of sprite offset for ghosts in box
 inBoxTable      dc.b 0,0,0,2,6
+pointTable      dc.w $1600,$0800,$0400,$0200        
 ;;; the current sprite speeds
 ;;; speeds when pacman is powered up
 eyeSpeed         equ 255                ;sprite_speed setting for eyes
@@ -792,14 +809,13 @@ masterSpeed      equ 1 ;master game delay
 ;;; division table for division by 22
 ;Div22Table_i      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
 Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
-Div22Table      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 MotionTable     dc.b motionUp,motionDown,motionLeft,motionRight
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1 ;15
-sirenBase equ 223
-sirenStep equ 5
-WakaIdx dc.b 0
-WakaTimer dc.b 2        
+sirenBase  equ 223
+sirenStep  equ 5
+WakaIdx    dc.b 0
+WakaTimer  dc.b 2        
 SirenTable      
         dc.b sirenBase+[sirenStep*0]
         dc.b sirenBase+[sirenStep*1]
@@ -1087,10 +1103,18 @@ ReverseGhosts SUBROUTINE
         sta Sprite_mode,X
 .done
         rts
+;;; 
+;;; manage switching ghosts from chase to scatter modes
+;;; 
 Timer1Expired SUBROUTINE
         jsr ReverseGhosts
         ldx ChaseTableIdx       ;move down to next table entry
         dex
+        ;;
+        ;; TODO
+        ;; if ghosts havn't all come out by the beginning of the third
+        ;; scatter period, then send them out
+        ;; 
         bpl .0                  ;branch positive
         ;; < 0 wrapping around table
 initChaseTimer        
@@ -1110,7 +1134,7 @@ initChaseTimer
         inx                     ;add 1 such that even/odd works the way we want
         txa                     ;
         and #1                  ;bit 0 controls chase or scatter even or odd
-        sta CHASEMODE
+        sta CHASEMODE           ;engage chase mode, scatter when clear
         beq .done
         Display1 "C",10,#1
 .done
@@ -1140,8 +1164,11 @@ PowerPillOff SUBROUTINE
 ;;; 
 PowerPill SUBROUTINE
         lda #$50                ;bcd '50' points
-        jsr UpdateScore 
-        lda PowerPillTime
+        ldy #$0                 ;bcd high byte
+        jsr UpdateScore
+        lda #3
+        sta EatenIdx            ;initial ghost bonus points
+        lda PowerPillTime       ;init power pill time
         sta POWER_UP            ;store in timer
         ldy #SPRITES            ;init loop counter
         ;; install new speed map for all sprites
@@ -1468,70 +1495,17 @@ death subroutine
         jmp .top
 .done
         jsr stopSound
+        jsr DecrementLives
         JmpReset modePacDeath   ;reset level, pacman died mode
 
-;;; 
-;;; reset game after pacman death, or level start
-;;; inputs: S1=0 causes us to draw the maze and do all initialization for a new level
-;;; 
-reset_game subroutine
-        lda S1
-        cmp #modeResetGame
-        bne .00
-        jsr reset_game1         ; full game reset
-.00        
-        
-        store16 pacStart , Sprite_loc2+[2*0]
-        store16 g1Start  , Sprite_loc2+[2*1]
-        store16 g2Start  , Sprite_loc2+[2*2] 
-        store16 g3Start  , Sprite_loc2+[2*3] 
-        store16 g4Start  , Sprite_loc2+[2*4]
-        ;; init loop counter
-        ldx #SPRITES-1          ;SPRITES is 1 based, so -1
-.0
-        jsr erasesprt
-        
-        sta Sprite_offset,X
-        lda inBoxTable,X
-        sta Sprite_offset2,X
-        lda #0
-        sta Sprite_sback,X
-        sta Sprite_mode,X
-        lda #dirHoriz
-        sta Sprite_dir2,X
-        lda Sprite_base,X  ;load base sprite speed
-        sta Sprite_speed,X ;store it
-        cpx #0             ;are we pacman
-        beq .skip_bmap     ;skip setting bitmap
-        store16x GHOST,Sprite_src ;set bitmap for ghosts
-.skip_bmap
-        dex
-        bpl .0
-.1
-        lda #motionLeft
-        sta Sprite_motion
-        lda #motionRight
-        sta Sprite_motion+1
-        sta Sprite_motion+3
-        lda #motionLeft
-        sta Sprite_motion+2
-        sta Sprite_motion+4
-        ;; sprites not in ghost box: pacman and blinky
-        lda #1
-        sta Sprite_mode+2
-        lda #modePacman
-        sta Sprite_mode+0
-
-        lda S1
-        beq .continue           ;anything greater than 0 is modePacDeath or modeResetGame
-        jsr reset_game0         ; special logic for level reset
-.continue
         ;; set up dot counts for releasing ghosts
         ;; this is self modifying code, as we are overwriting
         ;; the cpy instruction's argument elsewhere in the code
         ;; 41 is totalDots/4
         ;; totalDots/8 = 20
         ;; /16 = 20
+        MAC SetupDotCounts
+        
         lda DOTCOUNT
         clc
         lsr                     ;2
@@ -1555,15 +1529,59 @@ reset_game subroutine
         tya
         sbc ClydeDots           ;subtract clyde dots from totalDots
         sta XClydeDots+1        ;store in compare instruction
-#if 0
-        ;; store the time the level was started
-        lda JIFFYL
-        sta LevelStartTm
-        lda JIFFYM
-        sta LevelStartTm+1
-#endif
-        jsr DecrementLives
+        ENDM
+;;; 
+;;; reset game after pacman death, or level start
+;;; inputs: S1=0 causes us to draw the maze and do all initialization for a new level
+;;; 
+reset_game subroutine
+        lda S1
+        cmp #modeResetGame
+        bne .00
+        jsr reset_game1         ; full game reset
+.00        
         
+        store16 pacStart , Sprite_loc2+[2*0]
+        store16 g1Start  , Sprite_loc2+[2*1]
+        store16 g2Start  , Sprite_loc2+[2*2] 
+        store16 g3Start  , Sprite_loc2+[2*3] 
+        store16 g4Start  , Sprite_loc2+[2*4]
+        ;; init loop counter
+        ldx #SPRITES-1          ;SPRITES is 1 based, so -1
+.0
+        jsr erasesprt
+
+        lda inBoxTable,X
+        sta Sprite_offset2,X
+        lda #0
+        sta Sprite_sback,X
+        sta Sprite_mode,X
+        lda #dirHoriz
+        sta Sprite_dir2,X
+        lda Sprite_base,X  ;load base sprite speed
+        sta Sprite_speed,X ;store it
+        cpx #0             ;are we pacman
+        beq .skip_bmap     ;skip setting bitmap
+        store16x GHOST,Sprite_src ;set bitmap for ghosts
+.skip_bmap
+        dex
+        bpl .0
+
+        lda #motionLeft
+        sta Sprite_motion
+        lda #motionRight
+        sta Sprite_motion+1
+        sta Sprite_motion+3
+        lda #motionLeft
+        sta Sprite_motion+2
+        sta Sprite_motion+4
+        ;; sprites not in ghost box: pacman and blinky
+        lda #1
+        sta Sprite_mode+2
+        lda #modePacman
+        sta Sprite_mode+0
+
+
         lda #8
         sta 36879               ; border and screen colors
         sta volume              ; turn up the volume to 8
@@ -1573,19 +1591,32 @@ reset_game subroutine
         sta PACFRAMED
         lda JIFFYL
         sta r_seed
+        
 #if 0
-.loop0
-        nop
-        jmp .loop0
+        ;; store the time the level was started
+        lda JIFFYL
+        sta LevelStartTm
+        lda JIFFYM
+        sta LevelStartTm+1
 #endif
+        
+        lda S1              ;S1=0 is pacdeath
+        beq .continue       ;skip some stuff if it's just pacman dying
+        
+        ;; for modeEndLevel,modeResetGame
+        jsr end_level          
 
-        jsr install_isr
+.continue        
+        SetupDotCounts          ;calc when to release ghosts
+        jsr DisplayLives        ;show lives meter
+        jsr install_isr         ;allow game sound interrupt 
+        
         rts
 ;;; level game reset
 ;;; or possibly full game reset
 ;;; #modePacDeath or #modeResetGame
 ;;; 
-reset_game0 subroutine
+end_level subroutine
         jsr mkmaze
         lda #GHOST_WALL
         sta [[outOfBoxRow+1]*22]+outOfBoxCol+screen
@@ -1616,7 +1647,7 @@ reset_game0 subroutine
         sec
         sbc #60
         bcs .pos
-        ;; store min
+        ;; store min possible value
         lda #2
 .pos
         sta PowerPillTime
@@ -1672,10 +1703,12 @@ lifeStart equ 22*[22-5]         ;location on left of screen to show lives meter
 ;;; 
 DecrementLives subroutine
         dec PacLives
-        bne .00
+        bne .done
         ;; game is over
         GameOver
-.00
+.done        
+        rts
+DisplayLives subroutine         ;entry point for displaying lives only
         ldx PacLives
         dex                     ;-1 don't display current life
         ldy #maxLives*22
@@ -2347,6 +2380,7 @@ DotEaten SUBROUTINE
         jsr SoundOn
 
         lda #$10
+        ldy #$0
         jsr UpdateScore
 
         lda #1
@@ -3124,11 +3158,25 @@ DeathDistance equ 5
         beq .done               ;already eaten
         jsr SoundGhostEaten     ;play eaten sound
         sta Sprite_mode,X       ;change mode to eaten
-;        lda #WHITE
-;        sta Sprite_color,X
         store16x BIT_EYES,Sprite_src
         lda #eyeSpeed           ;eyes as fast as possible
         sta Sprite_speed,X
+#if 0        
+        ldy eatenIdx
+        dey                     ;move to next entry
+        bmi .skip               ;did we run off the table?
+        lda pointTable,Y        ;load high byte
+        pha                     ;push
+        dey                     ;move to low byte
+        lda pointTable,Y        ;load low byte
+        sty eatenIdx            ;save updated index
+#endif        
+        
+        
+.skip                           ;really shouldn't be here
+        ;; we ran off the beginning of the point table
+        
+        
 .done        
         ;; GHOST_ROW,GHOST_COL
         rts
@@ -3612,15 +3660,17 @@ blith SUBROUTINE
 .done
     rts
 ;;; update player score
-;;; value to add is in A
+;;; value to add is in A (low)
+;;; and Y (high)
 UpdateScore subroutine
+        sei                     ;prevent 6502 bcd/interrupt 'bug'
         sed                     ;decimal mode
         clc
         adc PlayerScore_l
         sta PlayerScore_l
         bcc .0
-        lda PlayerScore_m
-        adc #0
+        tya
+        adc PlayerScore_m
         sta PlayerScore_m
         bcc .0
         lda PlayerScore_h
@@ -3628,7 +3678,7 @@ UpdateScore subroutine
         sta PlayerScore_h
 .0
         cld                     ;clear dec mode
-        
+        cli
         ldy #5                  ;six score digits
 .loop
         tya
@@ -3907,7 +3957,7 @@ scroll_down2 SUBROUTINE
         sta clrram,X
         ENDM
 
-
+;;; make letter code for display
 mkletter eqm [..-"A"+1|$80]
 ready_msg        
         dv.b mkletter "R","E","A","D","Y"
@@ -4099,6 +4149,7 @@ done:
         sta W5
         rts
         
+
         INCLUDE "maze.asm"
 ;;;
 ;;;
@@ -4566,3 +4617,4 @@ todo:
 #endif
 
         
+
