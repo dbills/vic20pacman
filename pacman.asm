@@ -170,10 +170,10 @@ MOVEMADE        equ $4c         ;true if last pacman move was successful
 TIMER1          equ $4d         ;compared against jiffy clock for chase/scatter modes
 TIMER1_h        equ $4e         ;timer1 high byte
 r_seed          equ $4f
-Div22Table      equ $50
+;Div22Table      equ $50
 ;;; ----------- 10 bytes
-PacLives        equ $5a
-SirenIdx        equ $5b        
+PacLives        equ $6a
+SirenIdx        equ $6b        
 ;TurnLost        equ $5b         ;incremented 
 PACDEATH        equ $66         ;pacman death animation pointer
          
@@ -627,7 +627,6 @@ PACL            equ [GH3L+4]        ;pacman char number
         jmp main
 
 ;    INCLUDE "music.asm"
-        INCLUDE "maze.asm"
         INCLUDE "debug.asm"
 
 
@@ -793,6 +792,7 @@ masterSpeed      equ 1 ;master game delay
 ;;; division table for division by 22
 ;Div22Table_i      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
 Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
+Div22Table      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 MotionTable     dc.b motionUp,motionDown,motionLeft,motionRight
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1 ;15
@@ -4098,11 +4098,8 @@ rotatehighbyte:
 done:
         sta W5
         rts
-;feed S1 in before call
-;either #1 for up
-;or #45 for down
-;END_SCRL_VAL 7 for down 0 for up
-
+        
+        INCLUDE "maze.asm"
 ;;;
 ;;;
 ;;; 
