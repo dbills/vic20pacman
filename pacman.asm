@@ -2316,7 +2316,7 @@ GhostTurn
 .notfocus
 
         UpdateMotion
-        jsr SpecialKeys
+;        jsr SpecialKeys
 #ifconst GHPLAYER        
         jsr GhostAsPlayer
 #endif        
@@ -4614,6 +4614,7 @@ todo:
 
 
         things to do
+        sprite_offset needs set to 0 on death sequence
         lots of JSR can become macros
         save quite a bit of space by moving some more things to zero page
 #endif
