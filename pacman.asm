@@ -398,6 +398,16 @@ PACL            equ [GH3L+4]        ;pacman char number
         pla                     ;restore A
 
         ENDM
+        ;; wait for number seconds in {1}
+        ;; no more than 255/60 seconds possible
+        MAC WaitTime
+        lda JIFFYL
+        clc
+        adc #60*{1}               ;seconds
+.gettime        
+        cmp JIFFYL
+        bne .gettime
+        ENDM
 ; write a 16 bit address to a destination
 ; indexed by X
 ; store16x(source_label,dest[X])
@@ -756,7 +766,8 @@ Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*
 Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; see motion defines
 ;;; table of sprite offset for ghosts in box
 inBoxTable      dc.b 0,0,0,2,6
-pointTable      dc.w $1600,$0800,$0400,$0200        
+;;; for eating ghosts 200,400,800,1600 in bcd
+pointTable      dc.b $16,00,$08,00,$04,00,$02,00
 ;;; the current sprite speeds
 ;;; speeds when pacman is powered up
 eyeSpeed         equ 255                ;sprite_speed setting for eyes
@@ -1166,7 +1177,7 @@ PowerPill SUBROUTINE
         lda #$50                ;bcd '50' points
         ldy #$0                 ;bcd high byte
         jsr UpdateScore
-        lda #3
+        lda #7                ;[4*2]-1
         sta EatenIdx            ;initial ghost bonus points
         lda PowerPillTime       ;init power pill time
         sta POWER_UP            ;store in timer
@@ -1618,6 +1629,7 @@ reset_game subroutine
 ;;; 
 end_level subroutine
         jsr mkmaze
+        jsr DisplayScore
         lda #GHOST_WALL
         sta [[outOfBoxRow+1]*22]+outOfBoxCol+screen
         lda #CYAN
@@ -2149,7 +2161,7 @@ UpdateMotion2 SUBROUTINE
         ;; Output: GHOST_ROW,GHOST_COL
         MAC CalcGhostRowCol
         
-        move16x Sprite_loc2,W1
+        move16x Sprite_loc,W1
         ScreenToColRow W1,GHOST_COL,GHOST_ROW
         
         ENDM
@@ -2568,8 +2580,8 @@ ones:
         asl
         asl
         sta {4}
-        lda Sprite_offset2,X
-        ldy Sprite_dir2,X
+        lda Sprite_offset,X
+        ldy Sprite_dir,X
         cpy #dirVert
         beq .vert
         cpy #dirHoriz
@@ -3161,18 +3173,23 @@ DeathDistance equ 5
         store16x BIT_EYES,Sprite_src
         lda #eyeSpeed           ;eyes as fast as possible
         sta Sprite_speed,X
-#if 0        
-        ldy eatenIdx
-        dey                     ;move to next entry
+
+        saveX
+;;; todo: maybe, display ghost eaten score
+;        move16x Sprite_loc,W1
+;        store16 ready_msg,W2
+;        jsr ndPrint
+;        WaitTime 3
+;        jsr rsPrint
+        ldx EatenIdx
         bmi .skip               ;did we run off the table?
-        lda pointTable,Y        ;load high byte
-        pha                     ;push
-        dey                     ;move to low byte
-        lda pointTable,Y        ;load low byte
-        sty eatenIdx            ;save updated index
-#endif        
-        
-        
+        lda pointTable,x        ;load low byte
+        dex                     ;move to low byte
+        ldy pointTable,x        ;load high byte
+        dex
+        stx EatenIdx            ;save updated index
+        jsr UpdateScore
+        resX
 .skip                           ;really shouldn't be here
         ;; we ran off the beginning of the point table
         
@@ -3668,7 +3685,6 @@ UpdateScore subroutine
         clc
         adc PlayerScore_l
         sta PlayerScore_l
-        bcc .0
         tya
         adc PlayerScore_m
         sta PlayerScore_m
@@ -3679,6 +3695,7 @@ UpdateScore subroutine
 .0
         cld                     ;clear dec mode
         cli
+DisplayScore subroutine        
         ldy #5                  ;six score digits
 .loop
         tya
@@ -3995,16 +4012,6 @@ rsPrint subroutine
         dey
         bpl .1
         rts
-        ;; wait for number seconds in {1}
-        ;; no more than 255/60 seconds possible
-        MAC WaitTime
-        lda JIFFYL
-        clc
-        adc #60*{1}               ;seconds
-.gettime        
-        cmp JIFFYL
-        bne .gettime
-        ENDM
 ;;; 
 ;;; print the get ready and delay before player gets control of a level
 getReady subroutine
