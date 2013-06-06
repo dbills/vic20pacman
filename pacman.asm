@@ -1677,7 +1677,7 @@ reset_game subroutine
 ;;; #modePacDeath or #modeResetGame
 ;;; 
 end_level subroutine
-        jsr mkmaze
+        jsr mkmaze2
         jsr DisplayScore
         lda #GHOST_WALL
         sta [[outOfBoxRow+1]*22]+outOfBoxCol+screen
@@ -2004,7 +2004,105 @@ process_nibble subroutine
         sta (W3),Y              ;write to clrram
         rts
 
-#if 0
+set_color subroutine
+        ldx #WHITE              ;assume white
+        cmp #DOT                ;is it a dot?
+        beq .isdot              ;yep, skip to store in clrram
+        ldx #BLUE               ;oh, its a wall
+.isdot
+        txa                     ;color to A
+        sta (W3),Y              ;write to clrram
+        rts
+        
+dataoffset dc.b 0
+mirror dc.b 0        
+;;; for mirrored maze attempt
+process_nibble2 subroutine
+        ldy mirror
+        cpy #11                 ;reached middle of screen?
+        beq .0
+
+        pha
+        clc
+        adc #6                  ;add offset to create tile #
+        sta (W2),Y              ;put it on the screen
+        jsr set_color
+        ;; place mirror side
+        lda #20                 ;21-Y
+        sec
+        sbc mirror
+        tay                     ;y = 21 - y
+        pla                     ;pull tile back out
+        tax                     ;save in X for a bit
+        ;; is it a reversible character?
+        and #%00001100          ;
+        cmp #4                  ;bit 3 but not 4 is set
+        brk
+        bne .notrev     
+        txa                     ;restore A
+        and #%00000111          ;clear bit 4
+        jmp .store
+.notrev
+        txa
+.store        
+        clc
+        adc #6
+        sta (W2),y
+        jsr set_color
+
+        inc mirror
+        
+        rts
+.0
+        brk
+        ;; time to move to the next line
+        add16Im W2,#22
+        add16Im W3,#22
+        lda #0
+        sta mirror
+        rts
+mkmaze2 subroutine
+        store16 screen,W2
+        ldy #255
+.loop
+        lda #EMPTY
+        sta (W2),Y
+        dey
+        bne .loop
+        
+        store16 MazeB,W1
+        store16 screen+1,W2
+        store16 clrram,W3
+        lda #0
+        sta dataoffset
+        sta mirror
+.fetch_byte
+        ldy dataoffset
+        cpy #100
+        bne .begin
+
+        lda #totalDots
+        sta DOTCOUNT            ;dot count to 0
+        lda #PWR
+        placePellets screen
+        lda #WHITE
+        placePellets clrram
+        sta clrram+[22*pacStartRow]+pacStartCol
+        rts
+.begin
+        lda (W1),Y              ;fetch high nibble
+        jsr SplitByte
+        pha                     ;push low nibble
+        txa                     ;high nibble to A
+        jsr process_nibble2
+        pla                     ;pull low nibble
+        jsr process_nibble2
+        inc dataoffset
+        jsr WaitFire
+        jmp .fetch_byte
+        
+        rts
+#if 1
 ;;; waits for joystick to be pressed
 ;;; and released
 WaitFire SUBROUTINE
@@ -4175,7 +4273,86 @@ BIT_PWR1
         dc.b %00111100
         dc.b %00011000
         dc.b %00000000
-BIT_DOT 
+;;; char 6 starts here
+        ;; right top
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %11111000
+        dc.b %00000100
+        dc.b %00000100
+        dc.b %11000100
+        dc.b %00100100
+        dc.b %00100100
+        ;; right facing tee
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %11000100
+        dc.b %00000100
+        dc.b %00000100
+        dc.b %11000100
+        dc.b %00100100
+        dc.b %00100100
+        ;; right cap
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %11111100
+        dc.b %00000010
+        dc.b %00000010
+        dc.b %11111100
+        dc.b %00000000
+        dc.b %00000000
+        ;; bot right
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %11000100
+        dc.b %00000100
+        dc.b %00000100
+        dc.b %11111000
+        dc.b %00000000
+        dc.b %00000000
+        
+        ;; 
+        ;; now the mirror of the previous 4 characters
+        ;; used by mirror maze compression
+        ;;
+        
+        ;; left top
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00011111
+        dc.b %00100000
+        dc.b %00100000
+        dc.b %00100011
+        dc.b %00100100
+        dc.b %00100100
+        ;; left facing tee
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100011
+        dc.b %00100000
+        dc.b %00100000
+        dc.b %00100011
+        dc.b %00100100
+        dc.b %00100100
+        ;; left cap
+        dc.b %00000000
+        dc.b %00000000
+        dc.b %00111111
+        dc.b %01000000
+        dc.b %01000000
+        dc.b %00111111
+        dc.b %00000000
+        dc.b %00000000
+        ;; bot left   
+        dc.b %00100100
+        dc.b %00100100
+        dc.b %00100011
+        dc.b %00100000
+        dc.b %00100000
+        dc.b %00011111
+        dc.b %00000000
+        dc.b %00000000
+BIT_DOT                         
         ;; regular eating dot
         dc.b 0
         dc.b 0
@@ -4215,42 +4392,6 @@ BIT_VWALL
         dc.b %00100100
         dc.b %00100100
         dc.b %00100100
-        ;; left top
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00011111
-        dc.b %00100000
-        dc.b %00100000
-        dc.b %00100011
-        dc.b %00100100
-        dc.b %00100100
-        ;; right top
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %11111000
-        dc.b %00000100
-        dc.b %00000100
-        dc.b %11000100
-        dc.b %00100100
-        dc.b %00100100
-        ;; bot left   
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100011
-        dc.b %00100000
-        dc.b %00100000
-        dc.b %00011111
-        dc.b %00000000
-        dc.b %00000000
-        ;; bot right
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %11000100
-        dc.b %00000100
-        dc.b %00000100
-        dc.b %11111000
-        dc.b %00000000
-        dc.b %00000000
         ;; top cap
         dc.b %00000000
         dc.b %00011000
@@ -4269,24 +4410,6 @@ BIT_VWALL
         dc.b %00100100
         dc.b %00011000
         dc.b %00000000
-        ;; left cap
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00111111
-        dc.b %01000000
-        dc.b %01000000
-        dc.b %00111111
-        dc.b %00000000
-        dc.b %00000000
-        ;; right cap
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %11111100
-        dc.b %00000010
-        dc.b %00000010
-        dc.b %11111100
-        dc.b %00000000
-        dc.b %00000000
         ;; top tee
         dc.b %00000000
         dc.b %00000000
@@ -4294,24 +4417,6 @@ BIT_VWALL
         dc.b %00000000
         dc.b %00000000
         dc.b %11000011
-        dc.b %00100100
-        dc.b %00100100
-        ;; left facing tee
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100011
-        dc.b %00100000
-        dc.b %00100000
-        dc.b %00100011
-        dc.b %00100100
-        dc.b %00100100
-        ;; right facing tee
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %11000100
-        dc.b %00000100
-        dc.b %00000100
-        dc.b %11000100
         dc.b %00100100
         dc.b %00100100
 BIT_EMPTY        
