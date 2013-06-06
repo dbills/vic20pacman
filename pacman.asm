@@ -184,10 +184,11 @@ TIMER1_h        equ $4e         ;timer1 high byte
 r_seed          equ $4f         ;
 Div22Table      equ $50         ;
 ;;; ----------- 10 bytes
+Sprite_offset   equ $5a
+;;; ------------equ $64
 PacLives        equ $6a ;
 SirenIdx        equ $6b ;
 EatenIdx        equ $6c ; number of ghosts eaten since power pill
-;TurnLost        equ $5b         ;incremented 
 PACDEATH        equ $66         ;pacman death animation pointer
          
 #IFCONST _LOCAL_SAVEDIR
@@ -600,18 +601,32 @@ PACL            equ [GH3L+4]        ;pacman char number
 ;;; on entry: A = tile in question
 ;;; W4 (out) font address of tile underneath
 ;;; uses S5,S6,W5
-        MAC mergeTile 
+        MAC mergeTile
+#if 0        
         sta S5
         lda #8
         sta S6
         jsr multxx
         lda W5
+#endif
+        ldy #0
+        sty W5
+        sty W5+1
+        clc
+        asl 
+        rol W5+1
+        asl
+        rol W5+1
+        asl
+        rol W5+1
+
         clc
         adc #mychars&$ff
         sta W4
         lda W5+1
         adc #mychars >> 8
         sta W4+1
+
         ENDM
 ;; beq on joy right A has bit 7 of last reading from JOY0B
         MAC onjoyr
@@ -747,8 +762,8 @@ Sprite_sback    equ Sprite_back2+5
 Sprite_sback2   equ Sprite_sback+5
 Sprite_dir      equ Sprite_sback2+5 ;
 Sprite_dir2     equ Sprite_dir+5    ;sprite direction 1(horiz),22(vert)    
-Sprite_offset   equ Sprite_dir2+5   ;sprite bit offset in tiles
-Sprite_offset2  equ Sprite_offset+5 ;upcoming sprite bit offset in tiles
+;Sprite_offset   equ Sprite_dir2+5   ;sprite bit offset in tiles
+Sprite_offset2  equ Sprite_dir2+5 ;upcoming sprite bit offset in tiles
 PlayerScore_h   equ Sprite_offset2+5 ;3 byte BCD player score, MSB order
 PlayerScore_m   equ PlayerScore_h+1
 PlayerScore_l   equ PlayerScore_m+1
@@ -874,6 +889,18 @@ VolTableSz equ 15
         sta Sprite_offset,X
 
         ENDM
+;;; clear all bits to 0
+;;; W2 = top half font ram
+;;; W3 = bottom half font ram
+        MAC blitc 
+        ldy #16
+        lda #0
+.loop
+        dey
+        sta (W2),Y
+        bne .loop
+.done
+        ENDM
 ;;; S2 sprite to render
 render_sprite SUBROUTINE
         stx S2                  ;set for call to blith
@@ -904,11 +931,11 @@ render_sprite SUBROUTINE
         
         lda Sprite_offset2,X
         sta S1                  ;setup for blitd,blith,blitc
-        jsr blitc        ;
+        blitc        ;
         lda Sprite_dir2,X
-        cmp #1
+        cmp #dirHoriz
         beq .horiz
-        cmp #22
+        cmp #dirVert
         beq .vert
         brk
 .horiz        
@@ -1459,6 +1486,23 @@ longJmp subroutine
         ldx ResetPoint
         txs
         jmp PacDeathEntry
+
+        MAC ClearPacSite
+        ;; lda Sprite_sback
+        ;; pha
+        ;; lda Sprite_sback2
+        ;; pha
+        lda #EMPTY
+        sta Sprite_sback
+        sta Sprite_sback2
+        ENDM
+
+        MAC REstorePacSite
+        pla
+        sta Sprite_sback
+        pla
+        sta Sprite_sback2
+        ENDM
 ;;; 
 ;;; called when pacman touches a ghost
 ;;; performs death animation
@@ -1471,6 +1515,7 @@ death subroutine
         jsr PowerPillOff        ;call off routine to clean up
         jsr SoundOff            ;stop waka
 
+        ClearPacSite
         store16 PAC1,PACDEATH
 
         lda #deathStartNote
@@ -1505,6 +1550,7 @@ death subroutine
         store16 PAC1,PACDEATH
         jmp .top
 .done
+;        RestorePacSite
         jsr stopSound
         jsr DecrementLives
         JmpReset modePacDeath   ;reset level, pacman died mode
@@ -1541,6 +1587,14 @@ death subroutine
         sbc ClydeDots           ;subtract clyde dots from totalDots
         sta XClydeDots+1        ;store in compare instruction
         ENDM
+
+        MAC ResetSpriteLocs 
+        store16 pacStart , Sprite_loc2+[2*0]
+        store16 g1Start  , Sprite_loc2+[2*1]
+        store16 g2Start  , Sprite_loc2+[2*2] 
+        store16 g3Start  , Sprite_loc2+[2*3] 
+        store16 g4Start  , Sprite_loc2+[2*4]
+        ENDM
 ;;; 
 ;;; reset game after pacman death, or level start
 ;;; inputs: S1=0 causes us to draw the maze and do all initialization for a new level
@@ -1551,12 +1605,7 @@ reset_game subroutine
         bne .00
         jsr reset_game1         ; full game reset
 .00        
-        
-        store16 pacStart , Sprite_loc2+[2*0]
-        store16 g1Start  , Sprite_loc2+[2*1]
-        store16 g2Start  , Sprite_loc2+[2*2] 
-        store16 g3Start  , Sprite_loc2+[2*3] 
-        store16 g4Start  , Sprite_loc2+[2*4]
+        ResetSpriteLocs
         ;; init loop counter
         ldx #SPRITES-1          ;SPRITES is 1 based, so -1
 .0
@@ -2098,51 +2147,6 @@ SpecialKeys SUBROUTINE
         lda GHOST_DIR
         sta Sprite_motion,X
         ENDM
-#if 0        
-;;; update motion but don't reverse
-UpdateMotion2 SUBROUTINE        
-        lda GHOST_DIR
-        cmp #motionRight
-        beq .right
-        cmp #motionDown
-        beq .down
-        cmp #motionLeft
-        beq .left
-        cmp #motionUp
-        beq .up
-        cmp #$7f
-        beq .done
-        brk
-.left
-        lda #motionRight
-        cmp Sprite_motion,X
-        bne .store
-;        brk
-        rts
-.right
-        lda #motionLeft
-        cmp Sprite_motion,X
-        bne .store
-;        brk
-        rts
-.up
-        lda #motionDown
-        cmp Sprite_motion,X
-        bne .store
-;        brk
-        rts
-.down
-        lda #motionUp
-        cmp Sprite_motion,X
-        bne .store
-;        brk
-        rts
-.store
-        lda GHOST_DIR
-        sta Sprite_motion,X
-.done        
-        rts
-#endif
         ;; {1} as screen location
         ;; broken into col,row
         ;; stored in {2} , {3}
@@ -2346,7 +2350,6 @@ LeaveBox SUBROUTINE
         
 .done        
         rts                     ;
-        ;; increase blinky speed
 ;;;
 ;;;take blinky out of cruise mode
 ;;; 
@@ -3562,18 +3565,6 @@ SoundOff SUBROUTINE
         cli
 .done        
         rts
-;;; clear all bits to 0
-;;; W2 = top half font ram
-;;; W3 = bottom half font ram
-blitc SUBROUTINE
-    ldy #16
-    lda #0
-.loop
-    dey
-    sta (W2),Y
-    bne .loop
-.done
-    rts
 ;;; vertical blit
 ;;; W1 = source bits
 ;;; W2 = left tile dest bits
@@ -4620,7 +4611,11 @@ todo:
 
         clyde DOES need the timer to come out toward the end if you
         die
-      
+
+
+        things to do
+        lots of JSR can become macros
+        save quite a bit of space by moving some more things to zero page
 #endif
 
         
