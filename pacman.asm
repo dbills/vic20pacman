@@ -207,11 +207,11 @@ noChoice        equ $7f
 ;;
 ;; misc constants
 ;;
-charTop         equ 63          ;max user def chars
 EMPTY           equ [BIT_EMPTY-CHAR_BEGIN]/8
 PWR2            equ [BIT_PWR0-CHAR_BEGIN]/8
 PWR             equ [BIT_PWR1-CHAR_BEGIN]/8
-TEEBOT          equ [BIT_TEEBOT-CHAR_BEGIN]/8       ;bottom tee
+RTOP            equ [BIT_RTOP-CHAR_BEGIN]/8   ;right top corner
+;TEEBOT          equ [BIT_TEEBOT-CHAR_BEGIN]/8 ;bottom tee
 DOT             equ [BIT_DOT-CHAR_BEGIN]/8
 HWALL           equ [BIT_HWALL-CHAR_BEGIN]/8
 VWALL           equ [BIT_VWALL-CHAR_BEGIN]/8
@@ -650,18 +650,6 @@ PACL            equ [GH3L+4]        ;pacman char number
         sta LASTJOY             ;store it
 .done        
         ENDM
-        ;; test code for multxx routine
-        ;; lda #131
-        ;; sta S5
-        ;; lda #12
-        ;; sta S6
-        ;; lda #0
-        ;; sta W5
-        ;; sta W5+1
-        ;; jsr multxx
-        ;; brk
-
-
 
         INCLUDE "debug.asm"
 
@@ -795,8 +783,9 @@ Sprite_speed2   dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSp
 ;;; default speeds for sprites for current level
 ;;; rational: small difference might help them from not clumping up
 ;;; blinky is fastest, then pinky, then inky, then clyde
-Sprite_base     dc.b 40,20,20,20,20
-Sprite_hard     dc.b 80,255,255,255,255        
+Sprite_base     dc.b 42,21,23,22,20
+;Sprite_hard     dc.b 80,255,255,255,255        
+;Sprite_base     dc.b 255,255,255,255,255        
 Sprite_turn     dc.b 5,9,6,3,7        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
@@ -830,7 +819,7 @@ ChaseTableIdx dc.b ChaseTableSz
         ;; if eyes heading toward ghost box
         ;; or in ghost box already
         ;; etc
-masterSpeed      equ 1 ;master game delay
+masterSpeed      equ 7 ;master game delay
 ;;; 
 ;;; division table for division by 22
 ;Div22Table_i      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
@@ -961,8 +950,8 @@ CheckFood subroutine
         beq .end_level
 .done        
         rts
-.end_level        
-        jsr uninstall_isr
+.end_level
+        WaitTime 1
         JmpReset modeEndLevel
         ;; control never reaches here
 .power_pill        
@@ -1184,7 +1173,8 @@ PowerPillOff SUBROUTINE
         lda #0
         sta 36876
         sta 36877
-        ldy #SPRITES
+        sta POWER_UP
+        ldy #SPRITES-1
 .loop        
         lda Sprite_base,Y
         sta Sprite_speed,Y
@@ -1204,11 +1194,11 @@ PowerPill SUBROUTINE
         lda #$50                ;bcd '50' points
         ldy #$0                 ;bcd high byte
         jsr UpdateScore
-        lda #7                ;[4*2]-1
+        lda #7                  ;[4*2]-1
         sta EatenIdx            ;initial ghost bonus points
         lda PowerPillTime       ;init power pill time
         sta POWER_UP            ;store in timer
-        ldy #SPRITES            ;init loop counter
+        ldy #SPRITES-1          ;init loop counter
         ;; install new speed map for all sprites
 .loop
         lda Sprite_speed2,Y
@@ -1503,6 +1493,13 @@ longJmp subroutine
         pla
         sta Sprite_sback2
         ENDM
+        ;; Wait for a keypress
+        MAC WaitKey
+.wait        
+        lda CURKEY
+        cmp #{1}
+        bne .wait
+        ENDM
 ;;; 
 ;;; called when pacman touches a ghost
 ;;; performs death animation
@@ -1510,10 +1507,9 @@ longJmp subroutine
 ;;; which needs some work :(
 death subroutine
         jsr uninstall_isr
-        ldx #0
-        stx POWER_UP            ;no more power mode
         jsr PowerPillOff        ;call off routine to clean up
         jsr SoundOff            ;stop waka
+        WaitKey 9 ;small pause before death
 
         ClearPacSite
         store16 PAC1,PACDEATH
@@ -1521,7 +1517,7 @@ death subroutine
         lda #deathStartNote
         sta S3                  ;initial note
         sta S4                  ;no zero = pitch mode for 'delay'
-        lda #5
+;        lda #5
 .top
         move16 PACDEATH,Sprite_src
         lda #2                  ;initial frame is pacman pointing X
@@ -1600,6 +1596,10 @@ death subroutine
 ;;; inputs: S1=0 causes us to draw the maze and do all initialization for a new level
 ;;; 
 reset_game subroutine
+        jsr uninstall_isr
+        jsr PowerPillOff
+        jsr SoundOff            ;waka off
+        
         lda S1
         cmp #modeResetGame
         bne .00
@@ -1645,7 +1645,8 @@ reset_game subroutine
         lda #8
         sta 36879               ; border and screen colors
         sta volume              ; turn up the volume to 8
-        lda #$ff
+        lda #!JOYL
+        
         sta LASTJOYDIR
         lda #1
         sta PACFRAMED
@@ -1669,7 +1670,6 @@ reset_game subroutine
 .continue        
         SetupDotCounts          ;calc when to release ghosts
         jsr DisplayLives        ;show lives meter
-        jsr install_isr         ;allow game sound interrupt 
         
         rts
 ;;; level game reset
@@ -1731,7 +1731,7 @@ reset_game1 subroutine
 
         lda #pacLives           ;1 based : number of lives + 1
         sta PacLives
-BLARGO1
+;BLARGO1
         ldx #4
 .loop
         move16xx Div22Table_i,Div22Table
@@ -1739,13 +1739,6 @@ BLARGO1
         bpl .loop
         
         rts
-        ;; Wait for a keypress
-        MAC WaitKey
-.wait        
-        lda CURKEY
-        cmp #{1}
-        bne .wait
-        ENDM
         ;; game over macro
         ;; display message and restart
         MAC GameOver
@@ -1821,14 +1814,6 @@ main SUBROUTINE
         ora #$0f                    ;char ram pointer is lower 4 bits
         sta VICSCRN
 
-        ldx #22
-        lda #WHITE
-.top
-        sta clrram,X
-        dex
-        bne .top
-.done
-
         tsx
         stx ResetPoint
 
@@ -1840,6 +1825,7 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         store16 screen+leftMargin+22*pacStartRow+21/2-ready_msg_sz/2,W1      ;post the player ready message
         store16 ready_msg,W2
         jsr getReady
+        jsr install_isr         ;allow game sound interrupt 
         jsr initChaseTimer
         
         jmp .background
@@ -1929,7 +1915,6 @@ PacDeathEntry                   ;code longjmp's here on pacman death
 .loopend
 ;        Display1 "D",0,DOTCOUNT
         jmp .loop
-        brk
         
 ;;; place power pellets
 ;;; W1 pointer
@@ -1952,57 +1937,6 @@ SplitByte subroutine
         pla
         and #$f
         rts
-;;; 
-;;; Create the maze
-;;; 
-mkmaze SUBROUTINE
-
-        store16 MazeB-1,W1
-        store16 screen,W2
-        store16 clrram,W3
-
-.fetch_byte
-        inc16 W1                ;move pointer forward
-        cmp16Im W1,MazeX
-        bne .begin
-        lda #totalDots
-        sta DOTCOUNT            ;dot count to 0
-        lda #PWR
-        placePellets screen
-        lda #WHITE
-        placePellets clrram
-        sta clrram+[22*pacStartRow]+pacStartCol
-        rts
-.begin        
-        ldy #0                  ;8 bit counter to 0
-        lda (W1),Y              ;fetch high nibble
-        jsr SplitByte
-        pha
-        txa
-        jsr process_nibble
-        pla                     ;pull low nibble
-
-        inc16 W2
-        inc16 W3                ;inc color ram pointer
-
-        jsr process_nibble
-
-        inc16 W2                ;inc screen pointer
-        inc16 W3                ;inc color ram pointer
-        jmp .fetch_byte
-
-process_nibble subroutine
-        clc
-        adc #6                  ;add offset to create tile #
-        sta (W2),Y              ;put it on the screen
-        ldx #WHITE              ;assume white
-        cmp #DOT                ;is it a dot?
-        beq .isdot              ;yep, skip to store in clrram
-        ldx #BLUE               ;oh, its a wall
-.isdot
-        txa                     ;color to A
-        sta (W3),Y              ;write to clrram
-        rts
 
 set_color subroutine
         ldx #WHITE              ;assume white
@@ -2013,20 +1947,21 @@ set_color subroutine
         txa                     ;color to A
         sta (W3),Y              ;write to clrram
         rts
-        
-dataoffset dc.b 0
-mirror dc.b 0        
-;;; for mirrored maze attempt
+;;; 
+;;; locals for maze generation routine
+dataoffset equ S1
+mirror     equ S2
+;;; process nibble from compressed maze data
 process_nibble2 subroutine
         ldy mirror
-        cpy #11                 ;reached middle of screen?
-        beq .0
 
         pha
         clc
         adc #6                  ;add offset to create tile #
         sta (W2),Y              ;put it on the screen
         jsr set_color
+        cpy #10                 ;reached middle of screen?
+        beq .0
         ;; place mirror side
         lda #20                 ;21-Y
         sec
@@ -2035,12 +1970,10 @@ process_nibble2 subroutine
         pla                     ;pull tile back out
         tax                     ;save in X for a bit
         ;; is it a reversible character?
-        and #%00001100          ;
-        cmp #4                  ;bit 3 but not 4 is set
-        brk
+        and #%00001000          ;check bit 3 and 4 not set
         bne .notrev     
         txa                     ;restore A
-        and #%00000111          ;clear bit 4
+        eor #%00000100          ;clear bit 3
         jmp .store
 .notrev
         txa
@@ -2054,7 +1987,7 @@ process_nibble2 subroutine
         
         rts
 .0
-        brk
+        pla
         ;; time to move to the next line
         add16Im W2,#22
         add16Im W3,#22
@@ -2063,22 +1996,28 @@ process_nibble2 subroutine
         rts
 mkmaze2 subroutine
         store16 screen,W2
-        ldy #255
-.loop
+        ;; clear top line, and left line
+        ldx #22
+.loop   
         lda #EMPTY
-        sta (W2),Y
-        dey
-        bne .loop
+        sta screen,x
+        sta (W2),y
+        lda #WHITE
+        sta clrram,x
+        add16Im W2,#22
+        dex
+        bpl .loop
+        ;; end clearing of top and left lines
         
         store16 MazeB,W1
-        store16 screen+1,W2
-        store16 clrram,W3
+        store16 screen+22+1,W2
+        store16 clrram+22+1,W3
         lda #0
         sta dataoffset
         sta mirror
 .fetch_byte
         ldy dataoffset
-        cpy #100
+        cpy #MazeX-MazeB
         bne .begin
 
         lda #totalDots
@@ -2098,11 +2037,10 @@ mkmaze2 subroutine
         pla                     ;pull low nibble
         jsr process_nibble2
         inc dataoffset
-        jsr WaitFire
-        jmp .fetch_byte
+        bne .fetch_byte         ;jmp .fetch_byte
         
         rts
-#if 1
+#if 0
 ;;; waits for joystick to be pressed
 ;;; and released
 WaitFire SUBROUTINE
@@ -2284,41 +2222,41 @@ SpecialKeys SUBROUTINE
         ;;      
         jsr Divide22_16
         lda W1
-        sta PACCOL              ;store tile column
-        asl                     ;multiply by 8
+        sta PACCOL             ;store tile column
+        asl                    ;multiply by 8
         asl
         asl
-        ldy Sprite_dir2         ;are we oriented vertically?
+        ldy Sprite_dir         ;are we oriented vertically?
         cpy #dirVert
-        beq .vert
-        clc                     ;we are horiz
-        adc Sprite_offset2      ;add in the smooth scroll offset to pixel count
+        beq .vert              ;yes, don't add offset into X pixel
+        clc                    ;we are horiz
+        adc Sprite_offset      ;add in pixel count to X
 .vert
-        sta PACXPIXEL           ;store pixel column
+        sta PACXPIXEL          ;store pixel column
         
-        lda DIV22_RSLT          ;get row result from division
-        sta PACROW              ;store tile row
-        asl                     ;multiply by 8
+        lda DIV22_RSLT         ;get row result from division
+        sta PACROW             ;store tile row
+        asl                    ;multiply by 8
         asl
         asl
-        cpy #dirHoriz
-        beq .horiz         ;
-        clc                ;we are vertical
-        adc Sprite_offset2 ; add in the smooth scroll offset to pixel count
+        cpy #dirHoriz          ;are we horizontall
+        beq .horiz             ;yes, don't add offset into Y
+        clc                    ;we are vertical
+        adc Sprite_offset      ;add in the smooth scroll offset to pixel count
 .horiz        
         sta PACYPIXEL           ;store pixel row
         ENDM
-        
+        ;; 
         ;; check if sprite X get's to move this frame
+        ;; note: Z=0 on return
         MAC MyTurn2
         dec Sprite_turn,X
         bne {1}
         ;; we don't get to move this turn
-        ;; reset the turn counter, and set the carry
-        ;; to indicate no soup for you
+        ;; reset the turn counter
         lda Sprite_speed,X
         sta Sprite_turn,X
-        sec
+
         ENDM
 
         ;; Place target tile for an eaten ghost
@@ -2355,7 +2293,7 @@ GhostAI SUBROUTINE
 ailoop0
         ldx SPRITEIDX
         MyTurn2 GhostTurn      ;does this ghost get to move this time?
-        jmp .loop              ;no he doesn't
+        bne .loop              ;jmp .loop - no move for ghost
 GhostTurn
         lda Sprite_mode,X
         cmp #modeReverse
@@ -2382,11 +2320,21 @@ GhostTurn
         jsr FrightAI
         jmp .continue
 .notfrightened        
+#if 1       
+        ;; check if we should bother with AI
+        ;; we have to be at an intersection
+        lda Sprite_offset,X
+        beq .decide
+        cmp #8
+        bne .moveghost
+        
+.decide                         ;entering a new tile
+#endif        
         lda CHASEMODE
         bne .chasing
         jsr ScatterGhostAI
         jmp .continue
-.chasing        
+.chasing
         ;; switch on ghost # to get ai routine
         cpx #4
         bne .ghost3
@@ -2553,8 +2501,8 @@ XClydeDots
 ;;; W2 ( candidate position )
 IsWall SUBROUTINE
 .checkWall
-        cmp #TEEBOT
-        bcc .ok                 ;less the TEEBOT tile
+        cmp #RTOP
+        bcc .ok                 ;less the RTOP tile
         cmp #EMPTY
         bcs .ok                 ;or greater than EMPTY
         ;; move isn't ok, set Z=1
@@ -4215,6 +4163,7 @@ rand_8 SUBROUTINE
 no_eor
 	STA	r_seed		; save number as next seed
 	RTS			; done
+#if 0        
 ;;; 
 ;;; S5 * S6 output ( 16 bit ) W5
 ;;; 
@@ -4244,7 +4193,7 @@ rotatehighbyte:
 done:
         sta W5
         rts
-        
+#endif        
 
         INCLUDE "maze.asm"
 ;;;
@@ -4274,6 +4223,7 @@ BIT_PWR1
         dc.b %00011000
         dc.b %00000000
 ;;; char 6 starts here
+BIT_RTOP        
         ;; right top
         dc.b %00000000
         dc.b %00000000
@@ -4352,16 +4302,6 @@ BIT_PWR1
         dc.b %00011111
         dc.b %00000000
         dc.b %00000000
-BIT_DOT                         
-        ;; regular eating dot
-        dc.b 0
-        dc.b 0
-        dc.b 0
-        dc.b 24
-        dc.b 24
-        dc.b 0
-        dc.b 0
-        dc.b 0
 BIT_TEEBOT        
         ;; tee bottom
         dc.b %00100100
@@ -4428,6 +4368,16 @@ BIT_EMPTY
         dc.b %00000000
         dc.b %00000000
         dc.b %00000000
+BIT_DOT                         
+        ;; regular eating dot
+        dc.b 0
+        dc.b 0
+        dc.b 0
+        dc.b 24
+        dc.b 24
+        dc.b 0
+        dc.b 0
+        dc.b 0
 BIT_GHWALL
         ;; ghost wall
         dc.b %00000000
@@ -4722,6 +4672,12 @@ todo:
         sprite_offset needs set to 0 on death sequence
         lots of JSR can become macros
         save quite a bit of space by moving some more things to zero page
+
+        work on pauses between game events
+        when blinky goes to elroy mode, give pacman an extra turn advantage
+
+        consider adding the 'expliot' zone per pacman dossier
+        it gets a littel rough as the top of the maze
 #endif
 
         

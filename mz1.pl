@@ -14,20 +14,20 @@ $left_top  ="4";
 $tee_left  ="5";
 $left_cap  ="6";
 $left_bot  ="7";
-$dot       ="8"; 
 
-$tee_bot   ="9";
-$hwall     ="a";   
-$vwall     ="b";   
-$top_cap   ="c";
-$bot_cap   ="d";
-$tee_top   ="e";   
-$space     ="f";
+$tee_bot   ="8";
+$hwall     ="9";   
+$vwall     ="a";   
+$top_cap   ="b";
+$bot_cap   ="c";
+$tee_top   ="d";   
+$space     ="e";
+$dot       ="f"; 
 
 $skip=<STDIN>;#eat first line
 @LINES=<STDIN>;
 chop(@LINES);
-#chop(@LINES);
+chop(@LINES);
 foreach(@LINES) {
     $len = length($_);
     $len==22 || die("line length wrong $len:\n$_\n");
