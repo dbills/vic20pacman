@@ -16,6 +16,7 @@ _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 GHOSTS_ON   equ 1
 ;GHPLAYER    equ 1              ; ghost as player
+LARGEMAZE   equ 1              ;
 _debug      equ 1              ; true for debugging
 cornerAdv   equ 1              ;pacman's cornering advantage in pixels
 voice1      equ 36874          ; sound registers
@@ -399,15 +400,18 @@ PACL            equ [GH3L+4]        ;pacman char number
         pla                     ;restore A
 
         ENDM
-        ;; wait for number seconds in {1}
-        ;; no more than 255/60 seconds possible
-        MAC WaitTime
-        lda JIFFYL
+WaitTime_ subroutine
         clc
-        adc #60*{1}               ;seconds
+        adc JIFFYL
 .gettime        
         cmp JIFFYL
         bne .gettime
+        rts
+        ;; wait for number seconds in {1}
+        ;; no more than 255/60 seconds possible
+        MAC WaitTime
+        lda #60*{1}               ;seconds
+        jsr WaitTime_
         ENDM
 ; write a 16 bit address to a destination
 ; indexed by X
@@ -681,17 +685,20 @@ pacframes  equ #4            ; total number of pacman animation frames ( 1 based
 ;------------------------------------
 dirVert         equ 22            ;sprite oriented vertically
 dirHoriz        equ 1             ;sprite oriented horizontally
+;;; valid modes for JmpReset
 modeEndLevel    equ 1             ;see JmpReset
 modePacDeath    equ 0             ;see JmpReset
 modeResetGame   equ 2             ;see JmpReset
+;;; valid modes for Sprite_mode
 modeInBox       equ 0
+modeFright      equ 1
+modeEaten       equ 2             ;ghost was chomped
+modeLeaving     equ 3             ;leavin the ghost box
+modeOutOfBox    equ 4             ;see sprite_mode
 modePacman      equ 5             ;mode only pacman has
-;;;changes from scatter to chase cause reverse for example
-modeReverse     equ 6            
-modeFright      equ 4
-modeOutOfBox    equ 1             ;see sprite_mode
-modeLeaving     equ 2             ;leavin the ghost box
-modeEaten       equ 3             ;ghost was chomped
+        ;;changes from scatter to chase cause reverse for example
+modeReverse     equ 6
+;;; end valid modes for Sprite_mode        
 outOfBoxCol     equ 11            ;column at ghost box entry/exit
 outOfBoxRow     equ 9             ;row of tile directly above exit
 pacStartRow     equ outOfBoxRow+8 ;pacman start row
@@ -728,12 +735,19 @@ blinkyS2Dots    equ [totalDots/4]*3
 
 maxLives        equ 4           ;max lives ever possible on left display
 pacLives        equ 3           ;default starting lives for pacman
+#ifconst LARGEMAZE        
 g1Start         equ screen+22*11+9
 g2Start         equ screen+22*outOfBoxRow+outOfBoxCol
 ;;; debug location, buttom row
 ;g2Start         equ screen+22*21+2
 g3Start         equ screen+22*11+10
 g4Start         equ screen+22*11+12
+#else
+g1Start         equ screen+22*11+10
+g2Start         equ screen+22*outOfBoxRow+outOfBoxCol
+g3Start         equ screen+22*11+11
+g4Start         equ screen+22*11+11
+#endif        
 ;;;
 ;;; make number code useable for basic 'tokens'
 ;;; I use this to generate the 'sys' command to start
@@ -1201,6 +1215,7 @@ PowerPill SUBROUTINE
         ldy #SPRITES-1          ;init loop counter
         ;; install new speed map for all sprites
 .loop
+;        store16x BLUE_GHOST,Sprite_src
         lda Sprite_speed2,Y
         sta Sprite_speed,Y
         lda #modeOutOfBox       ;is this ghost in the mze
@@ -1626,12 +1641,17 @@ reset_game subroutine
 .skip_bmap
         dex
         bpl .0
-
-        lda #motionLeft
-        sta Sprite_motion
+;;; not needed?? pacman goes left through joystick
+;        lda #motionLeft
+;        sta Sprite_motion
         lda #motionRight
         sta Sprite_motion+1
+#ifconst LARGEMAZE        
         sta Sprite_motion+3
+#else
+        lda #motionUp
+        sta Sprite_motion+3
+#endif        
         lda #motionLeft
         sta Sprite_motion+2
         sta Sprite_motion+4
@@ -1951,6 +1971,17 @@ set_color subroutine
 ;;; locals for maze generation routine
 dataoffset equ S1
 mirror     equ S2
+#ifconst LARGEMAZE
+mzRightEdge equ 20
+mzLeftEdge  equ 1        
+mzMiddle    equ 10        
+        INCLUDE "maze.asm"
+#else        
+mzRightEdge equ 18
+mzLeftEdge  equ 2        
+mzMiddle    equ 9        
+        INCLUDE "smmaze.asm"
+#endif        
 ;;; process nibble from compressed maze data
 process_nibble2 subroutine
         ldy mirror
@@ -1960,10 +1991,12 @@ process_nibble2 subroutine
         adc #6                  ;add offset to create tile #
         sta (W2),Y              ;put it on the screen
         jsr set_color
-        cpy #10                 ;reached middle of screen?
+        cpy #mzMiddle          ;reached middle of screen?
         beq .0
         ;; place mirror side
-        lda #20                 ;21-Y
+
+        lda #mzRightEdge        ;mazeEdge-Y
+
         sec
         sbc mirror
         tay                     ;y = 21 - y
@@ -2010,8 +2043,8 @@ mkmaze2 subroutine
         ;; end clearing of top and left lines
         
         store16 MazeB,W1
-        store16 screen+22+1,W2
-        store16 clrram+22+1,W3
+        store16 screen+22+mzLeftEdge,W2
+        store16 clrram+22+mzLeftEdge,W3
         lda #0
         sta dataoffset
         sta mirror
@@ -2102,13 +2135,24 @@ scroll_right SUBROUTINE
         jmp scroll_horiz
 
 #if 1
+        MAC MoveGhost
+        lda Sprite_mode,X
+        beq .done               ;ghost in box don't get to move
+        jsr MoveGhostI
+       lda Sprite_mode,X
+       cmp #4                  ;< 4 no copy needed
+       bcs .done
+
+       move16x2 W3,Sprite_src
+        
+.done        
+        ENDM
 ;;; move ghost in its currently indicated direction
-MoveGhost SUBROUTINE
+;;; output: W3 pointer to ghost bitmap for selected direction
+MoveGhostI SUBROUTINE
 #ifconst GHPLAYER
         rts      ;keyboard is controlling ghost
 #endif        
-        lda Sprite_mode,X       ;ghost in box don't get to move
-        beq .exit
         lda Sprite_motion,X
         cmp #motionRight
         beq .right
@@ -2121,10 +2165,12 @@ MoveGhost SUBROUTINE
         brk
 .left
         jsr scroll_left
+        store16 GHOST,W3
 .exit        
         rts
 .right
         jsr scroll_right
+        store16 GHOSTR,W3
         rts
 .up
         jsr scroll_up
@@ -2367,8 +2413,8 @@ GhostTurn
         jsr GhostAsPlayer
 #endif        
 .moveghost
-        
-        jsr MoveGhost           ;
+
+        MoveGhost
         
         jsr Collisions
 .animate
@@ -3210,18 +3256,18 @@ DeathDistance equ 5
         bne .done             
         ;; pacman eaten
 ;        brk
-        jsr death               ;long jumps to level restart
+;        jsr death               ;long jumps to level restart
         ;; control cannot reach here
         rts                     ;leave this here for debugging and commenting jsr death out
-.ghost_eaten
-        lda #modeEaten
-        cmp Sprite_mode,X
-        beq .done               ;already eaten
+.ghost_eaten                    ;pacman has eaten a ghost in the maze
+        lda #modeEaten          ;load eaten mode
+        cmp Sprite_mode,X       ;check if already in eaten mode
+        beq .done               ;already eaten, skip ahead
         jsr SoundGhostEaten     ;play eaten sound
-        sta Sprite_mode,X       ;change mode to eaten
+        sta Sprite_mode,X       ;change sprite mode to eaten
         store16x BIT_EYES,Sprite_src
         lda #eyeSpeed           ;eyes as fast as possible
-        sta Sprite_speed,X
+        sta Sprite_speed,X      ;store eye speed
 
         saveX
 ;;; todo: maybe, display ghost eaten score
@@ -3543,7 +3589,6 @@ scroll_horiz SUBROUTINE
         cmp #dirHoriz           ;are we already horizontal
         beq .ok                 ;ok to move horizontal
         jsr changehoriz         ;no, switch to horizontal
-        bcc .ok                 ;change successful
         rts                     ;we couldn't change to horizontal
 .ok
         lda Sprite_offset,X     ;get our current pixel offset
@@ -3807,18 +3852,18 @@ changehoriz SUBROUTINE
         cmp #motionRight
         beq .isright            ;branch moving right
 .isleft
-        lda #8                  ;going left, sprite offset = 8
+        lda #7                  ;going left, sprite offset = 8
 ;        sec
 ;        sbc CORNER_SHAVE        ;bonus for pacman if applic
-        sta Sprite_offset,X
+        sta Sprite_offset2,X
 
         lda #22                 ;offset from ORG for new sprite pos
         bne .continue           ;jmp .continue
 .isright
-        lda #0                  ;assume moving right
+        lda #1                  ;assume moving right
 ;        clc
 ;        adc CORNER_SHAVE        ;bonus for pacman if applic
-        sta Sprite_offset,X     ;sprite offset = 0
+        sta Sprite_offset2,X     ;sprite offset = 0
 
         lda #23                 ;offset from ORG for new sprite pos
 .continue        
@@ -4054,7 +4099,8 @@ rsPrint subroutine
 getReady subroutine
         jsr ndPrint             ;show message
 
-        WaitTime 3
+        ;WaitTime 3
+        WaitKey 9
         
         jsr rsPrint
         rts
@@ -4195,7 +4241,27 @@ done:
         rts
 #endif        
 
-        INCLUDE "maze.asm"
+BLUE_GHOST
+     dc.b 126,219,219,255,219,165,255,170
+     dc.b 126,219,219,255,219,165,255,85
+GHOSTR
+    dc.b %01111110
+    dc.b %11000011
+    dc.b %11101011
+    dc.b %11101011
+    dc.b %11111111
+    dc.b %11100011
+    dc.b %11111111
+    dc.b %10101010
+GHOSTR_1      
+    dc.b %01111110
+    dc.b %11000011
+    dc.b %11101011
+    dc.b %11101011
+    dc.b %11111111
+    dc.b %11100011
+    dc.b %11111111
+    dc.b %01010101
 ;;;
 ;;;
 ;;; 
@@ -4418,18 +4484,18 @@ GHOST
     dc.b %01111110
     dc.b %11000011
     dc.b %11010111
+    dc.b %11010111
     dc.b %11111111
-    dc.b %11111111
-    dc.b %11100011
+    dc.b %11000111
     dc.b %11111111
     dc.b %10101010
 GHOST2        
     dc.b %01111110
     dc.b %11000011
     dc.b %11010111
+    dc.b %11010111
     dc.b %11111111
-    dc.b %11111111
-    dc.b %11100011
+    dc.b %11000111
     dc.b %11111111
     dc.b %01010101
 PAC1

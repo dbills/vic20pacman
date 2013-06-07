@@ -27,12 +27,12 @@ $dot       ="f";
 $skip=<STDIN>;#eat first line
 @LINES=<STDIN>;
 chop(@LINES);
-chop(@LINES);
+#chop(@LINES);
 foreach(@LINES) {
     $len = length($_);
     $len==22 || die("line length wrong $len:\n$_\n");
-#    for($i=0;$i<$len;$i++) {
-    for($i=1;$i<12;$i++) {
+#    for($i=1;$i<11;$i++) { #smaller maze
+    for($i=1;$i<12;$i++) { # larger maze
         $char=substr($_,$i,1);
         switch($char) {
             case "/" { $output=$output.$left_top;}
