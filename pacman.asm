@@ -13,7 +13,7 @@ Sprite_page     dc.b 0
 Sprite_page     dc.b 0
 #endif        
 _LOCAL_SAVEDIR equ 1
-;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
+_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 GHOSTS_ON   equ 1
 ;GHPLAYER    equ 1              ; ghost as player
 LARGEMAZE   equ 1              ;
@@ -429,6 +429,20 @@ WaitTime_ subroutine
     pla
     tax                         ; restore X register
     endm
+;;;  same as store16x
+    mac store16y
+    tya                         ; x * 2 since 16 bits
+    pha
+    asl
+    tay
+    lda #[{1}] & $ff            ; load low byte
+    sta {2},y                   ; store low byte
+    lda #[{1}] >> 8             ; load high byte
+    iny
+    sta [{2}],y                 ; store high byte
+    pla
+    tay                         ; restore Y register
+    endm
     ;; ABORT instruction
     mac abort
     lda #$c0
@@ -794,12 +808,12 @@ ghostFrightSpeed equ 2
 ghostEasySpeed  equ 160
 ;;; the speed of ghosts on harder levels
 Sprite_speed2   dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed
-;;; default speeds for sprites for current level
-;;; rational: small difference might help them from not clumping up
-;;; blinky is fastest, then pinky, then inky, then clyde
-Sprite_base     dc.b 42,21,23,22,20
-;Sprite_hard     dc.b 80,255,255,255,255        
-;Sprite_base     dc.b 255,255,255,255,255        
+;;; pacman always runs @ 95% of top speed
+;;; ghosts start at 90%
+;;; when hard they are at 100%
+Sprite_base     dc.b 255,255,255,255,255
+;Sprite_base     dc.b 18,10,10,10,10
+;Sprite_hard     dc.b 18,255,255,255,255
 Sprite_turn     dc.b 5,9,6,3,7        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
@@ -833,7 +847,7 @@ ChaseTableIdx dc.b ChaseTableSz
         ;; if eyes heading toward ghost box
         ;; or in ghost box already
         ;; etc
-masterSpeed      equ 7 ;master game delay
+masterSpeed      equ 1 ;master game delay
 ;;; 
 ;;; division table for division by 22
 ;Div22Table_i      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
@@ -850,12 +864,12 @@ SirenTable
         dc.b sirenBase+[sirenStep*1]
         dc.b sirenBase+[sirenStep*2]
         dc.b sirenBase+[sirenStep*3]
-;        dc.b sirenBase+[sirenStep*4]
+;        dc.b sirenBase+[sirenStep*3]
 ;        dc.b sirenBase+[sirenStep*5]
         dc.b 0
 ;        dc.b 0
 ;        dc.b sirenBase+[sirenStep*5]
-;        dc.b sirenBase+[sirenStep*4]
+;        dc.b sirenBase+[sirenStep*3]
         dc.b sirenBase+[sirenStep*3]
         dc.b sirenBase+[sirenStep*2]
         dc.b sirenBase+[sirenStep*1]
@@ -1215,7 +1229,7 @@ PowerPill SUBROUTINE
         ldy #SPRITES-1          ;init loop counter
         ;; install new speed map for all sprites
 .loop
-;        store16x BLUE_GHOST,Sprite_src
+        store16y BLUE_GHOST,Sprite_src
         lda Sprite_speed2,Y
         sta Sprite_speed,Y
         lda #modeOutOfBox       ;is this ghost in the mze
@@ -1656,7 +1670,7 @@ reset_game subroutine
         sta Sprite_motion+2
         sta Sprite_motion+4
         ;; sprites not in ghost box: pacman and blinky
-        lda #1
+        lda #modeOutOfBox
         sta Sprite_mode+2
         lda #modePacman
         sta Sprite_mode+0
@@ -2139,20 +2153,19 @@ scroll_right SUBROUTINE
         lda Sprite_mode,X
         beq .done               ;ghost in box don't get to move
         jsr MoveGhostI
-       lda Sprite_mode,X
-       cmp #4                  ;< 4 no copy needed
-       bcs .done
-
-       move16x2 W3,Sprite_src
-        
+        lda Sprite_mode,X
+        cmp #4                          ;< 4 no copy needed
+        bcc .done
+        move16x2 W3,Sprite_src
 .done        
         ENDM
 ;;; move ghost in its currently indicated direction
 ;;; output: W3 pointer to ghost bitmap for selected direction
 MoveGhostI SUBROUTINE
 #ifconst GHPLAYER
+        store16 GHOST,W3
         rts      ;keyboard is controlling ghost
-#endif        
+#endif
         lda Sprite_motion,X
         cmp #motionRight
         beq .right
@@ -2174,9 +2187,11 @@ MoveGhostI SUBROUTINE
         rts
 .up
         jsr scroll_up
+        store16 GHOSTR,W3
         rts
 .down
         jsr scroll_down
+        store16 GHOST,W3
         rts
 #endif
         
@@ -2366,7 +2381,7 @@ GhostTurn
         jsr FrightAI
         jmp .continue
 .notfrightened        
-#if 1       
+#if 0
         ;; check if we should bother with AI
         ;; we have to be at an intersection
         lda Sprite_offset,X
@@ -2409,12 +2424,13 @@ GhostTurn
 
         UpdateMotion
 ;        jsr SpecialKeys
+.moveghost
 #ifconst GHPLAYER        
         jsr GhostAsPlayer
-#endif        
-.moveghost
-
+#else        
         MoveGhost
+#endif        
+
         
         jsr Collisions
 .animate
@@ -3255,11 +3271,12 @@ DeathDistance equ 5
         ;; passing pacman
         bne .done             
         ;; pacman eaten
-;        brk
-;        jsr death               ;long jumps to level restart
+
+;       jsr death               ;long jumps to level restart
         ;; control cannot reach here
         rts                     ;leave this here for debugging and commenting jsr death out
 .ghost_eaten                    ;pacman has eaten a ghost in the maze
+
         lda #modeEaten          ;load eaten mode
         cmp Sprite_mode,X       ;check if already in eaten mode
         beq .done               ;already eaten, skip ahead
@@ -3544,10 +3561,29 @@ IncrementHPos SUBROUTINE
         adc SCRL_VAL
         ENDM
         
+        MAC ApplyAllBonus
+        tay
+        cpx #0
+        beq .done1
+        lda {1}
+        and #1
+        bne .done0
+.0
+        tya
+        AddScroll
+        jmp .done1
+.done0
+        tya
+.done1        
+        ENDM
         ;; if blinky is in cruise elroy mode, he get's a plus one
         ;; advantage to his scroll value when course scrolling
         ;; account for that here
         ;; do not use A in this routine unless you restore it
+        ;; {1} is the sprite location, this routine uses it
+        ;; to apply the bonus scroll on every course scroll
+        ;; or every other course scroll, depending on
+        ;; blinky's accel mode
         MAC ApplyBlinkyBonus
         tay
         cpx #blinky
@@ -3622,7 +3658,8 @@ scroll_horiz SUBROUTINE
 .continue
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla                      ;pull new sprite offset from the stack
-        ApplyBlinkyBonus W2
+;        ApplyBlinkyBonus W2
+        ApplyAllBonus W2
 .draw
         ApplyScroll
 
@@ -4031,8 +4068,8 @@ scroll_down2 SUBROUTINE
 .wasup        
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla
-
-        ApplyBlinkyBonus W2       ;blinky's speed bonus on course scrolls
+        ApplyAllBonus W2
+;        ApplyBlinkyBonus W2       ;blinky's speed bonus on course scrolls
 .fine
         ApplyScroll
         sta Sprite_offset2,X
@@ -4744,6 +4781,9 @@ todo:
 
         consider adding the 'expliot' zone per pacman dossier
         it gets a littel rough as the top of the maze
+
+        blinky bonus isn't working in vertical mode beause tiles is always even or odd depending
+        on column you are in
 #endif
 
         
