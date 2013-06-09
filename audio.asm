@@ -1,183 +1,145 @@
-;------------------------------------
-;
-; class Scale &  Note
-;    plays a Scale or a note on a VoiceTrack
-;    4 instances for the 4 voices
-;    if playing a note, then Scale_ef and Scale_st is not relevant
-;------------------------------------
-Scale_sf      ds 5,0,0,0,0,0        ; current start freq
-Scale_ef      ds 5,0,0,0,0,0       ; current end freq
-Scale_st      ds 5,0,0,0,0,0        ; step ( signed byte )
-Note_dur
-Scale_dur     ds 5,0,0,0,0,0        ; duration in jiffys
-Note_rem
-Scale_rem     ds 5,0,0,0,0,0        ; remaining jiffys in current sound
-;--------
-; methods
-;--------
-;
-; called every VoiceTrack, figures out the next
-; note to play and when, loads it into the sound
-; register
-; X = voicetrack we are on
-;
-Scale_service SUBROUTINE
-        lda Scale_sf,X              ; get current note
-        sta voice1,X                ; play it
+; note frequency tables
+sop1
+        dc.b 0
+        dc.b 224
+        dc.b 231
+        dc.b 234
+        dc.b 240
+        dc.b 232
+        dc.b 236
+        dc.b 237
+        dc.b 238
+        dc.b 239
+sop2
+        dc.b 0
+        dc.b 226
+        dc.b 232
+        dc.b 236
+        dc.b 241
+bas1
+        dc.b 0
+        dc.b 192
+        dc.b 214
+        dc.b 218
+        dc.b 222
+        dc.b 224
+bas2
+        dc.b 0
+        dc.b 197
+        dc.b 216
+
+; song sequence tables
+; byte&f0 --> bass
+; byte&0f --> soprano
+seq1
+        dc.b [1<<4] + 1
+        dc.b [1<<4] + 0
+        dc.b [0<<4] + 4
+        dc.b [0<<4] + 0
+        dc.b [0<<4] + 3
+        dc.b [0<<4] + 0
+        dc.b [2<<4] + 2
+        dc.b [2<<4] + 0
+        dc.b [1<<4] + 4
+        dc.b [1<<4] + 3
+        dc.b [0<<4] + 0
+        dc.b [0<<4] + 0
+        dc.b [0<<4] + 2
+        dc.b [0<<4] + 2
+        dc.b [2<<4] + 0
+        dc.b [0<<4] + 0
+        dc.b $ff
+seq2
+        dc.b [2<<4] + 2
+        dc.b [2<<4] + 5
+        dc.b [0<<4] + 3
+        dc.b [0<<4] + 0
+        dc.b [3<<4] + 3
+        dc.b [3<<4] + 6
+        dc.b [0<<4] + 7
+        dc.b [0<<4] + 0
+        dc.b [4<<4] + 7
+        dc.b [4<<4] + 8
+        dc.b [0<<4] + 9
+        dc.b [0<<4] + 0
+        dc.b [5<<4] + 4
+        dc.b [5<<4] + 4
+        dc.b [0<<4] + 0
+        dc.b $ff
 
 
+;; Measure 1:
+;; seq1 + sop1,bas1
+;; Measure 2:
+;; seq1 + sop2,bas2
+;; Measure 3:
+;; seq1 + sop1,bas1
+;; Measure 4:
+;; seq2 + sop1,bas1
 
-        dec Scale_rem,X             ; decrement remaining note time
-        beq .done
-;        dec Scale_rem,X             ; decrement remaining note time
-;       beq .done
-        rts
-.done
-        lda #trackDone          ;tell voicetrack we are done
-        sta VoiceTrack_done,X
-        rts
-Scale_service2 SUBROUTINE
-        lda Scale_sf,X              ; get current note
-        sta voice1,X                ; play it
 
-        clc
-        adc Scale_st,X
-        sta Scale_sf,X
-        cmp Scale_ef,X
-        beq .done
-        rts
-.done
-        lda #trackDone                      ;tell voicetrack we are done
-        sta VoiceTrack_done,X
-        rts
-;-------------------------------------------
-; end class Scale
-;-------------------------------------------
+SopFreqPtr     equ $00        ; pointer to active note freq table
+BasFreqPtr     equ $02        ; pointer to active base note freq table
+SequencePtr    equ $04        ; pointer to active sequence
+SequenceIdx    dc.b 0
 
-;-------------------------------------------
-; class VoiceTrack
-;    manages a series of Commands for a
-;    voice
-;    e.g. Scale,Note ( see above )
-;;; voice track data commands
-;;; 0 = scale
-;;; [cmd][note][duration]
-;;; 1 = note
-;;; not doc'd yet
-;;; 2 = repeat
-;-------------------------------------------
-trackDone     equ 0
-trackRunning  equ 1        
-VoiceTrack_data ds.w    5,0,0,0,0,0      ; pointer to track data
-VoiceTrack_done ds      5,trackDone,trackDone,trackDone,trackDone,trackDone
-VoiceTrack_st   ds.w    5,0,0,0,0,0      ;address beginning
-VoiceTrack_halted ds    5,1,1,1,1,1
-;
-; Called regularly by main loop or VBI
-; to service the voice track
-; X = voice track to service
-;
-VoiceTrack_svc SUBROUTINE
-        lda VoiceTrack_halted,x
-        bne .nothalted
-
-        rts
-.nothalted
-        lda VoiceTrack_done,X
-        beq .load_next_command
-        ;; call appropriate service routine
-        lda Scale_sf,X
-        cmp Scale_ef,X
-        beq Scale_service       ;sf,ef same, it's a simple note
-        bne Scale_service2
-        brk                         ; service routine shoulda called rts
-
-.loadscale
-        inc16 AUDIO
-        lda (AUDIO),Y
-        sta Scale_sf,X
-        inc16 AUDIO
-        lda (AUDIO),Y
-        sta Scale_ef,X
-        inc16 AUDIO
-        lda (AUDIO),Y
-        sta Scale_st,X
-        inc16 AUDIO
-        lda (AUDIO),Y
-        sta Scale_dur,X
-        inc16 AUDIO
-                                ; install Scale as service handler
-        move16x2 AUDIO,VoiceTrack_data
-
-        lda #trackRunning 
-        sta VoiceTrack_done,X       ;
-        jmp Scale_service2  
+player subroutine
+        store16 sop1,SopFreqPtr
+        store16 bas1,BasFreqPtr
+        store16 seq1,SequencePtr  
+        jsr PlayMeasure
         
-.load_next_command
-        ;; move pointer to zero page so we can use it for indexing 
-        move16x VoiceTrack_data,AUDIO
-        ldy #0
-        lda (AUDIO),Y
-        ;; switch ( track[idx] )
-        beq .loadscale
-        cmp #1                  ; case 1
-        beq  .load_note         ;
-        cmp #3
-        beq .repeat
-        cmp #4
-        beq .repeat2
-        brk
-.done        
+        store16 sop2,SopFreqPtr
+        store16 bas2,BasFreqPtr
+        ldx #14
+        lda #-1
+        sta seq1,x
+        jsr PlayMeasure
+
+        jmp bigloop0
+FinishMusic        
+        lda #[2<<4] + 0
+        ldx #14
+        sta seq1,x
+        
+        store16 sop1,SopFreqPtr
+        store16 bas1,BasFreqPtr
+        store16 seq1,SequencePtr  
+        jsr PlayMeasure
+        
+        store16 seq2,SequencePtr  
+        jsr PlayMeasure
+        lda #$ea                 ;opcode NOP
+        sta bigloop+1
+
+.noop
+        nop
+        jmp .noop
         rts
-        
-.repeat
-        move16x    VoiceTrack_st,AUDIO
-        jmp .loadscale
-.repeat2        
-        move16x    VoiceTrack_st,AUDIO
-        jmp .load_note
-        
-.load_note
-        inc16 AUDIO
-        lda (AUDIO),Y                  ; get note freq
-        ;; we use the same start/end freq for 'notes'
-        sta Scale_sf,X              ; save start freq
-        sta Scale_ef,X              ; save end freq
-        lda #1                      ; direction = up ( not really relevant )
-        sta Scale_st,X
-        inc16 AUDIO
-        lda (AUDIO),Y                  ; get note dur
-        sta Note_dur,X              ;
-        sta Note_rem,X              ; initialize remaining time
-        inc16 AUDIO
-                                ; install Scale as service handler
-        move16x2 AUDIO,VoiceTrack_data
-        
-        lda #trackRunning
-        sta VoiceTrack_done,X       ;
-        jmp Scale_service           ;
-        brk                         ; shouldn't get here
 
-
-;-------------------------------------------
-; end class VoiceTrack
-;-------------------------------------------
-        ;; loadtrack voice,track
-        MAC LoadTrack
-        ldx #{1}
-        store16x {2},VoiceTrack_data
-        store16x {2},VoiceTrack_st
-        ENDM
-
-        ;; X track to halt
-        MAC HaltTrack
-        lda #trackDone
-        sta VoiceTrack_halted,X
+PlayMeasure subroutine
         lda #0
-        sta 36877
-        ENDM
-        ;; X track
-        MAC UnHaltTrack
-        lda #trackRunning
-        sta VoiceTrack_halted,X
-        ENDM
+        sta SequenceIdx
+.loop   
+        ldy SequenceIdx
+        lda (SequencePtr),Y
+        cmp #-1
+        beq .done
+        jsr SplitByte        ;a=low x=high
+        tay
+        lda (SopFreqPtr),Y
+        sta  voice3
+        txa                  ; x ->a
+        tay                  ; a ->y
+        lda (BasFreqPtr),Y
+        sta  voice1          ; store base freq
+        
+        lda #4
+        jsr WaitTime_
+
+        
+        inc SequenceIdx
+        bne .loop
+.done
+	 rts
+

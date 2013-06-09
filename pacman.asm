@@ -165,7 +165,7 @@ SCORE_h         equ $38
 LevelStartTm    equ $39
 LevelStartTm_h  equ $3a        
 W5              equ $32
-S7              equ $43
+MUSICDONE       equ $43         ;true when intro song is done
 W6              equ $44
 W6_h            equ $45       
 PowerPillTime   equ $46
@@ -1110,7 +1110,6 @@ drwsprt1 SUBROUTINE
         jsr UpdateColorRam
         rts
 
-; INCLUDE "audio.asm"
 
 ;;; load reverse direction into A
 ReverseDirection subroutine
@@ -1822,10 +1821,13 @@ DisplayLives subroutine         ;entry point for displaying lives only
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
-        ;; jsr BLARGO1
-        ;; store16 66,W1
-        ;; jsr Divide22_16
-        ;; brk
+#if 0        
+        lda #8
+        sta 36879               ; border and screen colors
+        sta volume              ; turn up the volume to 8
+        cli
+        jsr player
+#endif        
 #if 0
         lda #$ea
         DoubleSigned
@@ -1842,6 +1844,7 @@ main SUBROUTINE
 
         lda #0
         sta $9113               ;joy VIA to input
+        sta MUSICDONE
 
         lda VICSCRN
         and #$f0
@@ -1858,12 +1861,21 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         
         store16 screen+leftMargin+22*pacStartRow+21/2-ready_msg_sz/2,W1      ;post the player ready message
         store16 ready_msg,W2
-        jsr getReady
+;        jsr getReady
+        jsr player
+        
         jsr install_isr         ;allow game sound interrupt 
         jsr initChaseTimer
-        
+bigloop0        
         jmp .background
 .loop
+bigloop
+        lda Sprite_page
+        beq .skiph
+        nop
+        jmp FinishMusic
+        ;rts
+.skiph
         lda #masterSpeed
         sta MASTERCNT
 .iloop        
@@ -1982,7 +1994,8 @@ set_color subroutine
         sta (W3),Y              ;write to clrram
         rts
         
-        INCLUDE "player.asm"
+        INCLUDE "audio.asm"
+
 ;;; 
 ;;; locals for maze generation routine
 dataoffset equ S1
