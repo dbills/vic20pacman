@@ -1,4 +1,4 @@
-        org $0400
+         org $0400
         processor 6502
 ;BASIC equ 1                     ;launch from basic
 #ifconst BASIC
@@ -13,7 +13,7 @@ Sprite_page     dc.b 0
 Sprite_page     dc.b 0
 #endif        
 _LOCAL_SAVEDIR equ 1
-_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
+;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 GHOSTS_ON   equ 1
 ;GHPLAYER    equ 1              ; ghost as player
 LARGEMAZE   equ 1              ;
@@ -811,8 +811,8 @@ Sprite_speed2   dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSp
 ;;; pacman always runs @ 95% of top speed
 ;;; ghosts start at 90%
 ;;; when hard they are at 100%
-Sprite_base     dc.b 255,255,255,255,255
-;Sprite_base     dc.b 18,10,10,10,10
+;Sprite_base     dc.b 255,255,255,255,255
+Sprite_base     dc.b 18,10,10,10,10
 ;Sprite_hard     dc.b 18,255,255,255,255
 Sprite_turn     dc.b 5,9,6,3,7        
 Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
@@ -1981,6 +1981,8 @@ set_color subroutine
         txa                     ;color to A
         sta (W3),Y              ;write to clrram
         rts
+        
+        INCLUDE "player.asm"
 ;;; 
 ;;; locals for maze generation routine
 dataoffset equ S1
@@ -2225,18 +2227,25 @@ GhostAsPlayer SUBROUTINE
         jsr scroll_down         ;
         rts
 #endif
+keypressed dc.b 0        
 SpecialKeys SUBROUTINE
+        saveX
         lda 197
         cmp #9                  ;'w'
         bne .done
 
-        saveX
 
-        ldx #inky
-        jsr LeaveBox
-        resX
+;        ldx #inky
+;        jsr LeaveBox
+        lda keypressed
+        bne .done
+        ldx #blinkyCruise1
+        jsr IncreaseBlinky
+        lda #1
+        sta keypressed
 
 .done        
+        resX
         rts
 
         
@@ -2423,7 +2432,7 @@ GhostTurn
 .notfocus
 
         UpdateMotion
-;        jsr SpecialKeys
+        jsr SpecialKeys
 .moveghost
 #ifconst GHPLAYER        
         jsr GhostAsPlayer
@@ -2473,12 +2482,11 @@ ResetBlinky subroutine
         sta SirenIdx
         cli
         rts
-
 ;;;
 ;;; Increase blinky speed to make things harder
 ;;; X = blinky mode
 soundInc equ 3        
-IncreaseBlinky subroutine
+        MAC IncreaseBlinkyI 
         sei
         stx BlinkyCruise
         lda XsirenTop+1
@@ -2491,8 +2499,28 @@ IncreaseBlinky subroutine
         lda SirenIdx
         adc #soundInc
         sta SirenIdx
-        
         cli
+        ENDM
+
+IncreaseBlinky subroutine
+        ;; levels > 2 are done with the IncreaseBlinkyI routine
+        ;; otherwise blinky can be increased with Sprite_speed adjustments
+        lda LevelsComplete
+        cmp #2
+        bcs .over2              ;greater than 2
+        cpx #1
+        bne .cruise2
+.cruise1        
+        lda #18
+        bne .store
+.cruise2
+        lda #255
+.store
+        ldx #blinky
+        sta Sprite_speed,x
+        rts
+.over2
+        IncreaseBlinkyI
         rts
 ;;;
 ;;; self modifying code
@@ -3585,6 +3613,7 @@ IncrementHPos SUBROUTINE
         ;; or every other course scroll, depending on
         ;; blinky's accel mode
         MAC ApplyBlinkyBonus
+        
         tay
         cpx #blinky
         bne .done1
@@ -3658,8 +3687,8 @@ scroll_horiz SUBROUTINE
 .continue
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla                      ;pull new sprite offset from the stack
-;        ApplyBlinkyBonus W2
-        ApplyAllBonus W2
+        ApplyBlinkyBonus W2
+;        ApplyAllBonus W2        ;
 .draw
         ApplyScroll
 
@@ -4068,8 +4097,8 @@ scroll_down2 SUBROUTINE
 .wasup        
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla
-        ApplyAllBonus W2
-;        ApplyBlinkyBonus W2       ;blinky's speed bonus on course scrolls
+;        ApplyAllBonus W2
+        ApplyBlinkyBonus W2       ;blinky's speed bonus on course scrolls
 .fine
         ApplyScroll
         sta Sprite_offset2,X
@@ -4136,8 +4165,8 @@ rsPrint subroutine
 getReady subroutine
         jsr ndPrint             ;show message
 
-        ;WaitTime 3
-        WaitKey 9
+        WaitTime 3
+        ;WaitKey 9
         
         jsr rsPrint
         rts
