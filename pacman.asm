@@ -749,9 +749,10 @@ blinkyS2Dots    equ [totalDots/4]*3
 
 maxLives        equ 4           ;max lives ever possible on left display
 pacLives        equ 3           ;default starting lives for pacman
-#ifconst LARGEMAZE        
+#ifconst LARGEMAZE
 g1Start         equ screen+22*11+9
-g2Start         equ screen+22*outOfBoxRow+outOfBoxCol
+g2StartI        equ 22*outOfBoxRow+outOfBoxCol
+g2Start         equ screen+g2StartI
 ;;; debug location, buttom row
 ;g2Start         equ screen+22*21+2
 g3Start         equ screen+22*11+10
@@ -918,6 +919,108 @@ VolTableSz equ 15
         bne .loop
 .done
         ENDM
+;;; horizontal blit
+;;; W1 = source bits
+;;; W2 = left tile dest bits
+;;; W3 = right tile dest bits
+;;; W4 = under character bitmap
+;;; S1 = amount to shift ( 1 - 8 )
+;;; S2 = sprite to move
+        MAC blith 
+#if 1
+        ldx S2
+
+        lda Sprite_sback,X      ;input to mergeTile
+        mergeTile               ;font address of underneath tile into W4
+        move16 W4,W6
+
+        lda Sprite_sback2,X
+        mergeTile
+#endif        
+        ldy #7
+        ldx S1                  ;amount to shift sprite
+.nextbyte
+        lda (W1),Y
+        sta (W2),Y
+        ldx S1
+        beq .shiftdone
+.loop
+        lda (W2),y
+        lsr
+        sta (W2),Y
+        lda (W3),Y
+        ror
+        sta (W3),Y
+        dex
+        bne .loop
+.shiftdone
+#if 1        
+        lda (W6),Y              ;load left tile underneath bits
+        ora (W2),Y              ;overlay to left tile
+        sta (W2),Y
+        lda (W4),Y              ;load right tile underneath bits
+        ora (W3),Y              ;overlay to right tile
+        sta (W3),Y
+#endif        
+        dey
+        bpl .nextbyte
+.done
+        ENDM
+;;; vertical blit
+;;; W1 = source bits
+;;; W2 = left tile dest bits
+;;; W3 = right tile dest bits
+;;; S1 = amount to shift ( 1 - 8 )
+;;; S2 = sprite to move
+;;; uses W4,S5,S6
+;;; 
+        MAC blitd 
+        ;; get left hand tile 'underneath' bitmap
+        ;; so we can or it into this new image
+        ldx S2                 
+        lda Sprite_sback,X      ;input to mergeTile
+
+        mergeTile               ;font address of underneath tile into W4
+
+        ldx #0
+        ldy #0
+.loop        
+        lda (W4),Y              ;load background tile byte
+        cpx S1                  ;are we ready to start copying source bitmap
+        bmi .lt                 ;nope, skip
+        ora (W1),Y              ;yes, or in the source byte
+        inc16 W1                ;increment the source byte count
+.lt           
+        sta (W2),Y              ;store the possibly combined background/sprite byte
+        inc16 W4                ;increment background byte pointer
+        inc16 W2                ;increment left tile destination byte pointer
+        inx                     ;next x
+        cpx #8
+        bmi .loop
+
+        ldx S2
+        lda Sprite_sback2,X
+
+        mergeTile
+
+        ldx #0                  
+
+.loop2
+        lda (W4),Y
+        cpx S1
+        bpl .lt1
+        ora (W1),Y
+        inc16 W1
+.lt1                             ;don't copy from source
+        sta (W3),Y
+        inc16 W4
+        inc16 W3
+        inx                     ;next x
+        cpx #8
+        bmi .loop2
+
+.done
+        ENDM
 ;;; S2 sprite to render
 render_sprite SUBROUTINE
         stx S2                  ;set for call to blith
@@ -956,10 +1059,10 @@ render_sprite SUBROUTINE
         beq .vert
         brk
 .horiz        
-        jsr blith
+        blith
         rts
 .vert
-        jsr blitd
+        blitd
         rts
 ;;; figure out what pacman might be eating
 ;;; A = consumed playfield tile
@@ -1817,6 +1920,61 @@ DisplayLives subroutine         ;entry point for displaying lives only
         bpl .0
 .done        
         rts
+#if 0        
+;;; color the actors
+;;; Y=0 all back
+;;; y!=0 standard colors
+ColorActors subroutine
+        cpy #0
+        beq .skip
+        lda #CYAN
+        sta g1Start+[clrram-screen]
+        lda #GREEN
+        sta g3Start+[clrram-screen]
+        sta g3Start+[clrram-screen]+1
+        lda #PURPLE
+        sta g4Start+[clrram-screen]
+        sta g4Start+[clrram-screen]+1
+        lda #RED
+        sta g2StartI+clrram
+        rts
+.skip        
+        ldx #4
+        lda #BLACK
+.loop
+        sta clrram+22*11+9,x
+        dex
+        bpl .loop
+        sta g2StartI+clrram
+        rts
+        ;; hide the actors
+        MAC HideActors
+        ldy #0
+        jsr ColorActors
+        ENDM
+ShowActors subroutine
+        saveX
+        saveY
+        ldy #1
+        jsr ColorActors
+        resY
+        resX
+        rts
+#endif        
+;;; show the ghost and pacman as quickly as possible
+;;; used by the intro music 
+ActorIntro subroutine
+        ;; HideActors
+        ;; lda $9002
+        ;; ora #22
+        ;; sta $9002
+        WaitTime 1
+;        jsr WaitFire
+        jsr player
+        ;; move jmp in main loop to proper
+        ;; spot for running the game
+        store16 MainLoop0,MainLoopEnd+1
+        rts
 ;-------------------------------------------
 ; MAIN()
 ;-------------------------------------------
@@ -1844,12 +2002,14 @@ main SUBROUTINE
 
         lda #0
         sta $9113               ;joy VIA to input
-        sta MUSICDONE
 
         lda VICSCRN
         and #$f0
         ora #$0f                    ;char ram pointer is lower 4 bits
         sta VICSCRN
+        ;; lda $9002
+        ;; and %10000000           ;set to zero column
+        ;; sta $9002
 
         tsx
         stx ResetPoint
@@ -1861,8 +2021,11 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         
         store16 screen+leftMargin+22*pacStartRow+21/2-ready_msg_sz/2,W1      ;post the player ready message
         store16 ready_msg,W2
+        lda #modeInBox
+        sta Sprite_mode+2
 ;        jsr getReady
-        jsr player
+;        jsr player
+        jmp bigloop0
         
         jsr install_isr         ;allow game sound interrupt 
         jsr initChaseTimer
@@ -1870,12 +2033,10 @@ bigloop0
         jmp .background
 .loop
 bigloop
-        lda Sprite_page
-        beq .skiph
-        nop
-        jmp FinishMusic
-        ;rts
-.skiph
+        lda Sprite_page         ;sprite's havn't been rendered yes
+        beq MainLoop0           ;skip actor intro this lap
+        jsr ActorIntro
+MainLoop0
         lda #masterSpeed
         sta MASTERCNT
 .iloop        
@@ -1951,14 +2112,14 @@ bigloop
         InitSpriteLoop
 .playerloop
         dec SPRITEIDX
-        bmi .loopend
+        bmi MainLoopEnd
         ldx SPRITEIDX
         jsr blargo
         ldx SPRITEIDX
         jsr render_sprite
         jmp .playerloop
 
-.loopend
+MainLoopEnd
 ;        Display1 "D",0,DOTCOUNT
         jmp .loop
         
@@ -2102,7 +2263,7 @@ mkmaze2 subroutine
         bne .fetch_byte         ;jmp .fetch_byte
         
         rts
-#if 0
+#if 1
 ;;; waits for joystick to be pressed
 ;;; and released
 WaitFire SUBROUTINE
@@ -3735,108 +3896,6 @@ SoundOff SUBROUTINE
         cli
 .done        
         rts
-;;; vertical blit
-;;; W1 = source bits
-;;; W2 = left tile dest bits
-;;; W3 = right tile dest bits
-;;; S1 = amount to shift ( 1 - 8 )
-;;; S2 = sprite to move
-;;; uses W4,S5,S6
-;;; 
-blitd SUBROUTINE
-        ;; get left hand tile 'underneath' bitmap
-        ;; so we can or it into this new image
-        ldx S2                 
-        lda Sprite_sback,X      ;input to mergeTile
-
-        mergeTile               ;font address of underneath tile into W4
-
-        ldx #0
-        ldy #0
-.loop        
-        lda (W4),Y              ;load background tile byte
-        cpx S1                  ;are we ready to start copying source bitmap
-        bmi .lt                 ;nope, skip
-        ora (W1),Y              ;yes, or in the source byte
-        inc16 W1                ;increment the source byte count
-.lt           
-        sta (W2),Y              ;store the possibly combined background/sprite byte
-        inc16 W4                ;increment background byte pointer
-        inc16 W2                ;increment left tile destination byte pointer
-        inx                     ;next x
-        cpx #8
-        bmi .loop
-
-        ldx S2
-        lda Sprite_sback2,X
-
-        mergeTile
-
-        ldx #0                  
-
-.loop2
-        lda (W4),Y
-        cpx S1
-        bpl .lt1
-        ora (W1),Y
-        inc16 W1
-.lt1                             ;don't copy from source
-        sta (W3),Y
-        inc16 W4
-        inc16 W3
-        inx                     ;next x
-        cpx #8
-        bmi .loop2
-
-.done
-        rts
-;;; horizontal blit
-;;; W1 = source bits
-;;; W2 = left tile dest bits
-;;; W3 = right tile dest bits
-;;; W4 = under character bitmap
-;;; S1 = amount to shift ( 1 - 8 )
-;;; S2 = sprite to move
-blith SUBROUTINE
-#if 1
-        ldx S2
-
-        lda Sprite_sback,X      ;input to mergeTile
-        mergeTile               ;font address of underneath tile into W4
-        move16 W4,W6
-
-        lda Sprite_sback2,X
-        mergeTile
-#endif        
-        ldy #7
-        ldx S1                  ;amount to shift sprite
-.nextbyte
-        lda (W1),Y
-        sta (W2),Y
-        ldx S1
-        beq .shiftdone
-.loop
-        lda (W2),y
-        lsr
-        sta (W2),Y
-        lda (W3),Y
-        ror
-        sta (W3),Y
-        dex
-        bne .loop
-.shiftdone
-#if 1        
-        lda (W6),Y              ;load left tile underneath bits
-        ora (W2),Y              ;overlay to left tile
-        sta (W2),Y
-        lda (W4),Y              ;load right tile underneath bits
-        ora (W3),Y              ;overlay to right tile
-        sta (W3),Y
-#endif        
-        dey
-        bpl .nextbyte
-.done
-    rts
 ;;; update player score
 ;;; value to add is in A (low)
 ;;; and Y (high)

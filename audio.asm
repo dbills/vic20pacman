@@ -86,35 +86,22 @@ SequenceIdx    dc.b 0
 player subroutine
         store16 sop1,SopFreqPtr
         store16 bas1,BasFreqPtr
-        store16 seq1,SequencePtr  
+        store16 seq1,SequencePtr
         jsr PlayMeasure
         
         store16 sop2,SopFreqPtr
         store16 bas2,BasFreqPtr
-        ldx #14
-        lda #-1
-        sta seq1,x
+        
         jsr PlayMeasure
 
-        jmp bigloop0
-FinishMusic        
-        lda #[2<<4] + 0
-        ldx #14
-        sta seq1,x
-        
         store16 sop1,SopFreqPtr
         store16 bas1,BasFreqPtr
-        store16 seq1,SequencePtr  
         jsr PlayMeasure
         
         store16 seq2,SequencePtr  
+;        jsr ShowActors
         jsr PlayMeasure
-        lda #$ea                 ;opcode NOP
-        sta bigloop+1
 
-.noop
-        nop
-        jmp .noop
         rts
 
 PlayMeasure subroutine
@@ -133,10 +120,9 @@ PlayMeasure subroutine
         tay                  ; a ->y
         lda (BasFreqPtr),Y
         sta  voice1          ; store base freq
-        
+
         lda #4
         jsr WaitTime_
-
         
         inc SequenceIdx
         bne .loop
