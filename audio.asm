@@ -78,9 +78,9 @@ seq2
 ;; seq2 + sop1,bas1
 
 
-SopFreqPtr     equ $00        ; pointer to active note freq table
-BasFreqPtr     equ $02        ; pointer to active base note freq table
-SequencePtr    equ $04        ; pointer to active sequence
+SopFreqPtr     equ W2         ; pointer to active note freq table
+BasFreqPtr     equ W3         ; pointer to active base note freq table
+SequencePtr    equ S0         ; pointer to active sequence
 SequenceIdx    dc.b 0
 
 player subroutine

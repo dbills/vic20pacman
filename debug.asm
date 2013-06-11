@@ -1,3 +1,6 @@
+;;; file for debug routines and other dead/maybe dead but possibly useful
+;;; code for this project
+
 ;;; move sprite side to side
         MAC moveS
         lda Sprite_motion,X
@@ -41,3 +44,48 @@
         sta Sprite_motion,X
 .done
         ENDM
+
+;;; these routines would be cool to show the actors for
+;;; the intro music ... the characters appear halfway through
+;;; the intro music, but it uses up too much memory
+#if 0        
+;;; color the actors
+;;; Y=0 all back
+;;; y!=0 standard colors
+ColorActors subroutine
+        cpy #0
+        beq .skip
+        lda #CYAN
+        sta g1Start+[clrram-screen]
+        lda #GREEN
+        sta g3Start+[clrram-screen]
+        sta g3Start+[clrram-screen]+1
+        lda #PURPLE
+        sta g4Start+[clrram-screen]
+        sta g4Start+[clrram-screen]+1
+        lda #RED
+        sta g2StartI+clrram
+        rts
+.skip        
+        ldx #4
+        lda #BLACK
+.loop
+        sta clrram+22*11+9,x
+        dex
+        bpl .loop
+        sta g2StartI+clrram
+        rts
+        ;; hide the actors
+        MAC HideActors
+        ldy #0
+        jsr ColorActors
+        ENDM
+ShowActors subroutine
+        saveX
+        saveY
+        ldy #1
+        jsr ColorActors
+        resY
+        resX
+        rts
+#endif

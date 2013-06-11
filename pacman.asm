@@ -57,6 +57,7 @@ cassStart   equ $033d             ;start of cassette buffer ( 190 bytes)
         ;; 0347
         ;; sprite_loc2 second 10
 cassEnd     equ $03fb
+SaveBuffer  equ cassEnd-10        
 
 ;; vic-I chip registers
 chrst           equ $9003       ; font map pointer
@@ -146,6 +147,7 @@ CORNER_SHAVE    equ $28
 ;;; non zero when pacman is powred up, indicate 'gameloop units' 
 ;;; left in power mode, this does not use the jiffy timer
 POWER_UP        equ $29
+basePowerTime   equ 245         ;initial power pill time
 BlinkyS1        equ $2a         
 BlinkyS2        equ $2b
 InkyDots        equ $2c
@@ -156,6 +158,7 @@ S5              equ $30         ;scratch 5
 S6              equ $31
 PACXPIXEL       equ $32
 PACYPIXEL       equ $33        
+BlinkyCruise    equ $34         ;see BlinkyCruise1 and 2 
 
 GHOST_COL       equ $35        
 GHOST_ROW       equ $36
@@ -712,7 +715,8 @@ modeOutOfBox    equ 4             ;see sprite_mode
 modePacman      equ 5             ;mode only pacman has
         ;;changes from scatter to chase cause reverse for example
 modeReverse     equ 6
-;;; end valid modes for Sprite_mode        
+;;; end valid modes for Sprite_mode
+msgRow          equ 13            ;row number for displaying messages
 outOfBoxCol     equ 11            ;column at ghost box entry/exit
 outOfBoxRow     equ 9             ;row of tile directly above exit
 pacStartRow     equ outOfBoxRow+8 ;pacman start row
@@ -738,7 +742,7 @@ pinky           equ 3
 clyde           equ 4
 nobody          equ 10        
 focusGhost      equ nobody       ;ghost to print debugging for
-totalDots       equ $A6          ;total dots in maze
+totalDots       equ $A2          ;total dots in maze
 ;totalDots       equ 1          ;total dots in maze
 fruit1Dots      equ 70           ;dots to release fruit
 fruit2Dots      equ 120          ;dots to release fruit2
@@ -806,27 +810,27 @@ eyeSpeed         equ 255                ;sprite_speed setting for eyes
 pacEatSpeed      equ 255
 ghostFrightSpeed equ 2       
 ;;; the initial speed of ghosts on easier levels
-ghostEasySpeed  equ 160
-;;; the speed of ghosts on harder levels
-Sprite_speed2   dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed
+ghostEasySpeed   equ 160
+;;; the speed of ghosts when pacman is powered up
+Sprite_speed2    dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed
 ;;; pacman always runs @ 95% of top speed
 ;;; ghosts start at 90%
 ;;; when hard they are at 100%
-;Sprite_base     dc.b 255,255,255,255,255
-Sprite_base     dc.b 18,10,10,10,10
-;Sprite_hard     dc.b 18,255,255,255,255
-Sprite_turn     dc.b 5,9,6,3,7        
-Sprite_color    dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
+Speed_standard   equ 18
+Speed_slow       equ 10
+Speed_fast       equ 255        
+Sprite_base      dc.b Speed_standard,Speed_slow,Speed_slow,Speed_slow,Speed_slow
+Sprite_turn      dc.b 5,9,6,3,7        
+Sprite_color     dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
-blinkyCruise1 equ 1
-blinkyCruise2 equ 2
-blinkyCruiseOff equ 0
+blinkyCruise1    equ 1
+blinkyCruise2    equ 2
+blinkyCruiseOff  equ 0
 ;;; controls the speed of blinky
 ;;; the lower 4 bits control which ghost gets the speed boost
 ;;; if BlinkyCruise & 0x7 == ghost then cruise mode on
 ;;; bit 7 controls cruise mode 1 or 2
 ;;; 
-BlinkyCruise      dc.b 0        ;1 = fast,2=faster
 ;;; resolution of system timer in 1/x seconds
 softTimerRes   equ 60
 ;;; chase table is the initial scatter/chase phases for each level
@@ -1063,6 +1067,27 @@ render_sprite SUBROUTINE
         rts
 .vert
         blitd
+        rts
+;;; perform end level animation
+FlashScreen subroutine
+        jsr AllSoundOff
+        store16 clrram,W1
+        ldy #0
+.0        
+        lda (W1),Y
+        cmp #BLUE
+        bne .noswitch
+        lda #CYAN
+.noswitch
+        sta (W1),Y
+        inc16 W1
+        cmp16Im W1,clrram+22*23
+        beq .done
+        jmp .0
+.done        
+        rts
+EndLevel subroutine
+        
         rts
 ;;; figure out what pacman might be eating
 ;;; A = consumed playfield tile
@@ -1639,7 +1664,7 @@ longJmp subroutine
 death subroutine
         jsr uninstall_isr
         jsr PowerPillOff        ;call off routine to clean up
-        jsr SoundOff            ;stop waka
+        jsr EatSoundOff            ;stop waka
         WaitKey 9 ;small pause before death
 
         ClearPacSite
@@ -1722,14 +1747,29 @@ death subroutine
         store16 g3Start  , Sprite_loc2+[2*3] 
         store16 g4Start  , Sprite_loc2+[2*4]
         ENDM
+        ;; modify the main game loop
+        ;; to not include the extra snippet
+        ;; of code used only during the Actor
+        ;; introduction mode and initial 'intro tune'
+        MAC ModifyMainLoop
+        store16 MainLoop0,MainLoopEnd+1
+        ENDM
+        MAC ResetMainLoop
+        store16 IntroLoop,MainLoopEnd+1
+        ENDM
+
+AllSoundOff subroutine
+        jsr uninstall_isr
+        jsr PowerPillOff
+        jsr EatSoundOff            ;waka off
+        rts
 ;;; 
 ;;; reset game after pacman death, or level start
 ;;; inputs: S1=0 causes us to draw the maze and do all initialization for a new level
 ;;; 
 reset_game subroutine
-        jsr uninstall_isr
-        jsr PowerPillOff
-        jsr SoundOff            ;waka off
+        ResetMainLoop           ;rest main loop to show intro
+        jsr AllSoundOff
         
         lda S1
         cmp #modeResetGame
@@ -1857,7 +1897,7 @@ reset_game1 subroutine
         sta SirenIdx
         lda #-1
         sta LevelsComplete
-        lda #245
+        lda #basePowerTime
         sta PowerPillTime
         lda #0
         sta PlayerScore_l
@@ -1878,7 +1918,7 @@ reset_game1 subroutine
         ;; game over macro
         ;; display message and restart
         MAC GameOver
-        store16 screen+leftMargin+22*pacStartRow+21/2-gameover_msg_sz/2,W1      ;post the player ready message
+        store16 screen+leftMargin+22*msgRow+21/2-gameover_msg_sz/2,W1      ;post the player ready message
         store16 gameover_msg,W2
         jsr ndPrint
         WaitKey 9
@@ -1920,47 +1960,6 @@ DisplayLives subroutine         ;entry point for displaying lives only
         bpl .0
 .done        
         rts
-#if 0        
-;;; color the actors
-;;; Y=0 all back
-;;; y!=0 standard colors
-ColorActors subroutine
-        cpy #0
-        beq .skip
-        lda #CYAN
-        sta g1Start+[clrram-screen]
-        lda #GREEN
-        sta g3Start+[clrram-screen]
-        sta g3Start+[clrram-screen]+1
-        lda #PURPLE
-        sta g4Start+[clrram-screen]
-        sta g4Start+[clrram-screen]+1
-        lda #RED
-        sta g2StartI+clrram
-        rts
-.skip        
-        ldx #4
-        lda #BLACK
-.loop
-        sta clrram+22*11+9,x
-        dex
-        bpl .loop
-        sta g2StartI+clrram
-        rts
-        ;; hide the actors
-        MAC HideActors
-        ldy #0
-        jsr ColorActors
-        ENDM
-ShowActors subroutine
-        saveX
-        saveY
-        ldy #1
-        jsr ColorActors
-        resY
-        resX
-        rts
-#endif        
 ;;; show the ghost and pacman as quickly as possible
 ;;; used by the intro music 
 ActorIntro subroutine
@@ -1968,12 +1967,27 @@ ActorIntro subroutine
         ;; lda $9002
         ;; ora #22
         ;; sta $9002
-        WaitTime 1
+        store16 screen+leftMargin+22*13+21/2-ready_msg_sz/2,W1      ;post the player ready message
+        store16 ready_msg,W2
+        jsr ndPrint             ;show message
+
+
+        lda LevelsComplete
+        bne .skipsong
 ;        jsr WaitFire
         jsr player
+        jmp .cont
+.skipsong
+        WaitTime 3
+.cont
+        jsr rsPrint
         ;; move jmp in main loop to proper
         ;; spot for running the game
-        store16 MainLoop0,MainLoopEnd+1
+        ModifyMainLoop
+        
+        jsr install_isr         ;allow game sound interrupt 
+        jsr initChaseTimer
+        
         rts
 ;-------------------------------------------
 ; MAIN()
@@ -2019,20 +2033,9 @@ main SUBROUTINE
 PacDeathEntry                   ;code longjmp's here on pacman death
         jsr reset_game
         
-        store16 screen+leftMargin+22*pacStartRow+21/2-ready_msg_sz/2,W1      ;post the player ready message
-        store16 ready_msg,W2
-        lda #modeInBox
-        sta Sprite_mode+2
-;        jsr getReady
-;        jsr player
-        jmp bigloop0
-        
-        jsr install_isr         ;allow game sound interrupt 
-        jsr initChaseTimer
-bigloop0        
         jmp .background
-.loop
-bigloop
+
+IntroLoop
         lda Sprite_page         ;sprite's havn't been rendered yes
         beq MainLoop0           ;skip actor intro this lap
         jsr ActorIntro
@@ -2121,7 +2124,7 @@ MainLoop0
 
 MainLoopEnd
 ;        Display1 "D",0,DOTCOUNT
-        jmp .loop
+        jmp IntroLoop
         
 ;;; place power pellets
 ;;; W1 pointer
@@ -2606,7 +2609,7 @@ GhostTurn
 .notfocus
 
         UpdateMotion
-        jsr SpecialKeys
+;        jsr SpecialKeys
 .moveghost
 #ifconst GHPLAYER        
         jsr GhostAsPlayer
@@ -2658,9 +2661,10 @@ ResetBlinky subroutine
         rts
 ;;;
 ;;; Increase blinky speed to make things harder
+;;; increase the panic inducing siren sound
 ;;; X = blinky mode
 soundInc equ 3        
-        MAC IncreaseBlinkyI 
+        MAC IncreasePanicLevel
         sei
         stx BlinkyCruise
         lda XsirenTop+1
@@ -2675,7 +2679,12 @@ soundInc equ 3
         sta SirenIdx
         cli
         ENDM
-
+;;; increases the speed of blink
+;;; levels > 2 use the IncreaseBlinkyHard
+;;; levels <=2 use this routine, and manipulate
+;;; the sprite speed
+;;; X: in, blinky cruise level
+;;; X clobbered
 IncreaseBlinky subroutine
         ;; levels > 2 are done with the IncreaseBlinkyI routine
         ;; otherwise blinky can be increased with Sprite_speed adjustments
@@ -2685,16 +2694,15 @@ IncreaseBlinky subroutine
         cpx #1
         bne .cruise2
 .cruise1        
-        lda #18
+        lda #Speed_standard
         bne .store
 .cruise2
-        lda #255
+        lda #Speed_fast
 .store
         ldx #blinky
         sta Sprite_speed,x
-        rts
 .over2
-        IncreaseBlinkyI
+        IncreasePanicLevel
         rts
 ;;;
 ;;; self modifying code
@@ -2779,7 +2787,7 @@ IsWall SUBROUTINE
         ;; if so then turn off eating sound
         cmp #EMPTY
         bne .done1              ;we must be covering dots
-        jsr SoundOff
+        jsr EatSoundOff
 .notpac        
         ;; move is ok, set Z=0
         lda #1
@@ -3331,7 +3339,7 @@ PacManTurn
         ldy MOVEMADE            ;if we made a move already then exit
         beq .cont
         ;;  we must have failed to move?
-        jsr SoundOff
+        jsr EatSoundOff
         rts
 .cont        
         ldy #1
@@ -3787,7 +3795,13 @@ IncrementHPos SUBROUTINE
         ;; or every other course scroll, depending on
         ;; blinky's accel mode
         MAC ApplyBlinkyBonus
-        
+
+        ;; only worry about this routine if > level 2
+        lda LevelsComplete      
+        cmp #3
+        bcc .done1               ; < level 2, leave
+
+        brk
         tay
         cpx #blinky
         bne .done1
@@ -3861,7 +3875,7 @@ scroll_horiz SUBROUTINE
 .continue
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla                      ;pull new sprite offset from the stack
-        ApplyBlinkyBonus W2
+;        ApplyBlinkyBonus W2
 ;        ApplyAllBonus W2        ;
 .draw
         ApplyScroll
@@ -3884,7 +3898,7 @@ SoundOn SUBROUTINE
 .done        
         rts
 ;;; attempt to turn the dot eating sound off
-SoundOff SUBROUTINE
+EatSoundOff SUBROUTINE
         lda eat_halted
         beq .done
 ;        lda #8
@@ -4170,7 +4184,7 @@ scroll_down2 SUBROUTINE
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla
 ;        ApplyAllBonus W2
-        ApplyBlinkyBonus W2       ;blinky's speed bonus on course scrolls
+;        ApplyBlinkyBonus W2       ;blinky's speed bonus on course scrolls
 .fine
         ApplyScroll
         sta Sprite_offset2,X
@@ -4215,7 +4229,7 @@ ndPrint subroutine
         ldy #0
 .0
         lda (W1),Y              ;save char underneath
-        sta screen,Y
+        sta SaveBuffer,Y
         lda (W2),y              ;load text to print
         beq .done
         sta (W1),Y
@@ -4226,21 +4240,14 @@ ndPrint subroutine
 ;;; restore text underneath a previous
 ;;; ndPrint call
 rsPrint subroutine
+        ldy #0
 .1
-        lda screen,y
+        lda SaveBuffer,y
+        beq .done
         sta (W1),Y
-        dey
+        iny
         bpl .1
-        rts
-;;; 
-;;; print the get ready and delay before player gets control of a level
-getReady subroutine
-        jsr ndPrint             ;show message
-
-        WaitTime 3
-        ;WaitKey 9
-        
-        jsr rsPrint
+.done        
         rts
 #if 0
 
