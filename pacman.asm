@@ -809,16 +809,14 @@ pointTable      dc.b $16,00,$08,00,$04,00,$02,00
 eyeSpeed         equ 255                ;sprite_speed setting for eyes
 pacEatSpeed      equ 255
 ghostFrightSpeed equ 2       
-;;; the initial speed of ghosts on easier levels
-ghostEasySpeed   equ 160
 ;;; the speed of ghosts when pacman is powered up
 Sprite_speed2    dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed
 ;;; pacman always runs @ 95% of top speed
 ;;; ghosts start at 90%
 ;;; when hard they are at 100%
-Speed_standard   equ 18
-Speed_slow       equ 10
-Speed_fast       equ 255        
+Speed_standard   equ 18         ;95%
+Speed_slow       equ 10         ;90%
+Speed_fast       equ 255        ;100%
 Sprite_base      dc.b Speed_standard,Speed_slow,Speed_slow,Speed_slow,Speed_slow
 Sprite_turn      dc.b 5,9,6,3,7        
 Sprite_color     dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
@@ -842,16 +840,6 @@ ChaseTable     dc.w  (5*60)*softTimerRes,5*softTimerRes,20*softTimerRes,7*softTi
 ChaseTableEnd
 ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
 ChaseTableIdx dc.b ChaseTableSz
-;LastUpgrade dc.b 0        
-        ;; in order of exit 
-        ;; red=blinky ( starts outside of ghost house )
-        ;; green = pinky AI
-        ;; cyan =inky 
-        ;; purple = clyde
-        
-        ;; if eyes heading toward ghost box
-        ;; or in ghost box already
-        ;; etc
 masterSpeed      equ 1 ;master game delay
 ;;; 
 ;;; division table for division by 22
@@ -1070,15 +1058,10 @@ render_sprite SUBROUTINE
         rts
 ;;; perform end level animation
 FlashScreen subroutine
-        jsr AllSoundOff
         store16 clrram,W1
         ldy #0
-.0        
-        lda (W1),Y
-        cmp #BLUE
-        bne .noswitch
-        lda #CYAN
-.noswitch
+.0
+        lda S1
         sta (W1),Y
         inc16 W1
         cmp16Im W1,clrram+22*23
@@ -1087,7 +1070,27 @@ FlashScreen subroutine
 .done        
         rts
 EndLevel subroutine
-        
+        jsr AllSoundOff
+        lda #90
+        jsr WaitTime_
+        ldx #0
+.0        
+        lda #WHITE
+        sta S1
+        jsr FlashScreen
+        lda #30
+        jsr WaitTime_
+        cpx #2
+        beq .done
+        lda #BLUE
+        sta S1
+        jsr FlashScreen
+        lda #25
+        jsr WaitTime_
+        inx
+        jmp .0
+.done
+        WaitTime 2
         rts
 ;;; figure out what pacman might be eating
 ;;; A = consumed playfield tile
@@ -1107,7 +1110,7 @@ CheckFood subroutine
 .done        
         rts
 .end_level
-        WaitTime 1
+        jsr EndLevel
         JmpReset modeEndLevel
         ;; control never reaches here
 .power_pill        
@@ -1872,24 +1875,23 @@ end_level subroutine
 .0
         move16x ChaseTable,W1
         sub16Im W1,[2*softTimerRes]
-        cmp16Im W1,#0           ;did this number hit 0
+        cmp16Im W1,#0           ;did this number hit 0?
         bne .not0
         store16 #2,W1           ;no lower on this number
         move16x2 W1,ChaseTable
 .not0
         dex
         dex
-        bpl  .0
+        bpl  .0                 ;while > 0
         lda PowerPillTime
         sec
-        sbc #60
-        bcs .pos
-        ;; store min possible value
-        lda #2
+        sbc #60                 ;decrease power pill time
+        bcs .pos                ;have we hit bottom?
+        lda #2                  ;then store min value
 .pos
-        sta PowerPillTime
+        sta PowerPillTime       ;store it
 .1  
-        inc LevelsComplete
+        inc LevelsComplete      ;inc levels complete counter
         rts
 ;;; full game system reset
 reset_game1 subroutine
@@ -1967,13 +1969,16 @@ ActorIntro subroutine
         ;; lda $9002
         ;; ora #22
         ;; sta $9002
-        store16 screen+leftMargin+22*13+21/2-ready_msg_sz/2,W1      ;post the player ready message
+        store16 screen+leftMargin+22*msgRow+21/2-ready_msg_sz/2,W1      ;post the player ready message
         store16 ready_msg,W2
         jsr ndPrint             ;show message
 
 
-        lda LevelsComplete
-        bne .skipsong
+        lda LevelsComplete      ;are we after the first level
+        bne .skipsong           ;then no song
+        lda DOTCOUNT            ;is the dotcount
+        cmp #totalDots          ;less than total, then we died midlevel
+        bcc .skipsong           ;and no song
 ;        jsr WaitFire
         jsr player
         jmp .cont
@@ -2641,6 +2646,9 @@ LeaveBox SUBROUTINE
         ;; instruct ghost to leave box
         lda #modeLeaving
         sta Sprite_mode,X
+
+        lda Sprite_base,X
+        sta Sprite_speed,X
         
 .done        
         rts                     ;
@@ -3451,7 +3459,7 @@ Collisions SUBROUTINE
         lda #modeOutOfBox
         sta Sprite_mode,X
         jmp .notspecial
-.eaten
+.eaten                          ;ghost eyes returning to box
         lda #motionDown
         sta Sprite_motion,X
         jsr scroll_down
@@ -3482,7 +3490,7 @@ DeathDistance equ 5
         bne .done             
         ;; pacman eaten
 
-;       jsr death               ;long jumps to level restart
+       jsr death               ;long jumps to level restart
         ;; control cannot reach here
         rts                     ;leave this here for debugging and commenting jsr death out
 .ghost_eaten                    ;pacman has eaten a ghost in the maze
@@ -3514,7 +3522,6 @@ DeathDistance equ 5
         resX
 .skip                           ;really shouldn't be here
         ;; we ran off the beginning of the point table
-        
         
 .done        
         ;; GHOST_ROW,GHOST_COL
@@ -4234,8 +4241,9 @@ ndPrint subroutine
         beq .done
         sta (W1),Y
         iny
-        bne .0
-.done        
+        bne .0                  ;jmp .0
+.done
+        sta SaveBuffer,Y
         rts
 ;;; restore text underneath a previous
 ;;; ndPrint call
