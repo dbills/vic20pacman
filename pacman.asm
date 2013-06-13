@@ -124,7 +124,7 @@ CSPRTFRM        equ $10        ; number of frames in the currently processing sp
 DOTCOUNT        equ $11        ;dots eaten
 frameCount      equ 4          ;number of pacman animation frames
 PACFRAMED       equ $12        ;pacframe dir
-NXTSPRTSRC      equ $13        ;when moving a sprite, the next 'set' of source bitmaps
+UNUSED0         equ $13        ;when moving a sprite, the next 'set' of source bitmaps
 DSPL_1          equ $14        ;used by DisplayNum routine
 BCD             equ $15        ;used by Bin2Hex routine
 DSPL_2          equ $16        ;
@@ -194,6 +194,7 @@ PacLives        equ $6a ;
 SirenIdx        equ $6b ;
 EatenIdx        equ $6c ; number of ghosts eaten since power pill
 PACDEATH        equ $66         ;pacman death animation pointer
+ChaseTableIdx   equ $67        
          
 #IFCONST _LOCAL_SAVEDIR
 SAVE_OFFSET     equ $ab
@@ -211,6 +212,7 @@ noChoice        equ $7f
 ;;
 ;; misc constants
 ;;
+CHERRY          equ [BIT_CHERRY-CHAR_BEGIN]/8        
 EMPTY           equ [BIT_EMPTY-CHAR_BEGIN]/8
 PWR2            equ [BIT_PWR0-CHAR_BEGIN]/8
 PWR             equ [BIT_PWR1-CHAR_BEGIN]/8
@@ -675,7 +677,7 @@ WaitTime_ subroutine
         INCLUDE "debug.asm"
 
 
-pacframes  equ #4            ; total number of pacman animation frames ( 1 based )
+pacframes  equ #3            ; total number of pacman animation frames ( 1 based )
 
 ;------------------------------------
 ;;;
@@ -717,6 +719,8 @@ modePacman      equ 5             ;mode only pacman has
 modeReverse     equ 6
 ;;; end valid modes for Sprite_mode
 msgRow          equ 13            ;row number for displaying messages
+cherryCol       equ 21/2+1        ;to display bonus fruit
+cherryRow       equ msgRow        ;to display bonus fruit
 outOfBoxCol     equ 11            ;column at ghost box entry/exit
 outOfBoxRow     equ 9             ;row of tile directly above exit
 pacStartRow     equ outOfBoxRow+8 ;pacman start row
@@ -839,7 +843,6 @@ softTimerRes   equ 60
 ChaseTable     dc.w  (5*60)*softTimerRes,5*softTimerRes,20*softTimerRes,7*softTimerRes,20*softTimerRes,7*softTimerRes
 ChaseTableEnd
 ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
-ChaseTableIdx dc.b ChaseTableSz
 masterSpeed      equ 1 ;master game delay
 ;;; 
 ;;; division table for division by 22
@@ -1359,12 +1362,12 @@ PowerPill SUBROUTINE
         ldy #SPRITES-1          ;init loop counter
         ;; install new speed map for all sprites
 .loop
-        store16y BLUE_GHOST,Sprite_src
-        lda Sprite_speed2,Y
-        sta Sprite_speed,Y
         lda #modeOutOfBox       ;is this ghost in the mze
         cmp Sprite_mode,Y
         bne .0                  ;nope, skip
+        store16y BLUE_GHOST,Sprite_src
+        lda Sprite_speed2,Y
+        sta Sprite_speed,Y
         ;; ghost in the maze are now frightened
         lda #modeFright
         sta Sprite_mode,Y
@@ -1780,6 +1783,7 @@ reset_game subroutine
         jsr reset_game1         ; full game reset
 .00        
         ResetSpriteLocs
+
         ;; init loop counter
         ldx #SPRITES-1          ;SPRITES is 1 based, so -1
 .0
@@ -1787,6 +1791,7 @@ reset_game subroutine
 
         lda inBoxTable,X
         sta Sprite_offset2,X
+        sta Sprite_offset,X
         lda #0
         sta Sprite_sback,X
         sta Sprite_mode,X
@@ -1851,6 +1856,24 @@ reset_game subroutine
         jsr DisplayLives        ;show lives meter
         
         rts
+;;; display the fruit/level meter on the left
+DisplayLevelMeter subroutine
+        ldx LevelsComplete
+        inx
+        store16 screen+22,W1
+        store16 clrram+22,W2
+        ldy #0
+.0
+        lda #CHERRY
+        sta (W1),Y
+        lda #RED
+        sta (W2),Y
+        add W1,#22
+        add W2,#22
+        dex
+        bpl .0
+.done        
+        rts
 ;;; level game reset
 ;;; or possibly full game reset
 ;;; #modePacDeath or #modeResetGame
@@ -1892,6 +1915,7 @@ end_level subroutine
         sta PowerPillTime       ;store it
 .1  
         inc LevelsComplete      ;inc levels complete counter
+        jsr DisplayLevelMeter
         rts
 ;;; full game system reset
 reset_game1 subroutine
@@ -2802,8 +2826,12 @@ IsWall SUBROUTINE
 .done1
         rts
         
-;;; puta fruit out 
+;;; put a fruit out 
 Fruit SUBROUTINE
+        lda #CHERRY
+        sta screen+cherryRow*22+cherryCol
+        lda #RED
+        sta clrram+cherryRow*22+cherryCol
         rts
 #if 0        
 ;;; display a number in A on screen
@@ -3490,7 +3518,7 @@ DeathDistance equ 5
         bne .done             
         ;; pacman eaten
 
-       jsr death               ;long jumps to level restart
+;       jsr death               ;long jumps to level restart
         ;; control cannot reach here
         rts                     ;leave this here for debugging and commenting jsr death out
 .ghost_eaten                    ;pacman has eaten a ghost in the maze
@@ -4394,27 +4422,6 @@ done:
         rts
 #endif        
 
-BLUE_GHOST
-     dc.b 126,219,219,255,219,165,255,170
-     dc.b 126,219,219,255,219,165,255,85
-GHOSTR
-    dc.b %01111110
-    dc.b %11000011
-    dc.b %11101011
-    dc.b %11101011
-    dc.b %11111111
-    dc.b %11100011
-    dc.b %11111111
-    dc.b %10101010
-GHOSTR_1      
-    dc.b %01111110
-    dc.b %11000011
-    dc.b %11101011
-    dc.b %11101011
-    dc.b %11111111
-    dc.b %11100011
-    dc.b %11111111
-    dc.b %01010101
 ;;;
 ;;;
 ;;; 
@@ -4679,15 +4686,6 @@ PAC3
     ds 1,%11111000
     ds 1,%01111110
     ds 1,%00111100
-PAC4
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11110000
-    ds 1,%11100000
-    ds 1,%11100000
-    ds 1,%11110000
-    ds 1,%01111110
-    ds 1,%00111100
 ;;; --------------
 PAC1D
     ds 1,%00111100
@@ -4713,15 +4711,6 @@ PAC3D
     ds 1,%11111111
     ds 1,%11111111
     ds 1,%11100111
-    ds 1,%11000011
-    ds 1,%01000010
-    ds 1,%00000000
-PAC4D
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11100111
-    ds 1,%11000011
     ds 1,%11000011
     ds 1,%01000010
     ds 1,%00000000
@@ -4753,15 +4742,6 @@ PAC_UP3
     ds 1,%11111111
     ds 1,%01111110
     ds 1,%00111100
-PAC_UP4
-    ds 1,%00000000
-    ds 1,%01000010
-    ds 1,%11000011
-    ds 1,%11000011
-    ds 1,%11100111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
 ;;; --------------------------
 PAC_L1
     ds 1,%00111100
@@ -4790,16 +4770,31 @@ PAC_L3
     ds 1,%00011111
     ds 1,%01111110
     ds 1,%00111100
-PAC_L4
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%00001111
-    ds 1,%00000111
-    ds 1,%00000111
-    ds 1,%00001111
-    ds 1,%01111110
-    ds 1,%00111100
 PAC_LAST
+        
+BLUE_GHOST
+     dc.b 126,219,219,255,219,165,255,170
+     dc.b 126,219,219,255,219,165,255,85
+GHOSTR
+    dc.b %01111110
+    dc.b %11000011
+    dc.b %11101011
+    dc.b %11101011
+    dc.b %11111111
+    dc.b %11100011
+    dc.b %11111111
+    dc.b %10101010
+GHOSTR_1      
+    dc.b %01111110
+    dc.b %11000011
+    dc.b %11101011
+    dc.b %11101011
+    dc.b %11111111
+    dc.b %11100011
+    dc.b %11111111
+    dc.b %01010101
+BIT_CHERRY
+        dc.b 12,16,32,32,24,124,108,104
 #if 0
 ;;; scratch text for debugging thoughts
 ;; 0 @
