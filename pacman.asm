@@ -124,7 +124,7 @@ CSPRTFRM        equ $10        ; number of frames in the currently processing sp
 DOTCOUNT        equ $11        ;dots eaten
 frameCount      equ 4          ;number of pacman animation frames
 PACFRAMED       equ $12        ;pacframe dir
-RESTORESPRT     equ $13        ;if true, restore sprite after CalcDistance routine
+UNUSED0         equ $13        ;when moving a sprite, the next 'set' of source bitmaps
 DSPL_1          equ $14        ;used by DisplayNum routine
 BCD             equ $15        ;used by Bin2Hex routine
 DSPL_2          equ $16        ;
@@ -822,7 +822,6 @@ Speed_standard   equ 18         ;95%
 Speed_slow       equ 10         ;90%
 Speed_fast       equ 255        ;100%
 Sprite_base      dc.b Speed_standard,Speed_slow,Speed_slow,Speed_slow,Speed_slow
-;Sprite_base      dc.b 255,255,255,255,255
 Sprite_turn      dc.b 5,9,6,3,7        
 Sprite_color     dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
@@ -1096,71 +1095,6 @@ EndLevel subroutine
 .done
         WaitTime 2
         rts
-;;;
-;;; self modifying code
-;;; for blinky speed
-;;; 
-        MAC DotEaten 
-        saveX
-        jsr SoundOn
-
-        lda #$10
-        ldy #$0
-        jsr UpdateScore
-
-        lda #1
-        bit DOTCOUNT
-        bne .noslowdown         ;penalize pacman every other dot
-        lda #2
-        sta Sprite_turn         ;for pac to slow down 1 frame per dot
-.noslowdown        
-        ;; 
-        ldy DOTCOUNT
-        lda BlinkyCruise
-        cmp #blinkyCruise2      ;already in cruise mode 2?
-        beq .01                 ;yes, no checking needed
-        cmp #blinkyCruise1
-        beq XBlinkyS2
-XBlinkyS1        
-        cpy #[totalDots/2]      ;time to go into mode 1
-        bcs XBlinkyS2           ;nope, skip mode 1
-        ldx #blinkyCruise1      ;select speed mode
-        jsr IncreaseBlinky      ;invoke
-XBlinkyS2
-        cpy #[totalDots/3]      ;time to go into mode 2?
-        bcs .01                 ;nope, skip mode2
-        ldx #blinkyCruise2      ;select speed mode into A
-        jsr IncreaseBlinky      ;invoke
-.01        
-        lda #modeLeaving
-XPinkyDots        
-        cpy #pinkyDots
-        bcs .0
-        ldx #pinky
-        jsr LeaveBox
-.0
-        cpy  #fruit1Dots
-        bne .1
-        jsr Fruit
-.1        
-        cpy #fruit2Dots
-        bne .2
-        jsr Fruit
-.2
-XInkyDots        
-        cpy #inkyDots
-        bcs .3
-        ldx #inky
-        jsr LeaveBox
-.3
-XClydeDots        
-        cpy #clydeDots
-        bcs .4
-        ldx #clyde
-        jsr LeaveBox
-.4
-        resX
-        ENDM
 ;;; figure out what pacman might be eating
 ;;; A = consumed playfield tile
 CheckFood subroutine
@@ -1170,7 +1104,7 @@ CheckFood subroutine
         cmp #DOT
         bne .done
 
-        DotEaten
+        jsr DotEaten
 
         ;; handle eating dots
         ;; and figuring out if the level is over
@@ -2203,10 +2137,10 @@ MainLoop0
 ;        jsr WaitFire
         jsr Pacman
 #IFCONST GHOSTS_ON        
-        jmp GhostAI
+        jsr GhostAI
 #endif
 ;        jsr PixelPos
-AfterAI
+
         InitSpriteLoop
 .playerloop
         dec SPRITEIDX
@@ -2619,148 +2553,7 @@ SpecialKeys SUBROUTINE
         lda #outOfBoxRow
         sta GHOST_TGTROW
         ENDM
-        ;; {1}=display letter {2}=offset
-        ;; displays distance from target tile
-        MAC IfFocus
-;;         cpx #focusGhost
-;;         bne .not
-;;         Display1 {1},{2},S3            ;
-;; .not        
-        ENDM
-;;; update {1} with min of A or {1} store SPRT_LOCATOR, which is the considered 'the move'
-;;; goes in {2} if it was the best move so far
-;;; INPUTS: SPRT_LOCATOR
-;;; locator is set from the scroll_up, scroll_down, etc routines
-;;; a litte remote in locality of reference for the reader, not happy about it
-;;; but there it is
-        MAC UpdateMinDist
-        cmp {1}
-        bpl .done
-        sta {1}                  ;update min
-        lda SPRT_LOCATOR         ;sprt_locator contained a directional indicator
-        sta {2}
-.done        
-        ENDM
-;;; load sprite head tile screen position pointer into {2}
-;;; X = sprite
-        MAC ldSprtHeadPos
-        move16x {1},{2}
-        endm
-        ;; you can pick loc or loc2
-        ;; load sprite's tail tile screen position pointer into word {2}
-        ;; e.g. ldSprtTailPos Sprite_loc,W1 
-        ;; e.g. ldSprtTailPos Sprite_loc2,W1 
-        mac ldSprtTailPos
-        move16x {1},{2}
-#if {1}=Sprite_loc
-        lda Sprite_dir,X
-#else 
-        lda Sprite_dir2,X
-#endif        
-        clc                     ;16 bit add the sprite_dir
-        adc {2}
-        sta {2}
-        lda {2}+1
-        adc #0
-        sta {2}+1
-        ENDM
-;;; save some properties of a sprite that will be damaged
-;;; during AI calcs
-        MAC SaveSprite 
-        lda Sprite_offset2,X
-        sta SAVE_OFFSET2
-        lda Sprite_offset,X
-        sta SAVE_OFFSET
-        lda Sprite_dir,X
-        sta SAVE_DIR
-        lda Sprite_dir2,X
-        sta SAVE_DIR2
-        ENDM
-;;; restore some damaged properties of a ghost sprite
-;;; after doing the AI calcs
-        MAC RestoreSprite 
-        lda SAVE_OFFSET2                  ;restore sprite offset
-        sta Sprite_offset2,X
-        lda SAVE_OFFSET
-        sta Sprite_offset,X
-        move16xx Sprite_loc,Sprite_loc2
-        lda SAVE_DIR
-        sta Sprite_dir,X
-        lda SAVE_DIR2
-        sta Sprite_dir2,X
-        ENDM
-;;; X ghost to check
-;;; locals: S3,S4,S0 current min distance
-        MAC PossibleMoves 
-        lda #1
-        sta RESTORESPRT     ;control behavior of subsequent CalcDistance calls
-        lda #noChoice
-        sta GHOST_DIST      ;initialize least distance to a big number
-        sta GHOST_DIR       ;initialize best move to an invalid move
-
-        SaveSprite              ;save sprite data into tempvars
-.checkup                             ;
-        ;; don't reverse
-        lda #motionDown
-        cmp Sprite_motion,X
-        beq .endup
-        ;; check if we can go up
-        jsr scroll_up           ;
-        bcs .endup
-        ;; we could go up;
-        ldSprtHeadPos Sprite_loc2,W1 ;
-        jsr CalcDistance             ;
-;        jsr RestoreSprite            ;
-        IfFocus "U",9            ;
-.endup        
-.checkleft
-        ;; don't reverse
-        lda #motionRight
-        cmp Sprite_motion,X
-        beq .endleft
-        ;; check if we can go left
-        jsr scroll_left             ;
-        bcs .endleft
-        ;; we could go left
-        ldSprtHeadPos Sprite_loc2,W1 ;
-        jsr CalcDistance             ;
-;        jsr RestoreSprite            ;
-        IfFocus "L",5                ;
-.endleft        
-.checkdown
-        ;; don't reverse
-        lda #motionUp
-        cmp Sprite_motion,X
-        beq .enddown
-        ;; check if we can go down
-        jsr scroll_down         ;
-        bcs .enddown
-        ;; we could go down
-        ldSprtTailPos Sprite_loc2,W1 ;correct
-        jsr CalcDistance
-;        jsr RestoreSprite
-        IfFocus "D",13
-.enddown        
-.checkright
-        ;; don't reverse
-        lda #motionLeft       
-        cmp Sprite_motion,X
-        beq .endright
-        ;; check if we can go right
-        jsr scroll_right            ;
-        bcs .endright
-        ;; we could go right
-        ldSprtTailPos Sprite_loc2,W1 ;correct
-        jsr CalcDistance             ;
-;        jsr RestoreSprite            ;
-        IfFocus "R",1                ;
-.endright        
-;.done
-        ENDM
-;;; 
-;;; perform AI for all ghosts
-GhostAIExit
-        jmp AfterAI
+;;; animate a ghost back and forth
 GhostAI SUBROUTINE
         lda #0
         sta CORNER_SHAVE        ;ghosts get no cornering bonus
@@ -2771,8 +2564,9 @@ GhostAI SUBROUTINE
         InitSpriteLoop
 .loop
         dec SPRITEIDX
-        beq GhostAIExit              ;pacman is sprite 0, so we leave
-
+        bne ailoop0
+        rts                     ;pacman is sprite 0, so we leave
+ailoop0
         ldx SPRITEIDX
         MyTurn2 GhostTurn      ;does this ghost get to move this time?
         bne .loop              ;jmp .loop - no move for ghost
@@ -2788,7 +2582,7 @@ GhostTurn
 .reversing
         jsr ReverseDirection
         sta Sprite_motion,X
-        jmp  .moveghost          
+        bne .moveghost          ;jmp .moveghost
 .eaten                          ;load target tile for eaten ghosts
         SetEatenTargetTile
         bne .continue
@@ -2802,14 +2596,13 @@ GhostTurn
         jsr FrightAI
         jmp .continue
 .notfrightened        
-#if 1
+#if 0
         ;; check if we should bother with AI
         ;; we have to be at an intersection
         lda Sprite_offset,X
         beq .decide
         cmp #8
-        beq .decide
-        jmp .moveghost 
+        bne .moveghost
         
 .decide                         ;entering a new tile
 #endif        
@@ -2838,9 +2631,9 @@ GhostTurn
         bne .continue
         jsr Ghost1AI
 .continue
-        PossibleMoves
-;        cpx #focusGhost
-;        bne .notfocus
+        jsr PossibleMoves
+        cpx #focusGhost
+        bne .notfocus
 ;        Display1 "G",17,GHOST_DIR
 .notfocus
 
@@ -2943,6 +2736,71 @@ IncreaseBlinky subroutine
 .over2
         IncreasePanicLevel
         rts
+;;;
+;;; self modifying code
+;;; for blinky speed
+;;; 
+DotEaten SUBROUTINE
+        saveX
+        jsr SoundOn
+
+        lda #$10
+        ldy #$0
+        jsr UpdateScore
+
+        lda #1
+        bit DOTCOUNT
+        bne .noslowdown         ;penalize pacman every other dot
+        lda #2
+        sta Sprite_turn         ;for pac to slow down 1 frame per dot
+.noslowdown        
+        ;; 
+        ldy DOTCOUNT
+        lda BlinkyCruise
+        cmp #blinkyCruise2      ;already in cruise mode 2?
+        beq .01                 ;yes, no checking needed
+        cmp #blinkyCruise1
+        beq XBlinkyS2
+XBlinkyS1        
+        cpy #[totalDots/2]      ;time to go into mode 1
+        bcs XBlinkyS2           ;nope, skip mode 1
+        ldx #blinkyCruise1      ;select speed mode
+        jsr IncreaseBlinky      ;invoke
+XBlinkyS2
+        cpy #[totalDots/3]      ;time to go into mode 2?
+        bcs .01                 ;nope, skip mode2
+        ldx #blinkyCruise2      ;select speed mode into A
+        jsr IncreaseBlinky      ;invoke
+.01        
+        lda #modeLeaving
+XPinkyDots        
+        cpy #pinkyDots
+        bcs .0
+        ldx #pinky
+        jsr LeaveBox
+.0
+        cpy  #fruit1Dots
+        bne .1
+        jsr Fruit
+.1        
+        cpy #fruit2Dots
+        bne .2
+        jsr Fruit
+.2
+XInkyDots        
+        cpy #inkyDots
+        bcs .3
+        ldx #inky
+        jsr LeaveBox
+.3
+XClydeDots        
+        cpy #clydeDots
+        bcs .4
+        ldx #clyde
+        jsr LeaveBox
+.4
+        resX
+        rts
 ;;; return true ( Z=1 ) if character in A is a wall
 ;;; W2 ( candidate position )
 IsWall SUBROUTINE
@@ -3024,6 +2882,43 @@ ones:
         sta clrram,X
         rts
 #endif        
+;;; update {1} with min of A or {1} store SPRT_LOCATOR, which is the considered 'move'
+;;; in {2} if it was the best move so far
+;;; INPUTS: SPRT_LOCATOR
+;;; locator is set from the scroll_up, scroll_down, etc routines
+;;; a litte remote in locality of reference for the reader, not happy about it
+;;; but there it is
+        MAC UpdateMinDist
+        cmp {1}
+        bpl .done
+        sta {1}                  ;update min
+        lda SPRT_LOCATOR         ;sprt_locator contained a directional indicator
+        sta {2}
+.done        
+        ENDM
+;;; load sprite head tile screen position pointer into {2}
+;;; X = sprite
+        MAC ldSprtHeadPos
+        move16x {1},{2}
+        endm
+        ;; you can pick loc or loc2
+        ;; load sprite's tail tile screen position pointer into word {2}
+        ;; e.g. ldSprtTailPos Sprite_loc,W1 
+        ;; e.g. ldSprtTailPos Sprite_loc2,W1 
+        mac ldSprtTailPos
+        move16x {1},{2}
+#if {1}=Sprite_loc
+        lda Sprite_dir,X
+#else 
+        lda Sprite_dir2,X
+#endif        
+        clc                     ;16 bit add the sprite_dir
+        adc {2}
+        sta {2}
+        lda {2}+1
+        adc #0
+        sta {2}+1
+        ENDM
 ;;; convert tiles to pixels
 ;;; X sprite to convert
 ;;; {1} source col
@@ -3077,6 +2972,7 @@ PixelPos SUBROUTINE
         Display1 "M",9,PACYPIXEL
 #endif        
         rts
+;;; Calculate distance of W1 to target tile
 ;;; input: W1 candidate sprite position
 ;;; output: GHOST_COL,GHOST_ROW target tile
 ;;; output:
@@ -3105,10 +3001,105 @@ CalcDistance SUBROUTINE
         
 ;        Display2 S2,S2
         UpdateMinDist GHOST_DIST,GHOST_DIR
-        lda RESTORESPRT
-        beq .done
-        RestoreSprite
-.done        
+        rts
+;;; save some properties of a sprite that will be damaged
+;;; during AI calcs
+        MAC SaveSprite 
+        lda Sprite_offset2,X
+        sta SAVE_OFFSET2
+        lda Sprite_offset,X
+        sta SAVE_OFFSET
+        lda Sprite_dir,X
+        sta SAVE_DIR
+        lda Sprite_dir2,X
+        sta SAVE_DIR2
+        ENDM
+;;; restore some damaged properties of a ghost sprite
+;;; after doing the AI calcs
+RestoreSprite SUBROUTINE
+        lda SAVE_OFFSET2                  ;restore sprite offset
+        sta Sprite_offset2,X
+        lda SAVE_OFFSET
+        sta Sprite_offset,X
+        move16xx Sprite_loc,Sprite_loc2
+        lda SAVE_DIR
+        sta Sprite_dir,X
+        lda SAVE_DIR2
+        sta Sprite_dir2,X
+        rts
+        ;; {1}=display letter {2}=offset
+        ;; displays distance from target tile
+        MAC IfFocus
+;;         cpx #focusGhost
+;;         bne .not
+;;         Display1 {1},{2},S3            ;
+;; .not        
+        ENDM
+;;; X ghost to check
+;;; locals: S3,S4,S0 current min distance
+PossibleMoves SUBROUTINE
+        lda #noChoice
+        sta GHOST_DIST      ;initialize least distance to a big number
+        sta GHOST_DIR       ;initialize best move to an invalid move
+
+        SaveSprite              ;save sprite data into tempvars
+.checkup                             ;
+        ;; don't reverse
+        lda #motionDown
+        cmp Sprite_motion,X
+        beq .endup
+        ;; check if we can go up
+        jsr scroll_up           ;
+        bcs .endup
+        ;; we could go up;
+        ldSprtHeadPos Sprite_loc2,W1 ;
+        jsr CalcDistance             ;
+        jsr RestoreSprite            ;
+        IfFocus "U",9            ;
+.endup        
+.checkleft
+        ;; don't reverse
+        lda #motionRight
+        cmp Sprite_motion,X
+        beq .endleft
+        ;; check if we can go left
+        jsr scroll_left             ;
+        bcs .endleft
+        ;; we could go left
+        ldSprtHeadPos Sprite_loc2,W1 ;
+        jsr CalcDistance             ;
+        jsr RestoreSprite            ;
+        IfFocus "L",5                ;
+.endleft        
+.checkdown
+        ;; don't reverse
+        lda #motionUp
+        cmp Sprite_motion,X
+        beq .enddown
+        ;; check if we can go down
+        jsr scroll_down         ;
+        bcs .enddown
+        ;; we could go down
+        ldSprtTailPos Sprite_loc2,W1 ;correct
+        jsr CalcDistance
+        jsr RestoreSprite
+        IfFocus "D",13
+.enddown        
+.checkright
+        ;; don't reverse
+        lda #motionLeft       
+        cmp Sprite_motion,X
+        beq .endright
+        ;; check if we can go right
+        jsr scroll_right            ;
+        bcs .endright
+        ;; we could go right
+        ldSprtTailPos Sprite_loc2,W1 ;correct
+        jsr CalcDistance             ;
+        jsr RestoreSprite            ;
+        IfFocus "R",1                ;
+.endright        
+.done
         rts
 ;;;  BlinkyRow,pacrow+2,inky target row
 ;;;  e.g. foo DIV22_RESLT,GHOST1_TGTROW,GHOST_TGTROW
@@ -3177,8 +3168,6 @@ Ghost4AI SUBROUTINE
         ;; let blinky calc our target tile
         jsr Ghost2AI            ;blinky's algo
         ;; how far are we away from where blinky would like to be?
-        lda #0
-        sta RESTORESPRT
         jsr CalcDistance        
 ;        Display1 "Y",0,GHOST_ROW
 ;        Display1 "X",3,GHOST_COL
@@ -3355,24 +3344,6 @@ Divide22_16 SUBROUTINE
         sta 36879
         ENDM
 
-;;; animate a sprite by changing its source frames
-        MAC Animate 
-        lda PACFRAMED
-.start        
-        clc
-        adc Sprite_frame
-        bmi .reverse
-        cmp #pacframes
-        beq .reverse
-        sta Sprite_frame
-        jmp .done
-.reverse
-        lda #$ff
-        eor PACFRAMED
-        ora #1
-        sta PACFRAMED
-.done        
-        ENDM
 ;;; 
 ;;; Service PACMAN, read joystick and move
 ;;; 
@@ -3413,6 +3384,9 @@ PacManTurn
         sta LASTJOY
         
 .process
+        ldy #0
+        sty S1 ;eat dots from head tile
+;        sta screen+1            ; debug char on screen
         tay                   
         and #JOYL               ; check for left bit
         beq .left
@@ -3423,8 +3397,13 @@ PacManTurn
         and #JOYDWN             ; check for down bit
         beq .down
         tya
+        and #JOYT
+        beq .fire
+        tya
         and #JOYR
         beq .right
+        rts
+.fire
         rts
 .left
         store16 PAC_L1,W3
@@ -3441,6 +3420,8 @@ PacManTurn
         bcc .moveok
         jmp .uselast
 .down
+        lda #1
+        sta S1                  ;eat dots from tail
         store16 PAC1D,W3
         lda #motionDown
         sta Sprite_motion
@@ -3448,6 +3429,8 @@ PacManTurn
         bcc .moveok
         jmp .uselast
 .right
+        lda #1
+        sta S1                  ;eat dots from tail
         store16 PAC1,W3    ;
         lda #motionRight
         sta Sprite_motion
@@ -3460,7 +3443,7 @@ PacManTurn
         lda LASTJOY
         sta LASTJOYDIR
         move16 W3,Sprite_src
-        Animate
+        jsr Animate
         rts
 ;;; 
 ;;; X ghost we are checking for collision
@@ -3570,6 +3553,23 @@ DeathDistance equ 5
         
 .done        
         ;; GHOST_ROW,GHOST_COL
+        rts
+;;; animate a sprite by changing its source frames
+Animate SUBROUTINE
+        lda PACFRAMED
+.start        
+        clc
+        adc Sprite_frame
+        bmi .reverse
+        cmp #pacframes
+        beq .reverse
+        sta Sprite_frame
+        rts
+.reverse
+        lda #$ff
+        eor PACFRAMED
+        ora #1
+        sta PACFRAMED
         rts
         
         ;; load the currently rendered tile for a sprite
