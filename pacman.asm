@@ -1,16 +1,30 @@
-         org $0400
+LARGEMEM equ 1                  ;
+#ifconst LARGEMEM
+        org $1200
+#else        
+        org $0400
+#endif        
         processor 6502
-;BASIC equ 1                     ;launch from basic
+BASIC equ 1                     ;launch from basic
 #ifconst BASIC
 Sprite_page     dc.b 0
 ;;; inject code for a BASIC 'sys' command
         HEX 0c 04 0a 00  9e 20
+#ifconst LARGEMEM
+        dc.b  "4","6","2","2"
+#else        
         dc.b  "1","0","3","8"
+#endif        
         HEX 00 00 00
         jmp main
-#else
+#else                           ;not basic startup
         jmp main
 Sprite_page     dc.b 0
+#endif
+#ifconst LARGEMEM
+        org $1400
+        INCLUDE "bitmaps.asm"
+;        org $1800
 #endif        
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
@@ -24,11 +38,15 @@ voice2      equ 36875
 voice3      equ 36876
 voice4      equ 36877        
 volume      equ 36878
-;screen     equ $1000        ; screen ram
-screen      equ $1e00        
-;clrram     equ $9400        ; color ram for screen
-clrram      equ $9600           ; color ram for screen
-clroffset   equ $78             ;offset from screen to color ram
+#ifconst LARGEMEM        
+screen      equ $1000        ; screen ram
+clrram      equ $9400        ; color ram for screen
+clroffset   equ $84          ;offset from screen to color
+#else        
+clroffset   equ $78          ;offset from screen to color
+screen      equ $1e00        ;3k ram
+clrram      equ $9600           ; color ram for screen (3k)
+#endif        
 defaultISR  equ $eabf           ;os default IRQ
 defaultVol  equ 8               ;default volume for app
 VICRASTER   equ $9004        
@@ -2048,7 +2066,11 @@ main SUBROUTINE
 
         lda VICSCRN
         and #$f0
+#ifconst LARGEMEM
+        ora #%1101              ;$1400 char ram
+#else        
         ora #$0f                    ;char ram pointer is lower 4 bits
+#endif        
         sta VICSCRN
         ;; lda $9002
         ;; and %10000000           ;set to zero column
@@ -4424,377 +4446,12 @@ done:
 
 ;;;
 ;;;
-;;; 
+;;;
+#ifnconst LARGEMEM        
         org $1c00
-CHAR_BEGIN        
-        ds 8*4,0
-BIT_PWR0        
-        ;; power pellet2
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00011000
-        dc.b %00111100
-        dc.b %00111100
-        dc.b %00011000
-        dc.b %00000000
-        dc.b %00000000
-BIT_PWR1        
-        ;; power pellet
-        dc.b %00000000
-        dc.b %00011000
-        dc.b %00111100
-        dc.b %00111100
-        dc.b %00111100
-        dc.b %00111100
-        dc.b %00011000
-        dc.b %00000000
-;;; char 6 starts here
-BIT_RTOP        
-        ;; right top
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %11111000
-        dc.b %00000100
-        dc.b %00000100
-        dc.b %11000100
-        dc.b %00100100
-        dc.b %00100100
-        ;; right facing tee
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %11000100
-        dc.b %00000100
-        dc.b %00000100
-        dc.b %11000100
-        dc.b %00100100
-        dc.b %00100100
-        ;; right cap
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %11111100
-        dc.b %00000010
-        dc.b %00000010
-        dc.b %11111100
-        dc.b %00000000
-        dc.b %00000000
-        ;; bot right
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %11000100
-        dc.b %00000100
-        dc.b %00000100
-        dc.b %11111000
-        dc.b %00000000
-        dc.b %00000000
+        INCLUDE "bitmaps.asm"
+#endif
         
-        ;; 
-        ;; now the mirror of the previous 4 characters
-        ;; used by mirror maze compression
-        ;;
-        
-        ;; left top
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00011111
-        dc.b %00100000
-        dc.b %00100000
-        dc.b %00100011
-        dc.b %00100100
-        dc.b %00100100
-        ;; left facing tee
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100011
-        dc.b %00100000
-        dc.b %00100000
-        dc.b %00100011
-        dc.b %00100100
-        dc.b %00100100
-        ;; left cap
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00111111
-        dc.b %01000000
-        dc.b %01000000
-        dc.b %00111111
-        dc.b %00000000
-        dc.b %00000000
-        ;; bot left   
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100011
-        dc.b %00100000
-        dc.b %00100000
-        dc.b %00011111
-        dc.b %00000000
-        dc.b %00000000
-BIT_TEEBOT        
-        ;; tee bottom
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %11000011
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %11111111
-        dc.b %00000000
-        dc.b %00000000
-BIT_HWALL        
-        ;; horizontal wall
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %11111111
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %11111111
-        dc.b %00000000
-        dc.b %00000000
-BIT_VWALL        
-        ;; vertical wall
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        ;; top cap
-        dc.b %00000000
-        dc.b %00011000
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        ;; bot cap
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00100100
-        dc.b %00011000
-        dc.b %00000000
-        ;; top tee
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %11111111
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %11000011
-        dc.b %00100100
-        dc.b %00100100
-BIT_EMPTY        
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00000000
-BIT_DOT                         
-        ;; regular eating dot
-        dc.b 0
-        dc.b 0
-        dc.b 0
-        dc.b 24
-        dc.b 24
-        dc.b 0
-        dc.b 0
-        dc.b 0
-BIT_GHWALL
-        ;; ghost wall
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %11111111
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00000000
-GHOST_BEGIN        
-        ;; 5 sprites * 4 tiles per sprite * 8 bytes
-        ;;  need to clean this up a bit
-        
-        ds 5*4*8,0
-        ;; eyes
-BIT_EYES
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %11100111
-        dc.b %10100101
-        dc.b %11100111
-        dc.b %00000000
-        dc.b %00000000
-        ;; 
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %00000000
-        dc.b %11100111
-        dc.b %11100111
-        dc.b %11100111
-        dc.b %00000000
-        dc.b %00000000
-        ;; eyes
-        
-GHOST
-    dc.b %01111110
-    dc.b %11000011
-    dc.b %11010111
-    dc.b %11010111
-    dc.b %11111111
-    dc.b %11000111
-    dc.b %11111111
-    dc.b %10101010
-GHOST2        
-    dc.b %01111110
-    dc.b %11000011
-    dc.b %11010111
-    dc.b %11010111
-    dc.b %11111111
-    dc.b %11000111
-    dc.b %11111111
-    dc.b %01010101
-PAC1
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC2
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11110000
-    ds 1,%11110000
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-BIT_PACRIGHTOPEN        
-PAC3
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111000
-    ds 1,%11110000
-    ds 1,%11110000
-    ds 1,%11111000
-    ds 1,%01111110
-    ds 1,%00111100
-;;; --------------
-PAC1D
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC2D
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11100111
-    ds 1,%11100111
-    ds 1,%01100110
-    ds 1,%00100100
-PAC3D
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11100111
-    ds 1,%11000011
-    ds 1,%01000010
-    ds 1,%00000000
-;;; -------------
-PAC_UP1
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC_UP2
-    ds 1,%00100100
-    ds 1,%01100110
-    ds 1,%11100111
-    ds 1,%11100111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC_UP3
-    ds 1,%00000000
-    ds 1,%01000010
-    ds 1,%11000011
-    ds 1,%11100111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-;;; --------------------------
-PAC_L1
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC_L2
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%11111111
-    ds 1,%00001111
-    ds 1,%00001111
-    ds 1,%11111111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC_L3
-    ds 1,%00111100
-    ds 1,%01111110
-    ds 1,%00011111
-    ds 1,%00001111
-    ds 1,%00001111
-    ds 1,%00011111
-    ds 1,%01111110
-    ds 1,%00111100
-PAC_LAST
-        
-BLUE_GHOST
-     dc.b 126,219,219,255,219,165,255,170
-     dc.b 126,219,219,255,219,165,255,85
-GHOSTR
-    dc.b %01111110
-    dc.b %11000011
-    dc.b %11101011
-    dc.b %11101011
-    dc.b %11111111
-    dc.b %11100011
-    dc.b %11111111
-    dc.b %10101010
-GHOSTR_1      
-    dc.b %01111110
-    dc.b %11000011
-    dc.b %11101011
-    dc.b %11101011
-    dc.b %11111111
-    dc.b %11100011
-    dc.b %11111111
-    dc.b %01010101
-BIT_CHERRY
-        dc.b 12,16,32,32,24,124,108,104
 #if 0
 ;;; scratch text for debugging thoughts
 ;; 0 @
