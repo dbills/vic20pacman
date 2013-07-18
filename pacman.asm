@@ -5,7 +5,7 @@ LARGEMEM equ 1                  ;
         org $0400
 #endif        
         processor 6502
-BASIC equ 1                     ;launch from basic
+;BASIC equ 1                     ;launch from basic
 #ifconst BASIC
 Sprite_page     dc.b 0
 ;;; inject code for a BASIC 'sys' command
@@ -24,7 +24,7 @@ Sprite_page     dc.b 0
 #ifconst LARGEMEM
         org $1400
         INCLUDE "bitmaps.asm"
-;        org $1800
+        org $1400+$800          ;full 2K character set
 #endif        
 _LOCAL_SAVEDIR equ 1
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
@@ -79,8 +79,11 @@ SaveBuffer  equ cassEnd-10
 
 ;; vic-I chip registers
 chrst           equ $9003       ; font map pointer
-;mychars         equ $1400        ; my font map
-mychars         equ $1c00        
+#ifconst LARGEMEM        
+mychars         equ $1400       ;>=8K font start
+#else
+mychars         equ $1c00       ;3K font start
+#endif        
 charcnt         equ $800
 zeroDigit       equ 48 | $80    ;zero digit character
 motionRight     equ 24          ;sprite locator code for right
@@ -2067,6 +2070,7 @@ main SUBROUTINE
         lda VICSCRN
         and #$f0
 #ifconst LARGEMEM
+;        jsr copychar            ;copy character set complete
         ora #%1101              ;$1400 char ram
 #else        
         ora #$0f                    ;char ram pointer is lower 4 bits
@@ -3372,9 +3376,9 @@ Divide22_16 SUBROUTINE
 Pacman SUBROUTINE
         ldx #0
 
-        MyTurn2 PacManTurn
+;        MyTurn2 PacManTurn
         ;;not our turn to move
-        rts
+;        rts
 PacManTurn
         lda #cornerAdv
         sta CORNER_SHAVE        ;pac get +1 bonus on corners
@@ -3540,7 +3544,7 @@ DeathDistance equ 5
         bne .done             
         ;; pacman eaten
 
-;       jsr death               ;long jumps to level restart
+       jsr death               ;long jumps to level restart
         ;; control cannot reach here
         rts                     ;leave this here for debugging and commenting jsr death out
 .ghost_eaten                    ;pacman has eaten a ghost in the maze
@@ -4307,6 +4311,51 @@ rsPrint subroutine
         bpl .1
 .done        
         rts
+        
+#ifconst LARGEMEM
+;;;
+;;;  copy the stock character set
+;;;
+copychar    SUBROUTINE
+    store16 chrom2,W2           ;source
+    store16 mychars+$400,W3     ;dest
+    store16 $400,W1             ;length
+
+    jsr movedown
+
+    rts
+;; Move memory down
+;;
+; W2 = source start address
+; W3 = destination start address
+; SIZE = number of bytes to move
+;
+movedown SUBROUTINE
+        LDY #0
+        LDX W1+1
+        BEQ md2
+md1
+        LDA ( W2 ),Y ; move a page at a time
+        STA ( W3 ),Y
+        INY
+        BNE md1
+        INC W2+1
+        INC W3+1
+        DEX
+        BNE md1
+md2
+        LDX W1
+        BEQ md4
+md3
+        LDA ( W2 ),Y ; move the remaining bytes
+        STA ( W3 ),Y
+        INY
+        DEX
+        BNE md3
+md4
+        RTS
+#endif                          ;LARGEMEM
+        
 #if 0
 
 TEXTS        
