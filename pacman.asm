@@ -1,4 +1,4 @@
-LARGEMEM equ 1                  ;
+;LARGEMEM equ 1                  ;
 #ifconst LARGEMEM
         org $1200
 #else        
@@ -26,29 +26,29 @@ Sprite_page     dc.b 0
         INCLUDE "bitmaps.asm"
         org $1400+$800          ;full 2K character set
 #endif        
-_LOCAL_SAVEDIR equ 1
+
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 GHOSTS_ON   equ 1
 ;GHPLAYER    equ 1              ; ghost as player
-LARGEMAZE   equ 1              ;
-_debug      equ 1              ; true for debugging
-cornerAdv   equ 1              ;pacman's cornering advantage in pixels
-voice1      equ 36874          ; sound registers
+LARGEMAZE   equ 1                 ;
+_debug      equ 1                 ; true for debugging
+cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
+voice1      equ 36874             ; sound registers
 voice2      equ 36875
 voice3      equ 36876
 voice4      equ 36877        
 volume      equ 36878
 #ifconst LARGEMEM        
-screen      equ $1000        ; screen ram
-clrram      equ $9400        ; color ram for screen
-clroffset   equ $84          ;offset from screen to color
+screen      equ $1000             ; screen ram
+clrram      equ $9400             ; color ram for screen
+clroffset   equ $84               ;offset from screen to color
 #else        
-clroffset   equ $78          ;offset from screen to color
-screen      equ $1e00        ;3k ram
-clrram      equ $9600           ; color ram for screen (3k)
+clroffset   equ $78               ;offset from screen to color
+screen      equ $1e00             ;3k ram
+clrram      equ $9600             ; color ram for screen (3k)
 #endif        
-defaultISR  equ $eabf           ;os default IRQ
-defaultVol  equ 8               ;default volume for app
+defaultISR  equ $eabf             ;os default IRQ
+defaultVol  equ 8                 ;default volume for app
 VICRASTER   equ $9004        
 VICSCRN     equ $9005             ;vic chip character generator pointer
 LIGHPENX    equ $9006             ;used for random number
@@ -70,10 +70,11 @@ chrom1      equ $8000             ; upper case character rom
 chrom2      equ $8400             ; upper case reversed
 chrom3      equ $8c00             ; upper lower reversed
 chrom4      equ $8800             ; upper lower
+;;; 
+;;; I do store some pointers in the casette buffer
+;;; to save memory in the 3K version
+;;; 
 cassStart   equ $033d             ;start of cassette buffer ( 190 bytes)
-        ;; Sprite_loc first 10 bytes
-        ;; 0347
-        ;; sprite_loc2 second 10
 cassEnd     equ $03fb
 SaveBuffer  equ cassEnd-10        
 
@@ -120,18 +121,18 @@ SPRITES      equ 5             ;count of sprites in system (1 based)
 ;;  Zero page constants
 ;;
 ;;; W prefix vars are WORD width
-;;; S or byte, short for 'scratch'
+;;; S or byte, short for 'scratch' and are
+;;; usually bytes
 W1              equ 0
 W2              equ 2
 W3              equ 4        ; 16 bit work 3
-W4              equ 6           ;2 byte work var
+W4              equ 6        ;2 byte work var
 S0              equ 7        
 S1              equ 8        ; 1 byte scratch reg
 S2              equ 9        ; 1 byte scratch reg
 S3              equ 10
 S4              equ 11
         
-#IFCONST _LOCAL_SAVEDIR
 DIV22_WORK      equ $c          ;word
 ;;;                 13
 DIV22_RSLT      equ $e          ;div22 result
@@ -214,15 +215,14 @@ Sprite_offset   equ $5a
 PacLives        equ $6a ;
 SirenIdx        equ $6b ;
 EatenIdx        equ $6c ; number of ghosts eaten since power pill
-PACDEATH        equ $66         ;pacman death animation pointer
+PACDEATH        equ $66 ; pacman death animation pointer
 ChaseTableIdx   equ $67        
          
-#IFCONST _LOCAL_SAVEDIR
 SAVE_OFFSET     equ $ab
 SAVE_OFFSET2    equ $ac
 SAVE_DIR        equ $ad
 SAVE_DIR2       equ $ae
-#endif
+
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -605,7 +605,7 @@ WaitTime_ subroutine
         SBC #0
         STA [{2}]+1
     endm
-        ;; substract byte from word
+        ;; substract byte {2} from word
         ;; {1} input, also contains result
         ;; 
         MAC sub16
@@ -646,13 +646,6 @@ WaitTime_ subroutine
 ;;; W4 (out) font address of tile underneath
 ;;; uses S5,S6,W5
         MAC mergeTile
-#if 0        
-        sta S5
-        lda #8
-        sta S6
-        jsr multxx
-        lda W5
-#endif
         ldy #0
         sty W5
         sty W5+1
@@ -717,8 +710,9 @@ pacframes  equ #3            ; total number of pacman animation frames ( 1 based
 ;;; between 0 and 1
 ;;;
 ;;; there are 4 sets of frames
-;;; for each sprite
+;;; for the pacman sprite
 ;;; the order of sets is left,right,top,bottom
+;;; ghosts have 2 sets of frames
 ;;; 
 ;;; debugging notes: 22*5+5 is at an intersection
 ;;; for testing up/down/left/right transitions
@@ -736,7 +730,8 @@ modeEaten       equ 2             ;ghost was chomped
 modeLeaving     equ 3             ;leavin the ghost box
 modeOutOfBox    equ 4             ;see sprite_mode
 modePacman      equ 5             ;mode only pacman has
-        ;;changes from scatter to chase cause reverse for example
+;;; causes ghosts to reverse direction
+;;; changes from scatter to chase cause reverse for example
 modeReverse     equ 6
 ;;; end valid modes for Sprite_mode
 msgRow          equ 13            ;row number for displaying messages
@@ -792,24 +787,18 @@ g2Start         equ screen+22*outOfBoxRow+outOfBoxCol
 g3Start         equ screen+22*11+11
 g4Start         equ screen+22*11+11
 #endif        
-;;;
-;;; make number code useable for basic 'tokens'
-;;; I use this to generate the 'sys' command to start
-;;; the program
-mknumber0 eqm [..-1]
-
         
 Sprite_loc      equ cassStart
-Sprite_loc2     equ Sprite_loc+10 ;new screen loc
+Sprite_loc2     equ Sprite_loc+10    ;new screen loc
 Sprite_back     equ Sprite_loc2+10   ;background char before other sprites drawn
-Sprite_back2    equ Sprite_back+5         ;static screen background
+Sprite_back2    equ Sprite_back+5    ;static screen background
 ;;;current screen background ( might include some other sprite tile that was laid down )
 Sprite_sback    equ Sprite_back2+5 
 Sprite_sback2   equ Sprite_sback+5
-Sprite_dir      equ Sprite_sback2+5 ;
-Sprite_dir2     equ Sprite_dir+5    ;sprite direction 1(horiz),22(vert)    
+Sprite_dir      equ Sprite_sback2+5  ;
+Sprite_dir2     equ Sprite_dir+5     ;sprite direction 1(horiz),22(vert)    
 ;Sprite_offset   equ Sprite_dir2+5   ;sprite bit offset in tiles
-Sprite_offset2  equ Sprite_dir2+5 ;upcoming sprite bit offset in tiles
+Sprite_offset2  equ Sprite_dir2+5    ;upcoming sprite bit offset in tiles
 PlayerScore_h   equ Sprite_offset2+5 ;3 byte BCD player score, MSB order
 PlayerScore_m   equ PlayerScore_h+1
 PlayerScore_l   equ PlayerScore_m+1
@@ -869,6 +858,8 @@ masterSpeed      equ 1 ;master game delay
 ;;; division table for division by 22
 ;Div22Table_i      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
 Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
+;;; the home tiles for ghosts that are in 'scatter' mode
+;;; ghosts try to find their way to these home tiles
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 MotionTable     dc.b motionUp,motionDown,motionLeft,motionRight
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1 ;15
@@ -2070,12 +2061,13 @@ main SUBROUTINE
         lda VICSCRN
         and #$f0
 #ifconst LARGEMEM
-;        jsr copychar            ;copy character set complete
         ora #%1101              ;$1400 char ram
+        sta VICSCRN
+        jsr copychar
 #else        
         ora #$0f                    ;char ram pointer is lower 4 bits
-#endif        
         sta VICSCRN
+#endif        
         ;; lda $9002
         ;; and %10000000           ;set to zero column
         ;; sta $9002
@@ -4317,43 +4309,19 @@ rsPrint subroutine
 ;;;  copy the stock character set
 ;;;
 copychar    SUBROUTINE
-    store16 chrom2,W2           ;source
-    store16 mychars+$400,W3     ;dest
-    store16 $400,W1             ;length
-
-    jsr movedown
-
-    rts
-;; Move memory down
-;;
-; W2 = source start address
-; W3 = destination start address
-; SIZE = number of bytes to move
-;
-movedown SUBROUTINE
-        LDY #0
-        LDX W1+1
-        BEQ md2
-md1
-        LDA ( W2 ),Y ; move a page at a time
-        STA ( W3 ),Y
-        INY
-        BNE md1
-        INC W2+1
-        INC W3+1
-        DEX
-        BNE md1
-md2
-        LDX W1
-        BEQ md4
-md3
-        LDA ( W2 ),Y ; move the remaining bytes
-        STA ( W3 ),Y
-        INY
-        DEX
-        BNE md3
-md4
-        RTS
+        store16 chrom1,W2           ;source
+        store16 [mychars+$400],W3     ;dest
+        ldy #0
+.loop
+        lda (W2),y
+        sta (W3),y
+        inc16 W2
+        inc16 W3
+        cmp16Im W2,[chrom1+$200]
+        beq .done
+        jmp .loop
+.done
+        rts
 #endif                          ;LARGEMEM
         
 #if 0
