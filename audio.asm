@@ -81,7 +81,7 @@ seq2
 SopFreqPtr     equ W2         ; pointer to active note freq table
 BasFreqPtr     equ W3         ; pointer to active base note freq table
 SequencePtr    equ S0         ; pointer to active sequence
-SequenceIdx    dc.b 0
+SequenceIdx    equ Audio1
 
 player subroutine
         store16 sop1,SopFreqPtr
@@ -110,8 +110,7 @@ PlayMeasure subroutine
 .loop   
         ldy SequenceIdx
         lda (SequencePtr),Y
-        cmp #-1
-        beq .done
+        bmi .done
         jsr SplitByte        ;a=low x=high
         tay
         lda (SopFreqPtr),Y

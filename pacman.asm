@@ -216,7 +216,9 @@ PacLives        equ $6a ;
 SirenIdx        equ $6b ;
 EatenIdx        equ $6c ; number of ghosts eaten since power pill
 PACDEATH        equ $66 ; pacman death animation pointer
-ChaseTableIdx   equ $67        
+ChaseTableIdx   equ $67
+PowerPillPtr    equ $68         ;ptr to power pill sound
+Audio1          equ $69         ;see audio.asm
          
 SAVE_OFFSET     equ $ab
 SAVE_OFFSET2    equ $ac
@@ -807,9 +809,9 @@ LevelsComplete  equ ResetPoint+1              ;length 1
 Sprite_mode     equ LevelsComplete+1          ;length 5
 ;;;your turn gets skipped every N loops of Sprite_speed
 Sprite_speed    equ Sprite_mode+5
+Sprite_frame    equ Sprite_speed+5 ;animation frame of sprite as offset from _src
 Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,GH3L      ;foreground char
 Sprite_src      dc.w PAC1,GHOST,GHOST,GHOST,GHOST ;sprite source bitmap
-Sprite_frame    dc.b 0,1,1,1,1 ;animation frame of sprite as offset from _src
 ;;; sprite chargen ram ( where to put the source bmap )
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8)     , mychars+(GH2L*8)     , mychars+(GH3L*8)    
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16), mychars+(GH2L*8)+(16),mychars+(GH3L*8)+(16)
@@ -861,7 +863,6 @@ Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
 ;;; the home tiles for ghosts that are in 'scatter' mode
 ;;; ghosts try to find their way to these home tiles
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
-MotionTable     dc.b motionUp,motionDown,motionLeft,motionRight
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1 ;15
 sirenBase  equ 223
 sirenStep  equ 5
@@ -1129,7 +1130,7 @@ CheckFood subroutine
         JmpReset modeEndLevel
         ;; control never reaches here
 .power_pill        
-        jsr PowerPill
+        jsr PowerPillOn
         rts
 ;;; X = sprite to erase
 erasesprt SUBROUTINE
@@ -1363,7 +1364,10 @@ PowerPillOff SUBROUTINE
         rts
 ;;; called when a power pill is activated
 ;;; 
-PowerPill SUBROUTINE
+PowerPillOn SUBROUTINE
+        ;; install sound effect table
+        ;; for isr
+        store16 PowerPillTable,PowerPillPtr
         lda #$50                ;bcd '50' points
         ldy #$0                 ;bcd high byte
         jsr UpdateScore
@@ -1429,39 +1433,22 @@ eat_halt
 eat_halted
         dc.b 0
         
-power_top equ 244
-power_bot equ 200        
-power_idx dc.b power_top
-vol_idx dc.b 14
-
-;;; power pill sound
+;;; power pill sound tale
+PowerPillTable dc.b 227,232,236,239,241,247
+PowerPillTableEnd               ;marker for end of table
+        
 isr4 subroutine
-        sei
-        lda power_idx
-        cmp #power_bot
-        bcc .reset
+        cmp16Im PowerPillPtr,PowerPillTableEnd
+        beq .reset
+        ldy #0
+        lda (PowerPillPtr),Y
         sta 36876
-        clc
-        adc #4
-        sta 36877
-        ldx vol_idx
-        ldy VolTable,X
-        sty 36878
-        dex
-        bpl .cont
-        ldx #14
-.cont
-        stx vol_idx
-;        dec power_idx
-        sec
-        sbc #3
-        sta power_idx
-.done
+        inc16 PowerPillPtr
         rts
 .reset
-        lda #power_top
-        sta power_idx
-        bne .done
+        store16 PowerPillTable,PowerPillPtr
+        rts
+
 ;;; 
 ;;; pacman eating sound
 ;;; 
@@ -1805,6 +1792,7 @@ reset_game subroutine
         sta Sprite_offset2,X
         sta Sprite_offset,X
         lda #0
+        sta Sprite_frame,X
         sta Sprite_sback,X
         sta Sprite_mode,X
         lda #dirHoriz
@@ -2019,7 +2007,7 @@ ActorIntro subroutine
         jsr player
         jmp .cont
 .skipsong
-        WaitTime 3
+        WaitTime 2
 .cont
         jsr rsPrint
         ;; move jmp in main loop to proper
@@ -2154,6 +2142,7 @@ MainLoop0
 ;;; everything before this, we hoped had been completed on the vertical blank
 ;        jsr WaitFire
         jsr Pacman
+
 #IFCONST GHOSTS_ON        
         jsr GhostAI
 #endif
@@ -3366,6 +3355,7 @@ Divide22_16 SUBROUTINE
 ;;; Service PACMAN, read joystick and move
 ;;; 
 Pacman SUBROUTINE
+
         ldx #0
 
 ;        MyTurn2 PacManTurn
