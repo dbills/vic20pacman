@@ -722,8 +722,8 @@ pacframes  equ #3            ; total number of pacman animation frames ( 1 based
 dirVert         equ 22            ;sprite oriented vertically
 dirHoriz        equ 1             ;sprite oriented horizontally
 ;;; valid modes for JmpReset
-modeEndLevel    equ 1             ;see JmpReset
 modePacDeath    equ 0             ;see JmpReset
+modeEndLevel    equ 1             ;see JmpReset
 modeResetGame   equ 2             ;see JmpReset
 ;;; valid modes for Sprite_mode
 modeInBox       equ 0
@@ -1133,14 +1133,16 @@ CheckFood subroutine
         jsr PowerPillOn
         rts
 ;;; X = sprite to erase
+;;; if we are erasing pacman then we need to check if he just ate something
+;;; 
 erasesprt SUBROUTINE
         cpx #0
         bne .notpac
 ;        Display1 "O",3,Sprite_offset
-        lda #4
+        lda #4                  ;were we halfway through a tile
         cmp Sprite_offset
-        bne .notpac
-
+        bne .notpac             ;nope, skip food checks
+        ;; what did pacman just eat?
         lda Sprite_back
         jsr CheckFood
         lda Sprite_back2
@@ -1453,6 +1455,7 @@ isr4 subroutine
 ;;; pacman eating sound
 ;;; 
 isr2 subroutine
+        sei
         lda POWER_UP
         beq .not_power
         jsr isr4                ;power up sound
@@ -1770,10 +1773,10 @@ AllSoundOff subroutine
         rts
 ;;; 
 ;;; reset game after pacman death, or level start
-;;; inputs: S1=0 causes us to draw the maze and do all initialization for a new level
-;;; 
+;;; inputs: S1==#modeResetGame draw the maze and do all initialization for a new level
+;;; S1==modeEndLevel : draw the maze but do not reset the lives, etc
 reset_game subroutine
-        ResetMainLoop           ;rest main loop to show intro
+        ResetMainLoop           ;reset main loop to show intro
         jsr AllSoundOff
         
         lda S1
@@ -1799,8 +1802,8 @@ reset_game subroutine
         sta Sprite_dir2,X
         lda Sprite_base,X  ;load base sprite speed
         sta Sprite_speed,X ;store it
-        cpx #0             ;are we pacman
-        beq .skip_bmap     ;skip setting bitmap
+        cpx #0             ;are we pacman, then
+        beq .skip_bmap     ;skip setting ghost bitmap
         store16x GHOST,Sprite_src ;set bitmap for ghosts
 .skip_bmap
         dex
@@ -1845,7 +1848,7 @@ reset_game subroutine
         sta LevelStartTm+1
 #endif
         
-        lda S1              ;S1=0 is pacdeath
+        lda S1              ;S1=0 is modePacDeath
         beq .continue       ;skip some stuff if it's just pacman dying
         
         ;; for modeEndLevel,modeResetGame
@@ -1918,6 +1921,8 @@ end_level subroutine
         jsr DisplayLevelMeter
         rts
 ;;; full game system reset
+;;; called after game over
+;;; 
 reset_game1 subroutine
         lda #sirenBot+1
         sta SirenIdx
@@ -1964,20 +1969,28 @@ DecrementLives subroutine
         GameOver
 .done        
         rts
+;;; display pacman icons in the lower left
+;;; to show remaining lives
+;;; 
 DisplayLives subroutine         ;entry point for displaying lives only
         ldx PacLives
         dex                     ;-1 don't display current life
         ldy #maxLives*22
 .0
-        lda #PACLIFE             ;load 'life' character tile
-        sta screen+lifeStart,Y
-        lda #BLACK
         cpx #0
         bcc .skip
         beq .skip
+        lda #PACLIFE             ;load 'life' character tile
+        sta screen+lifeStart,Y
         lda #YELLOW
-.skip        
         sta clrram+lifeStart,Y
+        jmp .cont
+.skip        
+        lda #EMPTY
+        sta screen+lifeStart,Y
+        lda #BLACK
+        sta clrram+lifeStart,Y
+.cont        
         tya
         sec
         sbc #44                 ;move down screen 2 spaces
