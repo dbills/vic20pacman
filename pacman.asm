@@ -1,4 +1,5 @@
 ;LARGEMEM equ 1                  ;
+INVINCIBLE equ 1        
 #ifconst LARGEMEM
         org $1200
 #else        
@@ -765,7 +766,7 @@ clyde           equ 4
 nobody          equ 10        
 focusGhost      equ nobody       ;ghost to print debugging for
 totalDots       equ $A2          ;total dots in maze
-;totalDots       equ 1          ;total dots in maze
+;totalDots       equ 10          ;total dots in maze
 fruit1Dots      equ 70           ;dots to release fruit
 fruit2Dots      equ 120          ;dots to release fruit2
 clydeDots       equ totalDots-30 ;dots to release clyde ( about 33% )
@@ -1122,11 +1123,16 @@ CheckFood subroutine
         ;; handle eating dots
         ;; and figuring out if the level is over
         dec DOTCOUNT
+        ;; debug todo
+        lda #[totalDots-10]
+        cmp DOTCOUNT
+        ;; end todo
         beq .end_level
 .done        
         rts
 .end_level
-        jsr EndLevel
+        lda #totalDots
+        sta DOTCOUNT
         JmpReset modeEndLevel
         ;; control never reaches here
 .power_pill        
@@ -1681,7 +1687,7 @@ death subroutine
 ;        lda #5
 .top
         move16 PACDEATH,Sprite_src
-        lda #2                  ;initial frame is pacman pointing X
+        lda #2                  ;animation frame is pac mouth open
         sta Sprite_frame
         ldx #0                  ;select pacman sprite
         jsr render_sprite       ;render bits
@@ -1702,9 +1708,9 @@ death subroutine
         sta S3                  ;no, store new note value
 
         add16im PACDEATH,32
-        cmp16Im PACDEATH,PAC_LAST
-        bne .top
-        store16 PAC1,PACDEATH
+        cmp16Im PACDEATH,PAC_LAST ;have we reached last position
+        bne .top                  ;nope
+        store16 PAC1,PACDEATH     ;yes, reset to position1
         jmp .top
 .done
 ;        RestorePacSite
@@ -1719,7 +1725,6 @@ death subroutine
         ;; totalDots/8 = 20
         ;; /16 = 20
         MAC SetupDotCounts
-        
         lda DOTCOUNT
         clc
         lsr                     ;2
@@ -1743,6 +1748,7 @@ death subroutine
         tya
         sbc ClydeDots           ;subtract clyde dots from totalDots
         sta XClydeDots+1        ;store in compare instruction
+        jsr WaitFire
         ENDM
 
         MAC ResetSpriteLocs 
@@ -1751,6 +1757,10 @@ death subroutine
         store16 g2Start  , Sprite_loc2+[2*2] 
         store16 g3Start  , Sprite_loc2+[2*3] 
         store16 g4Start  , Sprite_loc2+[2*4]
+        ;; reset pacman sprite offset and tile
+        ;; ldx #0
+        ;; stx Sprite_offset2
+        ;; jsr render_sprite
         ENDM
         ;; modify the main game loop
         ;; to not include the extra snippet
@@ -1771,6 +1781,9 @@ AllSoundOff subroutine
 ;;; 
 ;;; reset game after pacman death, or level start
 ;;; inputs: S1=0 causes us to draw the maze and do all initialization for a new level
+;;; outputs:
+;;; Sprite_page=0
+;;; and a lot more
 ;;; 
 reset_game subroutine
         ResetMainLoop           ;rest main loop to show intro
@@ -1782,7 +1795,6 @@ reset_game subroutine
         jsr reset_game1         ; full game reset
 .00        
         ResetSpriteLocs
-
         ;; init loop counter
         ldx #SPRITES-1          ;SPRITES is 1 based, so -1
 .0
@@ -1792,6 +1804,7 @@ reset_game subroutine
         sta Sprite_offset2,X
         sta Sprite_offset,X
         lda #0
+        sta Sprite_page
         sta Sprite_frame,X
         sta Sprite_sback,X
         sta Sprite_mode,X
@@ -1834,7 +1847,7 @@ reset_game subroutine
         sta LASTJOYDIR
         lda #1
         sta PACFRAMED
-        lda JIFFYL
+        lda JIFFYL              ;seed random number generator
         sta r_seed
         
 #if 0
@@ -1858,18 +1871,17 @@ reset_game subroutine
         rts
 ;;; display the fruit/level meter on the left
 DisplayLevelMeter subroutine
-        ldx LevelsComplete
-        inx
         store16 screen+22,W1
         store16 clrram+22,W2
+        ldx LevelsComplete
         ldy #0
 .0
         lda #CHERRY
         sta (W1),Y
         lda #RED
         sta (W2),Y
-        add W1,#22
-        add W2,#22
+        add16Im W1,#22
+        add16Im W2,#22
         dex
         bpl .0
 .done        
@@ -2004,17 +2016,17 @@ ActorIntro subroutine
         cmp #totalDots          ;less than total, then we died midlevel
         bcc .skipsong           ;and no song
 ;        jsr WaitFire
-        jsr player
+        jsr player              ;play pac intro song
         jmp .cont
-.skipsong
-        WaitTime 2
+.skipsong                       ;unless we played the pacsong
+        WaitTime 2              ;delay for 2 second after ready msg
 .cont
-        jsr rsPrint
+        jsr rsPrint             ;restore screen where text was printed
         ;; move jmp in main loop to proper
         ;; spot for running the game
         ModifyMainLoop
         
-        jsr install_isr         ;allow game sound interrupt 
+        jsr install_isr         ;allow game sound interrupts
         jsr initChaseTimer
         
         rts
@@ -2067,12 +2079,16 @@ main SUBROUTINE
         sta S1                  ;arg to reset_game below
 PacDeathEntry                   ;code longjmp's here on pacman death
         jsr reset_game
+        ;; Sprite_page=0 now
         
-        jmp .background
+        jmp .background         ;sneakily enter the main game loop halfway through
+        ;; I don't even remember why anymore
 
 IntroLoop
-        lda Sprite_page         ;sprite's havn't been rendered yes
-        beq MainLoop0           ;skip actor intro this lap
+        ;; checking for Sprite_page assures we make at least 2 passes
+        ;; through here, since it get's inverted on each pass
+        lda Sprite_page         ;sprite's havn't been rendered yet?
+        beq MainLoop0           ;yes,go around one more time
         jsr ActorIntro
 MainLoop0
         lda #masterSpeed
@@ -2256,6 +2272,8 @@ process_nibble2 subroutine
         lda #0
         sta mirror
         rts
+;;; draw maze
+;;; restore DOTCOUNT
 mkmaze2 subroutine
         store16 screen,W2
         ;; clear top line, and left line
@@ -2665,7 +2683,8 @@ GhostTurn
         jmp .loop
 ;;; 
 ;;; open the door on the ghost box
-;;; 
+;;; X = ghost to leave
+;;; Y unmolested
 LeaveBox SUBROUTINE
         lda #modeInBox
         cmp Sprite_mode,X       ;is ghost in box?
@@ -3525,8 +3544,9 @@ DeathDistance equ 5
         ;; passing pacman
         bne .done             
         ;; pacman eaten
-
-       jsr death               ;long jumps to level restart
+#ifnconst INVINCIBLE
+        jsr death               ;long jumps to level restart
+#endif        
         ;; control cannot reach here
         rts                     ;leave this here for debugging and commenting jsr death out
 .ghost_eaten                    ;pacman has eaten a ghost in the maze
@@ -4265,6 +4285,7 @@ gameover_msg_sz equ * - gameover_msg ; length of msg
         dc.b 0
 ;;; 
 ;;; non destructive print
+;;; save text to SaveBuffer
 ;;; W1=screen loc
 ;;; W2=text to print
 ;;; Y = length
