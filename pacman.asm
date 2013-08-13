@@ -1783,16 +1783,11 @@ AllSoundOff subroutine
         rts
 ;;; 
 ;;; reset game after pacman death, or level start
-<<<<<<< HEAD
-;;; inputs: S1=0 causes us to draw the maze and do all initialization for a new level
+;;; inputs: S1==#modeResetGame draw the maze and do all initialization for a new level
+;;; S1==modeEndLevel : draw the maze but do not reset the lives, etc
 ;;; outputs:
 ;;; Sprite_page=0
 ;;; and a lot more
-;;; 
-=======
-;;; inputs: S1==#modeResetGame draw the maze and do all initialization for a new level
-;;; S1==modeEndLevel : draw the maze but do not reset the lives, etc
->>>>>>> 301dba749284a6efe365e8d8c4510218a885acd0
 reset_game subroutine
         ResetMainLoop           ;reset main loop to show intro
         jsr AllSoundOff
