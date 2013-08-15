@@ -1124,8 +1124,8 @@ CheckFood subroutine
         ;; and figuring out if the level is over
         dec DOTCOUNT
         ;; debug todo
-        lda #[totalDots-10]
-        cmp DOTCOUNT
+;        lda #[totalDots-10]
+;        cmp DOTCOUNT
         ;; end todo
         beq .end_level
 .done        
@@ -1339,13 +1339,13 @@ initChaseTimer
         adc TIMER1+1
         sta TIMER1+1
         
-        Display1 "S",10,#1
+;        Display1 "S",10,#1
         inx                     ;add 1 such that even/odd works the way we want
         txa                     ;
         and #1                  ;bit 0 controls chase or scatter even or odd
         sta CHASEMODE           ;engage chase mode, scatter when clear
         beq .done
-        Display1 "C",10,#1
+;        Display1 "C",10,#1
 .done
         rts
 
@@ -1354,7 +1354,6 @@ initChaseTimer
 PowerPillOff SUBROUTINE
         lda #0
         sta 36876
-        sta 36877
         sta POWER_UP
         ldy #SPRITES-1
 .loop        
@@ -1373,13 +1372,13 @@ PowerPillOff SUBROUTINE
 ;;; called when a power pill is activated
 ;;; 
 PowerPillOn SUBROUTINE
-        ;; install sound effect table
-        ;; for isr
-        store16 PowerPillTable,PowerPillPtr
+        ;; init  sound effect table for isr4
+        jsr isr4_reset
+
         lda #$50                ;bcd '50' points
         ldy #$0                 ;bcd high byte
         jsr UpdateScore
-        lda #7                  ;[4*2]-1
+        lda #7                  ;[4*2]-1 4 ghost, 2 bytes
         sta EatenIdx            ;initial ghost bonus points
         lda PowerPillTime       ;init power pill time
         sta POWER_UP            ;store in timer
@@ -1389,15 +1388,16 @@ PowerPillOn SUBROUTINE
         lda #modeOutOfBox       ;is this ghost in the mze
         cmp Sprite_mode,Y
         bne .0                  ;nope, skip
+        ;; install sad ghost bitmaps to sprite
         store16y BLUE_GHOST,Sprite_src
-        lda Sprite_speed2,Y
-        sta Sprite_speed,Y
+        lda Sprite_speed2,Y     ;value from powerpill speed table
+        sta Sprite_speed,Y      ;into current speed table
         ;; ghost in the maze are now frightened
         lda #modeFright
         sta Sprite_mode,Y
 .0        
         dey
-        bpl .loop
+        bpl .loop               ;bpl skips pacman which is sprite 0
 .done
 
         rts
@@ -1444,16 +1444,18 @@ eat_halted
 ;;; power pill sound tale
 PowerPillTable dc.b 227,232,236,239,241,247
 PowerPillTableEnd               ;marker for end of table
-        
+;;;
+;;; pacman powerpill sound
+;;; 
 isr4 subroutine
         cmp16Im PowerPillPtr,PowerPillTableEnd
-        beq .reset
+        beq isr4_reset
         ldy #0
         lda (PowerPillPtr),Y
         sta 36876
         inc16 PowerPillPtr
         rts
-.reset
+isr4_reset
         store16 PowerPillTable,PowerPillPtr
         rts
 
@@ -1908,7 +1910,8 @@ end_level subroutine
         lda LevelsComplete
         and #1                  ;odd numbered levels completed?
         bne .1                  ;no, keep everything the same
-        ;; make level harder
+        ;; make level harder by increasing ghost chase-mode
+        ;; durations in ChaseTable
         ldx ChaseTableSz-1
 .0
         move16x ChaseTable,W1
@@ -1918,7 +1921,7 @@ end_level subroutine
         store16 #2,W1           ;no lower on this number
         move16x2 W1,ChaseTable
 .not0
-        dex
+        dex                     ;word pointer decrement
         dex
         bpl  .0                 ;while > 0
         lda PowerPillTime
@@ -1926,11 +1929,11 @@ end_level subroutine
         sbc #60                 ;decrease power pill time
         bcs .pos                ;have we hit bottom?
         lda #2                  ;then store min value
-.pos
-        sta PowerPillTime       ;store it
+.pos                            ;else
+        sta PowerPillTime       ;store new value
 .1  
         inc LevelsComplete      ;inc levels complete counter
-        jsr DisplayLevelMeter
+        jsr DisplayLevelMeter   ;show cherries for level
         rts
 ;;; full game system reset
 ;;; called after game over
@@ -2561,7 +2564,7 @@ SpecialKeys SUBROUTINE
         sta PACYPIXEL           ;store pixel row
         ENDM
         ;; 
-        ;; check if sprite X get's to move this frame
+        ;; check if sprite X gets to move this frame
         ;; note: Z=0 on return
         MAC MyTurn2
         dec Sprite_turn,X
@@ -3583,12 +3586,12 @@ DeathDistance equ 5
         ldx EatenIdx
         bmi .skip               ;did we run off the table?
         lda pointTable,x        ;load low byte
-        dex                     ;move to low byte
+        dex                     ;move to high byte
         ldy pointTable,x        ;load high byte
-        dex
+        dex                     ;move to next table entry
         stx EatenIdx            ;save updated index
-        jsr UpdateScore
-        resX
+        jsr UpdateScore         ;A,Y are inputs
+        resX                    ;restore X reg
 .skip                           ;really shouldn't be here
         ;; we ran off the beginning of the point table
         
