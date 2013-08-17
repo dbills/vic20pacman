@@ -1,11 +1,24 @@
 ;LARGEMEM equ 1                 ; generate code for 8k expansion
 INVINCIBLE equ 1                ; pacman can't die
-;BASIC equ 1                    ; launch from basic
+;MASTERDELAY                     ;enable master slowdown for debugging
+;;;
+;;; uncomment this to create code that will launch
+;;; from basic
+;BASIC equ 1  
+
+;;; level that the game starts from normal should be -1
+;;; at 2 ghost are as fast as pacman
+;;; at 4 ghosts are fast than pacman
+STARTLEVEL equ -1
 ;;; set below to something to run a 'short maze'
 ;;; that is whatevre you set this to, will be the number of dots
 ;;; you have to eat before the level ends and moves to the next
-SHORTMAZE equ 10
-        
+;SHORTMAZE equ 20
+;;;
+;;; PACMAN 2014 ( hopefully )
+;;; VIC20 6502 versions for +3k and +8k machines
+;;; title name: Panicman
+;;; 
 #ifconst LARGEMEM
         org $1200
 #else        
@@ -225,6 +238,7 @@ PACDEATH        equ $66 ; pacman death animation pointer
 ChaseTableIdx   equ $67
 PowerPillPtr    equ $68         ;ptr to power pill sound
 Audio1          equ $69         ;see audio.asm
+FruitSoundOn    equ $70        
          
 SAVE_OFFSET     equ $ab
 SAVE_OFFSET2    equ $ac
@@ -811,11 +825,16 @@ PlayerScore_h   equ Sprite_offset2+5 ;3 byte BCD player score, MSB order
 PlayerScore_m   equ PlayerScore_h+1
 PlayerScore_l   equ PlayerScore_m+1
 ResetPoint      equ PlayerScore_l+1           ;stack reset location for game reset ( longjmp )
-LevelsComplete  equ ResetPoint+1              ;length 1
+LevelsComplete  equ ResetPoint+1              ;length 1 : number of levels completed so far
 Sprite_mode     equ LevelsComplete+1          ;length 5
-;;;your turn gets skipped every N loops of Sprite_speed
-Sprite_speed    equ Sprite_mode+5
-Sprite_frame    equ Sprite_speed+5 ;animation frame of sprite as offset from _src
+;;; your turn gets skipped every N loops of Sprite_speed
+;;; for example: if sprite speed for sprite 0 =10
+;;; then every 10th game loop that sprite doens't get to move
+;;; see equates for Sprite_fast, Sprite_standard, Sprite_slow
+;;; for basic speeds
+Sprite_speed    equ Sprite_mode+5  ; current sprite speed 
+Sprite_base     equ Sprite_speed+5 ; base speed of sprites for this level
+Sprite_frame    equ Sprite_base+5  ; animation frame of sprite as offset from _src
 Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,GH3L      ;foreground char
 Sprite_src      dc.w PAC1,GHOST,GHOST,GHOST,GHOST ;sprite source bitmap
 ;;; sprite chargen ram ( where to put the source bmap )
@@ -839,7 +858,7 @@ Sprite_speed2    dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightS
 Speed_standard   equ 18         ;95%
 Speed_slow       equ 10         ;90%
 Speed_fast       equ 255        ;100%
-Sprite_base      dc.b Speed_standard,Speed_slow,Speed_slow,Speed_slow,Speed_slow
+;Sprite_base      dc.b Speed_standard,Speed_slow,Speed_slow,Speed_slow,Speed_slow
 Sprite_turn      dc.b 5,9,6,3,7        
 Sprite_color     dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
@@ -1117,9 +1136,12 @@ EndLevel subroutine
 ;;; figure out what pacman might be eating
 ;;; A = consumed playfield tile
 CheckFood subroutine
+        cmp  #CHERRY
+        beq .cherry
+        
         cmp #PWR
         beq .power_pill
-.0
+
         cmp #DOT
         bne .done
 
@@ -1132,8 +1154,6 @@ CheckFood subroutine
         lda #[totalDots-SHORTMAZE]
         cmp DOTCOUNT
 #endif
-        ;; debug todo
-        ;; end todo
         beq .end_level
 .done        
         rts
@@ -1142,8 +1162,14 @@ CheckFood subroutine
         sta DOTCOUNT
         JmpReset modeEndLevel
         ;; control never reaches here
+.cherry
+        jsr FruitEaten
+        rts
 .power_pill        
         jsr PowerPillOn
+        rts
+FruitEaten SUBROUTINE
+;        brk
         rts
 ;;; X = sprite to erase
 ;;; if we are erasing pacman then we need to check if he just ate something
@@ -1466,9 +1492,9 @@ isr4_reset
         store16 PowerPillTable,PowerPillPtr
         rts
 
-;;; 
-;;; pacman eating sound
-;;; 
+;;; main entry for interrupt driven sound
+;;; pacman eating sound, or power pill on sound
+;;; or possible fruit eating sound
 isr2 subroutine
         sei
         lda POWER_UP
@@ -1760,7 +1786,7 @@ death subroutine
         tya
         sbc ClydeDots           ;subtract clyde dots from totalDots
         sta XClydeDots+1        ;store in compare instruction
-        jsr WaitFire
+;        jsr WaitFire
         ENDM
 
         MAC ResetSpriteLocs 
@@ -1790,6 +1816,27 @@ AllSoundOff subroutine
         jsr PowerPillOff
         jsr EatSoundOff            ;waka off
         rts
+;;;
+;;;determine correct ghost speed based on levels complete
+;;; output: ghost speed in A
+;;;
+#if 1
+SetGhostSpeed SUBROUTINE
+        lda LevelsComplete
+        cmp #2
+        bmi .easy
+        cmp #4
+        bmi .hard1
+        ;; hardest
+        lda #Speed_fast
+        rts
+.hard1
+        lda #Speed_standard
+        rts
+.easy
+        lda #Speed_slow
+        rts
+#endif        
 ;;; 
 ;;; reset game after pacman death, or level start
 ;;; inputs: S1==#modeResetGame draw the maze and do all initialization for a new level
@@ -1822,14 +1869,21 @@ reset_game subroutine
         sta Sprite_mode,X
         lda #dirHoriz
         sta Sprite_dir2,X
-        lda Sprite_base,X  ;load base sprite speed
-        sta Sprite_speed,X ;store it
+
         cpx #0             ;are we pacman, then
-        beq .skip_bmap     ;skip setting ghost bitmap
+        beq .skip_bmap     ;skip setting ghost bitmap and speed
+        jsr SetGhostSpeed
+        sta Sprite_base,X  ;load base sprite speed
+        sta Sprite_speed,X ;store it
         store16x GHOST,Sprite_src ;set bitmap for ghosts
 .skip_bmap
         dex
         bpl .0
+        ;; set pacman speed ( this may not beed needed if I can
+        ;; prove it never would get set improperly )
+        lda #Speed_standard
+        sta Sprite_base
+        sta Sprite_speed
 ;;; not needed?? pacman goes left through joystick
 ;        lda #motionLeft
 ;        sta Sprite_motion
@@ -1948,7 +2002,7 @@ end_level subroutine
 reset_game1 subroutine
         lda #sirenBot+1
         sta SirenIdx
-        lda #-1
+        lda #STARTLEVEL
         sta LevelsComplete
         lda #basePowerTime
         sta PowerPillTime
@@ -2114,14 +2168,20 @@ IntroLoop
         beq MainLoop0           ;yes,go around one more time
         jsr ActorIntro
 MainLoop0
+        
+#ifconst MASTERDELAY        
         lda #masterSpeed
         sta MASTERCNT
+#endif
+        
 .iloop        
         lda VICRASTER           ;load raster line
         bne .iloop
 
+#ifconst MASTERDELAY        
         dec MASTERCNT
         bne .iloop
+#endif        
         ;; ok, we are at vertical blank, on one of the frames we want to render
         ;; here we go ...
 
@@ -2184,7 +2244,7 @@ MainLoop0
 
 #IFCONST GHOSTS_ON        
         jsr GhostAI
-#endif
+p#endif
 ;        jsr PixelPos
 
         InitSpriteLoop
@@ -3400,9 +3460,9 @@ Pacman SUBROUTINE
 
         ldx #0
 
-;        MyTurn2 PacManTurn
+        MyTurn2 PacManTurn
         ;;not our turn to move
-;        rts
+        rts
 PacManTurn
         lda #cornerAdv
         sta CORNER_SHAVE        ;pac get +1 bonus on corners
