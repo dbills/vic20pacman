@@ -1,12 +1,17 @@
-;LARGEMEM equ 1                  ;
-INVINCIBLE equ 1        
+;LARGEMEM equ 1                 ; generate code for 8k expansion
+INVINCIBLE equ 1                ; pacman can't die
+;BASIC equ 1                    ; launch from basic
+;;; set below to something to run a 'short maze'
+;;; that is whatevre you set this to, will be the number of dots
+;;; you have to eat before the level ends and moves to the next
+SHORTMAZE equ 10
+        
 #ifconst LARGEMEM
         org $1200
 #else        
         org $0400
 #endif        
         processor 6502
-;BASIC equ 1                     ;launch from basic
 #ifconst BASIC
 Sprite_page     dc.b 0
 ;;; inject code for a BASIC 'sys' command
@@ -1123,9 +1128,11 @@ CheckFood subroutine
         ;; handle eating dots
         ;; and figuring out if the level is over
         dec DOTCOUNT
+#ifconst SHORTMAZE
+        lda #[totalDots-SHORTMAZE]
+        cmp DOTCOUNT
+#endif
         ;; debug todo
-;        lda #[totalDots-10]
-;        cmp DOTCOUNT
         ;; end todo
         beq .end_level
 .done        
