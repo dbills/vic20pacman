@@ -1,3 +1,28 @@
+FruitSound
+        dc.b 248
+        dc.b 247
+        dc.b 246
+        dc.b 245
+        dc.b 244
+        dc.b 243
+        dc.b 241
+        dc.b 239
+        dc.b 237
+        dc.b 234
+        dc.b 230
+        dc.b 226
+        dc.b 230
+        dc.b 234
+        dc.b 237
+        dc.b 239
+        dc.b 241
+        dc.b 243
+        dc.b 244
+        dc.b 245
+        dc.b 246
+        dc.b 247
+        dc.b 248
+        dc.b 0
 ; note frequency tables
 sop1
         dc.b 0

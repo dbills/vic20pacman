@@ -238,7 +238,9 @@ PACDEATH        equ $66 ; pacman death animation pointer
 ChaseTableIdx   equ $67
 PowerPillPtr    equ $68         ;ptr to power pill sound
 Audio1          equ $69         ;see audio.asm
-FruitSoundOn    equ $70        
+FruitSoundOn    equ $70
+FruitPillPtr    equ $71
+;;; ----------------$73
          
 SAVE_OFFSET     equ $ab
 SAVE_OFFSET2    equ $ac
@@ -1169,7 +1171,10 @@ CheckFood subroutine
         jsr PowerPillOn
         rts
 FruitEaten SUBROUTINE
-;        brk
+        ldy #1
+        sty FruitSoundOn
+        jsr isr5_reset
+        ;; store16 FruitSound,FruitPillPtr
         rts
 ;;; X = sprite to erase
 ;;; if we are erasing pacman then we need to check if he just ate something
@@ -1475,16 +1480,17 @@ eat_halted
         dc.b 0
         
 ;;; power pill sound tale
-PowerPillTable dc.b 227,232,236,239,241,247
+PowerPillTable dc.b 227,232,236,239,241,247,0
 PowerPillTableEnd               ;marker for end of table
 ;;;
 ;;; pacman powerpill sound
 ;;; 
 isr4 subroutine
-        cmp16Im PowerPillPtr,PowerPillTableEnd
-        beq isr4_reset
+;        cmp16Im PowerPillPtr,PowerPillTableEnd 
+;        beq isr4_reset
         ldy #0
         lda (PowerPillPtr),Y
+        beq isr4_reset
         sta 36876
         inc16 PowerPillPtr
         rts
@@ -1492,11 +1498,30 @@ isr4_reset
         store16 PowerPillTable,PowerPillPtr
         rts
 
+;;; sound for when pacman eats a fruit
+;;; 
+isr5 subroutine
+        ldy #0
+        lda (FruitPillPtr),Y
+        sta 36874               ;else store to sound register
+        beq isr5_reset          ;if read a -1 then reset
+        inc16 FruitPillPtr      ;move to next note
+        rts
+isr5_reset
+        sty FruitSoundOn
+        store16 FruitSound,FruitPillPtr
+        rts
+
 ;;; main entry for interrupt driven sound
 ;;; pacman eating sound, or power pill on sound
 ;;; or possible fruit eating sound
 isr2 subroutine
         sei
+        lda FruitSoundOn
+        beq .not_fruit
+        jsr isr5
+        ;jmp .done2
+.not_fruit        
         lda POWER_UP
         beq .not_power
         jsr isr4                ;power up sound
@@ -2244,7 +2269,7 @@ MainLoop0
 
 #IFCONST GHOSTS_ON        
         jsr GhostAI
-p#endif
+#endif
 ;        jsr PixelPos
 
         InitSpriteLoop
@@ -2661,6 +2686,8 @@ SpecialKeys SUBROUTINE
         lda #outOfBoxRow
         sta GHOST_TGTROW
         ENDM
+somertn        
+        rts
 ;;; animate a ghost back and forth
 GhostAI SUBROUTINE
         lda #0
@@ -2669,13 +2696,11 @@ GhostAI SUBROUTINE
         ;; in their AI routines
         CalcPacRowCol
 
-        InitSpriteLoop
+        ldx #4
 .loop
-        dec SPRITEIDX
-        bne ailoop0
-        rts                     ;pacman is sprite 0, so we leave
+        dex
+        beq somertn            ;pacman is sprite 0, so we leave
 ailoop0
-        ldx SPRITEIDX
         MyTurn2 GhostTurn      ;does this ghost get to move this time?
         bne .loop              ;jmp .loop - no move for ghost
 GhostTurn
@@ -2740,8 +2765,8 @@ GhostTurn
         jsr Ghost1AI
 .continue
         jsr PossibleMoves
-        cpx #focusGhost
-        bne .notfocus
+;        cpx #focusGhost
+;        bne .notfocus
 ;        Display1 "G",17,GHOST_DIR
 .notfocus
 
@@ -2753,8 +2778,6 @@ GhostTurn
 #else        
         MoveGhost
 #endif        
-
-        
         jsr Collisions
 .animate
         ;; animate the ghost by changing frames
@@ -2845,7 +2868,7 @@ IncreaseBlinky subroutine
 .over2
         IncreasePanicLevel
         rts
-;;;
+;;; note:
 ;;; self modifying code
 ;;; for blinky speed
 ;;; 
@@ -3460,9 +3483,9 @@ Pacman SUBROUTINE
 
         ldx #0
 
-        MyTurn2 PacManTurn
+;        MyTurn2 PacManTurn
         ;;not our turn to move
-        rts
+;        rts
 PacManTurn
         lda #cornerAdv
         sta CORNER_SHAVE        ;pac get +1 bonus on corners
