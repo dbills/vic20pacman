@@ -1168,14 +1168,11 @@ CheckFood subroutine
         jsr FruitEaten
         rts
 .power_pill        
-        jsr PowerPillOn
-        rts
+        jmp PowerPillOn         ;rts for us
 FruitEaten SUBROUTINE
-        ldy #1
-        sty FruitSoundOn
-        jsr isr5_reset
-        ;; store16 FruitSound,FruitPillPtr
-        rts
+        lda #1
+        jmp isr5_reset          ;activate fruit sound player, rts for us
+
 ;;; X = sprite to erase
 ;;; if we are erasing pacman then we need to check if he just ate something
 ;;; 
@@ -1486,30 +1483,28 @@ PowerPillTableEnd               ;marker for end of table
 ;;; pacman powerpill sound
 ;;; 
 isr4 subroutine
-;        cmp16Im PowerPillPtr,PowerPillTableEnd 
-;        beq isr4_reset
-        ldy #0
-        lda (PowerPillPtr),Y
+        ldy PowerPillPtr
+        lda PowerPillTable,Y
         beq isr4_reset
         sta 36876
-        inc16 PowerPillPtr
+        inc PowerPillPtr
         rts
 isr4_reset
-        store16 PowerPillTable,PowerPillPtr
+        sta PowerPillPtr        ;reset index to 0
         rts
 
 ;;; sound for when pacman eats a fruit
 ;;; 
 isr5 subroutine
-        ldy #0
-        lda (FruitPillPtr),Y
-        sta 36874               ;else store to sound register
-        beq isr5_reset          ;if read a -1 then reset
-        inc16 FruitPillPtr      ;move to next note
+        ldy FruitPillPtr        ;load note table index
+        lda FruitSound,Y        ;load value from note table
+        sta 36874               ;store to sound register
+        beq isr5_reset          ;if read a 0 then reset
+        inc FruitPillPtr        ;move to next note
         rts
 isr5_reset
-        sty FruitSoundOn
-        store16 FruitSound,FruitPillPtr
+        sta FruitSoundOn        ;turn off fruit eating sound
+        sta FruitPillPtr        ;reset index to 0
         rts
 
 ;;; main entry for interrupt driven sound
@@ -1545,8 +1540,8 @@ isr2 subroutine
 .done
         dec WakaTimer
 .done2
-        lda #8
-        sta 36878
+;        lda #8
+;        sta 36878
         jmp $eabf
 .reset
         lda eat_halt
