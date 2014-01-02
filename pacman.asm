@@ -240,7 +240,7 @@ PowerPillPtr    equ $68         ;ptr to power pill sound
 Audio1          equ $69         ;see audio.asm
 FruitSoundOn    equ $70
 FruitPillPtr    equ $71
-;;; ----------------$73
+FruitIsOut      equ $72         ;true if fruit is displayed
          
 SAVE_OFFSET     equ $ab
 SAVE_OFFSET2    equ $ac
@@ -1165,13 +1165,10 @@ CheckFood subroutine
         JmpReset modeEndLevel
         ;; control never reaches here
 .cherry
-        jsr FruitEaten
-        rts
-.power_pill        
-        jmp PowerPillOn         ;rts for us
-FruitEaten SUBROUTINE
         lda #1
         jmp isr5_reset          ;activate fruit sound player, rts for us
+.power_pill        
+        jmp PowerPillOn         ;rts for us
 
 ;;; X = sprite to erase
 ;;; if we are erasing pacman then we need to check if he just ate something
@@ -1504,6 +1501,7 @@ isr5 subroutine
         rts
 isr5_reset
         sta FruitSoundOn        ;turn off fruit eating sound
+        sta FruitIsOut
         sta FruitPillPtr        ;reset index to 0
         rts
 
@@ -1512,6 +1510,12 @@ isr5_reset
 ;;; or possible fruit eating sound
 isr2 subroutine
         sei
+
+        lda FruitIsOut
+        beq .nofruitout
+        lda #RED
+        sta clrram+cherryRow*22+cherryCol
+.nofruitout
         lda FruitSoundOn
         beq .not_fruit
         jsr isr5
@@ -2957,8 +2961,10 @@ IsWall SUBROUTINE
 Fruit SUBROUTINE
         lda #CHERRY
         sta screen+cherryRow*22+cherryCol
+SetFruitColor        
         lda #RED
         sta clrram+cherryRow*22+cherryCol
+        sta FruitIsOut
         rts
 #if 0        
 ;;; display a number in A on screen
