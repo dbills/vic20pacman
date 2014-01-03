@@ -11,9 +11,14 @@ INVINCIBLE equ 1                ; pacman can't die
 ;;; at 4 ghosts are fast than pacman
 STARTLEVEL equ -1
 ;;; set below to something to run a 'short maze'
-;;; that is whatevre you set this to, will be the number of dots
+;;; that is whatever you set this to, will be the number of dots
 ;;; you have to eat before the level ends and moves to the next
-;SHORTMAZE equ 20
+SHORTMAZE equ 5
+;;; comment this out to not flash the maze at the end of the levels
+;;; for faster debugging when running through levels
+;FLASHMAZE equ 1
+;;; maximum number of cherries that can appear on left side
+MAXLEVELCHERRIES equ 15        
 ;;;
 ;;; PACMAN 2014 ( hopefully )
 ;;; VIC20 6502 versions for +3k and +8k machines
@@ -1112,7 +1117,10 @@ FlashScreen subroutine
         jmp .0
 .done        
         rts
-EndLevel subroutine
+;;; 
+;;; Flash the screen at between blue and white
+;;; 
+FlashMaze subroutine
         jsr AllSoundOff
         lda #90
         jsr WaitTime_
@@ -1160,8 +1168,9 @@ CheckFood subroutine
 .done        
         rts
 .end_level
-        lda #totalDots
-        sta DOTCOUNT
+#ifconst FLASHMAZE        
+        jsr FlashMaze
+#endif        
         JmpReset modeEndLevel
         ;; control never reaches here
 .cherry
@@ -1200,8 +1209,7 @@ erasesprt SUBROUTINE
 
         sta (W1),Y              ;restore tail tile to playfied
         ldy #WHITE
-        jsr UpdateColorRam
-        rts
+        jmp UpdateColorRam
         ;; 
         ;; load the upcoming ( to be rendered ) tile
         ;;  into A
@@ -1294,8 +1302,7 @@ drwsprt1 SUBROUTINE
 
         GetSpriteColorInY
 
-        jsr UpdateColorRam
-        rts
+        jmp UpdateColorRam      ;rts for us
 
 
 ;;; load reverse direction into A
@@ -1961,19 +1968,24 @@ reset_game subroutine
         rts
 ;;; display the fruit/level meter on the left
 DisplayLevelMeter subroutine
-        store16 screen+22,W1
-        store16 clrram+22,W2
-        ldx LevelsComplete
-        ldy #0
+        store16 screen+22,W1    ;screen pointer
+        store16 clrram+22,W2    ;color ram pointer
+        ldx LevelsComplete      ;loop counter
+        ;; we don't want to run down the screen too far
+        cpx #MAXLEVELCHERRIES   ;less than max?
+        bcc .lessthan
+        ldx #MAXLEVELCHERRIES   ;fix loop to max
+.lessthan        
+        ldy #0                  ;indexed addr to 0
 .0
         lda #CHERRY
-        sta (W1),Y
+        sta (W1),Y              ;cherry on screen
         lda #RED
-        sta (W2),Y
-        add16Im W1,#22
-        add16Im W2,#22
-        dex
-        bpl .0
+        sta (W2),Y              ;make red
+        add16Im W1,#22          ;bump screen ptr
+        add16Im W2,#22          ;bump color ptr
+        dex                     ;dec loop counter
+        bpl .0                  ;while not done
 .done        
         rts
 ;;; level game reset
