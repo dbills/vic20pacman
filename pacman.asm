@@ -13,10 +13,10 @@ STARTLEVEL equ -1
 ;;; set below to something to run a 'short maze'
 ;;; that is whatever you set this to, will be the number of dots
 ;;; you have to eat before the level ends and moves to the next
-;SHORTMAZE equ 5
+SHORTMAZE equ 5
 ;;; comment this out to not flash the maze at the end of the levels
 ;;; for faster debugging when running through levels
-;FLASHMAZE equ 1
+FLASHMAZE equ 1
 ;;; maximum number of cherries that can appear on left side
 MAXLEVELCHERRIES equ 15        
 ;;;
@@ -834,6 +834,7 @@ PlayerScore_l   equ PlayerScore_m+1
 ResetPoint      equ PlayerScore_l+1           ;stack reset location for game reset ( longjmp )
 LevelsComplete  equ ResetPoint+1              ;length 1 : number of levels completed so far
 Sprite_mode     equ LevelsComplete+1          ;length 5
+;FruitVAlue              
 ;;; your turn gets skipped every N loops of Sprite_speed
 ;;; for example: if sprite speed for sprite 0 =10
 ;;; then every 10th game loop that sprite doens't get to move
@@ -853,7 +854,10 @@ inBoxTable      dc.b 0,0,0,2,6
 ;;; for eating ghosts 200,400,800,1600 in bcd
 pointTable      dc.b $16,00,$08,00,$04,00,$02,00
 ;;; points for eating fruits
-fruitPoints     dc.b $01,00,$03,00,$05,00,$07,00,$10,00,$20,00,$30,00,$50,00
+;;; too many bytes, maybe I'll do this for the 8k version
+;;; just gonna make the fruit increment by 200 for every level now
+;fruitPoints     dc.b $01,00,$03,00,$05,00,$07,00,$10,00,$20,00,$30,00,$50,00
+;;; 
 ;;; the current sprite speeds
 ;;; speeds when pacman is powered up
 eyeSpeed         equ 255                ;sprite_speed setting for eyes
@@ -1115,9 +1119,7 @@ FlashScreen subroutine
         sta (W1),Y
         inc16 W1
         cmp16Im W1,clrram+22*23
-        beq .done
-        jmp .0
-.done        
+        bne  .0
         rts
 ;;; 
 ;;; Flash the screen at between blue and white
@@ -1141,7 +1143,7 @@ FlashMaze subroutine
         lda #25
         jsr WaitTime_
         inx
-        jmp .0
+        bne .0
 .done
         WaitTime 2
         rts
@@ -1155,7 +1157,8 @@ CheckFood subroutine
         beq .power_pill
 
         cmp #DOT
-        bne .done
+;        bne .done
+        rts                     ;save a byte
 
         jsr DotEaten
 
@@ -1177,6 +1180,7 @@ CheckFood subroutine
         ;; control never reaches here
 .cherry ;cherry has been eaten
         ;; TODO: update the score
+        
         lda #1
         jmp isr5_reset          ;activate fruit sound player, rts for us
 .power_pill        
@@ -3539,8 +3543,9 @@ PacManTurn
         ldy MOVEMADE            ;if we made a move already then exit
         beq .cont
         ;;  we must have failed to move?
-        jsr EatSoundOff
-        rts
+;        jsr EatSoundOff
+ ;       rts
+        jmp EatSoundOff         ;save a rts byte
 .cont        
         ldy #1
         sty MOVEMADE            ;indicate we made a move
@@ -3607,8 +3612,9 @@ PacManTurn
         lda LASTJOY
         sta LASTJOYDIR
         move16 W3,Sprite_src
-        jsr Animate
-        rts
+;        jsr Animate
+;        rts
+        jmp Animate          ;save a rts byte
 ;;; 
 ;;; X ghost we are checking for collision
 Collisions SUBROUTINE
@@ -3824,7 +3830,6 @@ SPRT_CUR set S2                 ;current sprite
         jsr tail2tail
 .not_tail2tail        
         jmp .loop               ;all possible collisions checked
-        brk
         
 ;;; handle tail to head collisions
 ;;; X is the indexed sprite
@@ -4041,8 +4046,9 @@ scroll_horiz SUBROUTINE
         lda Sprite_dir,X        ;get our current orientation
         cmp #dirHoriz           ;are we already horizontal
         beq .ok                 ;ok to move horizontal
-        jsr changehoriz         ;no, switch to horizontal
-        rts                     ;we couldn't change to horizontal
+;        jsr changehoriz         ;no, switch to horizontal
+;        rts                     ;we couldn't change to horizontal
+        jmp changehoriz
 .ok
         lda Sprite_offset,X     ;get our current pixel offset
         cmp END_SCRL_VAL        ;are we at the end of our tiles?
@@ -4349,8 +4355,9 @@ scroll_down2 SUBROUTINE
         cmp #dirVert            ;check if already vertical
         beq .00
 
-        jsr changevert          ;if not, change us to down
-        rts
+;        jsr changevert          ;if not, change us to down
+;        rts
+        jmp changevert
 .00
         lda Sprite_offset,X
         cmp END_SCRL_VAL        ; less than 8? then fine scroll
