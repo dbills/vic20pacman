@@ -13,7 +13,7 @@ STARTLEVEL equ -1
 ;;; set below to something to run a 'short maze'
 ;;; that is whatever you set this to, will be the number of dots
 ;;; you have to eat before the level ends and moves to the next
-SHORTMAZE equ 5
+;SHORTMAZE equ 5
 ;;; comment this out to not flash the maze at the end of the levels
 ;;; for faster debugging when running through levels
 ;FLASHMAZE equ 1
@@ -852,6 +852,8 @@ Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; se
 inBoxTable      dc.b 0,0,0,2,6
 ;;; for eating ghosts 200,400,800,1600 in bcd
 pointTable      dc.b $16,00,$08,00,$04,00,$02,00
+;;; points for eating fruits
+fruitPoints     dc.b $01,00,$03,00,$05,00,$07,00,$10,00,$20,00,$30,00,$50,00
 ;;; the current sprite speeds
 ;;; speeds when pacman is powered up
 eyeSpeed         equ 255                ;sprite_speed setting for eyes
@@ -1173,7 +1175,8 @@ CheckFood subroutine
 #endif        
         JmpReset modeEndLevel
         ;; control never reaches here
-.cherry
+.cherry ;cherry has been eaten
+        ;; TODO: update the score
         lda #1
         jmp isr5_reset          ;activate fruit sound player, rts for us
 .power_pill        
@@ -1507,7 +1510,7 @@ isr5 subroutine
         inc FruitPillPtr        ;move to next note
         rts
 isr5_reset
-        sta FruitSoundOn        ;turn off fruit eating sound
+        sta FruitSoundOn        ;turn on or off fruit eating sound
         sta FruitIsOut
         sta FruitPillPtr        ;reset index to 0
         rts
@@ -1516,14 +1519,10 @@ isr5_reset
 ;;; pacman eating sound, or power pill on sound
 ;;; or possible fruit eating sound
 isr2 subroutine
-        sei
+        sei                     ;disable interrupts while in interrupt
 
-        lda FruitIsOut
-        beq .nofruitout
-        lda #RED
-        sta clrram+cherryRow*22+cherryCol
-.nofruitout
-        lda FruitSoundOn
+.00
+        lda FruitSoundOn        ;should be be playing fruit eaten sound?
         beq .not_fruit
         jsr isr5
         ;jmp .done2
@@ -1894,6 +1893,7 @@ reset_game subroutine
         sta Sprite_offset2,X
         sta Sprite_offset,X
         lda #0
+        sta FruitIsOut
         sta Sprite_page
         sta Sprite_frame,X
         sta Sprite_sback,X
@@ -2273,6 +2273,22 @@ MainLoop0
         jsr drwsprt1             ;draw in new location
         jmp .drawloop
 .player
+        ;; take care of fixing the fruit colors
+        ;; and aging the fruit
+        lda FruitIsOut          ;is a fruit displayed?
+        beq .player1
+
+        lda #RED                ;yes, restore its color from sprites that destroy it
+        sta clrram+cherryRow*22+cherryCol
+#if 1  
+        ;; age the fruit, so it dissappears after a while
+        dec FruitIsOut
+        bne .player1            ;fruit is still good, no worries
+        ;; fruit is spoiled , removed it
+        lda #EMPTY              ;blank tile
+        sta screen+cherryRow*22+cherryCol
+#endif        
+.player1        
 ;;; this is the beginning of non-time critical stuff
 ;;; everything before this, we hoped had been completed on the vertical blank
 ;        jsr WaitFire
@@ -2968,14 +2984,16 @@ IsWall SUBROUTINE
         lda #1
 .done1
         rts
-        
-;;; put a fruit out 
+;;; 
+;;; put a fruit out
+;;; 
 Fruit SUBROUTINE
         lda #CHERRY
         sta screen+cherryRow*22+cherryCol
 SetFruitColor        
         lda #RED
         sta clrram+cherryRow*22+cherryCol
+        lda #125                ;time fruit is out
         sta FruitIsOut
         rts
 #if 0        

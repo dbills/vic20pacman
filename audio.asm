@@ -1,4 +1,5 @@
 FruitSound
+        dc.b 248                ;unused due to sloppy,but. byte saving code in game
         dc.b 248
         dc.b 247
         dc.b 246
