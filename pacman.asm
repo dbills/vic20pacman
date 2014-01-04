@@ -2723,7 +2723,7 @@ GhostAI SUBROUTINE
         ;; in their AI routines
         CalcPacRowCol
 
-        ldx #4
+        ldx #5
 .loop
         dex
         beq somertn            ;pacman is sprite 0, so we leave
