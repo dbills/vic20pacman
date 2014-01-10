@@ -13,7 +13,7 @@ STARTLEVEL equ -1
 ;;; set below to something to run a 'short maze'
 ;;; that is whatever you set this to, will be the number of dots
 ;;; you have to eat before the level ends and moves to the next
-;SHORTMAZE equ 5
+;SHORTMAZE equ 25
 ;;; comment this out to not flash the maze at the end of the levels
 ;;; for faster debugging when running through levels
 ;FLASHMAZE equ 1
@@ -1212,7 +1212,7 @@ erasesprt SUBROUTINE
 
         sta (W1),Y              ;restore tail tile to playfied
         ldy #WHITE
-        jmp UpdateColorRam
+        jmp UpdateColorRam      ;rts for us
         ;; 
         ;; load the upcoming ( to be rendered ) tile
         ;;  into A
@@ -1484,8 +1484,8 @@ eat_halted
         dc.b 0
         
 ;;; power pill sound tale
-PowerPillTable dc.b 227,232,236,239,241,247,0
-PowerPillTableEnd               ;marker for end of table
+PowerPillTable dc.b 227,232,236,239,241,247,0 ;null terminated
+
 ;;;
 ;;; pacman powerpill sound
 ;;; 
@@ -1576,8 +1576,8 @@ uninstall_isr subroutine
         sei
         store16 defaultISR,$0314 ;replace standard isr
         cli                     ;reenable interrupts
-        jsr stopSound
-        rts
+        jmp stopSound           ;rts for us
+;        rts
 ;;;
 ;;; install a sound service routine
 install_isr SUBROUTINE
@@ -1656,15 +1656,13 @@ SoundGhostEaten SUBROUTINE
         pha
         jsr uninstall_isr           ;turn off all sound but this
 
-.st
-        
-        lda #0
-        sta 36876
+;        lda #0
+;       sta 36876
         ldy #1
 ;        jsr delay2
         ldx #195
 .loop
-        lda #0
+        lda #0                  ;delay of 0
         sta S2
         jsr delay
 
@@ -1686,7 +1684,8 @@ SoundGhostEaten SUBROUTINE
         sec
         sbc #2
         sta 36876
-        jmp .loop
+;        jmp .loop
+        bne .loop
 .done
         lda #0
         sta 36876
@@ -1744,7 +1743,8 @@ death subroutine
         jsr uninstall_isr
         jsr PowerPillOff        ;call off routine to clean up
         jsr EatSoundOff            ;stop waka
-        WaitKey 9 ;small pause before death
+        WaitTime 2              ;delay for 2 second 
+;        WaitKey 9 ;small pause before death
 
         ClearPacSite
         store16 PAC1,PACDEATH
@@ -1878,7 +1878,11 @@ reset_game subroutine
         ResetMainLoop           ;reset main loop to show intro
         jsr AllSoundOff
         
-        lda S1
+        lda S1               ;load 'mode' of reset
+        beq .00              ;skip resetting dot count if it's a death
+        ldx #totalDots       ;reset dot counter for end level
+        stx DOTCOUNT         ;and game reset modes
+
         cmp #modeResetGame
         bne .00
         jsr reset_game1         ; full game reset
@@ -1910,7 +1914,7 @@ reset_game subroutine
 .skip_bmap
         dex
         bpl .0
-        ;; set pacman speed ( this may not beed needed if I can
+        ;; set pacman speed ( this may not be needed if I can
         ;; prove it never would get set improperly )
         lda #Speed_standard
         sta Sprite_base
@@ -2435,8 +2439,8 @@ mkmaze2 subroutine
         cpy #MazeX-MazeB
         bne .begin
 
-        lda #totalDots
-        sta DOTCOUNT            ;dot count to 0
+;        lda #totalDots
+;        sta DOTCOUNT            ;dot count to 0
         lda #PWR
         placePellets screen
         lda #WHITE
@@ -2455,7 +2459,7 @@ mkmaze2 subroutine
         bne .fetch_byte         ;jmp .fetch_byte
         
         rts
-#if 1
+#if 0
 ;;; waits for joystick to be pressed
 ;;; and released
 WaitFire SUBROUTINE
@@ -2485,7 +2489,7 @@ scroll_down SUBROUTINE
         sta END_SCRL_VAL
         lda #1
         sta SCRL_VAL
-        jmp scroll_down2
+        jmp scroll_down2        ;rts for us
 
 scroll_up SUBROUTINE
         lda #motionUp
@@ -2494,7 +2498,7 @@ scroll_up SUBROUTINE
         sta END_SCRL_VAL
         lda #-1
         sta SCRL_VAL
-        jmp scroll_down2
+        jmp scroll_down2        ;rts for us
 
 
 scroll_left SUBROUTINE
@@ -2504,7 +2508,7 @@ scroll_left SUBROUTINE
         sta END_SCRL_VAL
         lda #$ff                ;-1 into A
         sta SCRL_VAL
-        jmp scroll_horiz
+        jmp scroll_horiz        ;rts for us
 
 scroll_right SUBROUTINE
         
@@ -2514,7 +2518,7 @@ scroll_right SUBROUTINE
         sta END_SCRL_VAL
         lda #$01
         sta SCRL_VAL
-        jmp scroll_horiz
+        jmp scroll_horiz        ;rts for us
 
 #if 1
         MAC MoveGhost
@@ -2593,6 +2597,7 @@ GhostAsPlayer SUBROUTINE
         jsr scroll_down         ;
         rts
 #endif
+#if 0        
 keypressed dc.b 0        
 SpecialKeys SUBROUTINE
         saveX
@@ -2613,7 +2618,7 @@ SpecialKeys SUBROUTINE
 .done        
         resX
         rts
-
+#endif
         
         MAC UpdateMotion 
         lda GHOST_DIR
