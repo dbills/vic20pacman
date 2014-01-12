@@ -3537,9 +3537,9 @@ Pacman SUBROUTINE
 
         ldx #0
 
-;        MyTurn2 PacManTurn
+        MyTurn2 PacManTurn
         ;;not our turn to move
-;        rts
+        rts
 PacManTurn
         lda #cornerAdv
         sta CORNER_SHAVE        ;pac get +1 bonus on corners

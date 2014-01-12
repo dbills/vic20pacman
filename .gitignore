@@ -98,7 +98,7 @@ publish
 #emacs directory
 \#*\#
 .emacs.d/
-_emacs
+#_emacs
 #bash
 .bashrc
 .emacs-places
