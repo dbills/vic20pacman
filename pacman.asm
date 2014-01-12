@@ -13,7 +13,7 @@ STARTLEVEL equ -1
 ;;; set below to something to run a 'short maze'
 ;;; that is whatever you set this to, will be the number of dots
 ;;; you have to eat before the level ends and moves to the next
-;SHORTMAZE equ 25
+SHORTMAZE equ 75
 ;;; comment this out to not flash the maze at the end of the levels
 ;;; for faster debugging when running through levels
 ;FLASHMAZE equ 1
@@ -798,7 +798,7 @@ fruit2Dots      equ 120          ;dots to release fruit2
 clydeDots       equ totalDots-30 ;dots to release clyde ( about 33% )
 inkyDots        equ totalDots-10 ;dots to release inky  ( )
 pinkyDots       equ totalDots-20 ;dots to release pinky ( should be 1)
-blinkyS2Dots    equ [totalDots/4]*3
+;blinkyS2Dots    equ [totalDots/4]*3
 
 maxLives        equ 4           ;max lives ever possible on left display
 pacLives        equ 3           ;default starting lives for pacman
@@ -842,6 +842,8 @@ Sprite_mode     equ LevelsComplete+1          ;length 5
 Sprite_speed    equ Sprite_mode+5  ; current sprite speed 
 Sprite_base     equ Sprite_speed+5 ; base speed of sprites for this level
 Sprite_frame    equ Sprite_base+5  ; animation frame of sprite as offset from _src
+;;; points for eating fruits
+fruitPoints     equ Sprite_frame+5 
 Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,GH3L      ;foreground char
 Sprite_src      dc.w PAC1,GHOST,GHOST,GHOST,GHOST ;sprite source bitmap
 ;;; sprite chargen ram ( where to put the source bmap )
@@ -852,8 +854,7 @@ Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; se
 inBoxTable      dc.b 0,0,0,2,6
 ;;; for eating ghosts 200,400,800,1600 in bcd
 pointTable      dc.b $16,00,$08,00,$04,00,$02,00
-;;; points for eating fruits
-fruitPoints     dc.b $01,00,$03,00,$05,00,$07,00,$10,00,$20,00,$30,00,$50,00
+
 ;;; the current sprite speeds
 ;;; speeds when pacman is powered up
 eyeSpeed         equ 255                ;sprite_speed setting for eyes
@@ -898,6 +899,7 @@ Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
 ;;; ghosts try to find their way to these home tiles
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1 ;15
+FruitScore      dc.b 00,       
 sirenBase  equ 223
 sirenStep  equ 5
 WakaIdx    dc.b 0
@@ -1177,6 +1179,11 @@ CheckFood subroutine
         ;; control never reaches here
 .cherry ;cherry has been eaten
         ;; TODO: update the score
+        ldx #0
+        lda fruitPoints,X
+        inx
+        ldy fruitPoints,X
+        jsr UpdateScore
         lda #1
         jmp isr5_reset          ;activate fruit sound player, rts for us
 .power_pill        
@@ -1939,7 +1946,6 @@ reset_game subroutine
         lda #modePacman
         sta Sprite_mode+0
 
-
         lda #8
         sta 36879               ; border and screen colors
         sta volume              ; turn up the volume to 8
@@ -2032,7 +2038,17 @@ end_level subroutine
         lda #2                  ;then store min value
 .pos                            ;else
         sta PowerPillTime       ;store new value
-.1  
+.1
+        ;; increase the value of fruits that are eaten by 300
+        sei
+        sed
+        clc
+        lda fruitPoints+1
+        adc #03
+        sta fruitPoints+1
+        cld
+        cli
+        
         inc LevelsComplete      ;inc levels complete counter
         jsr DisplayLevelMeter   ;show cherries for level
         rts
@@ -2047,6 +2063,8 @@ reset_game1 subroutine
         lda #basePowerTime
         sta PowerPillTime
         lda #0
+        sta fruitPoints
+        sta fruitPoints+1
         sta PlayerScore_l
         sta PlayerScore_m
         sta PlayerScore_h
@@ -2875,7 +2893,7 @@ soundInc equ 3
         sta SirenIdx
         cli
         ENDM
-;;; increases the speed of blink
+;;; increases the speed of blinky
 ;;; levels > 2 use the IncreaseBlinkyHard
 ;;; levels <=2 use this routine, and manipulate
 ;;; the sprite speed
@@ -2998,7 +3016,7 @@ Fruit SUBROUTINE
 SetFruitColor        
         lda #RED
         sta clrram+cherryRow*22+cherryCol
-        lda #125                ;time fruit is out
+        lda #185                ;time fruit is out
         sta FruitIsOut
         rts
 #if 0        
@@ -4115,7 +4133,7 @@ EatSoundOff SUBROUTINE
         cli
 .done        
         rts
-;;; update player score
+;;; update player scorem chains into DisplayScore routine
 ;;; value to add is in A (low)
 ;;; and Y (high)
 UpdateScore subroutine

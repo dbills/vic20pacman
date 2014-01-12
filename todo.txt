@@ -1,0 +1,13 @@
+Testing plans:
+
+verify cherries create column on left side of screen one per level
+verify 2 fruits come out per level , the defines in the asm code are:
+fruit1Dots: 70
+fruit2Dots: 120
+
+fruit are worth increasing points, 300 each time
+
+on level 0
+verify Blinky has 2 speed increases per level
+each increase is accompanied by an increase in pitch of the siren
+second speedup is at 75% of dots eaten
