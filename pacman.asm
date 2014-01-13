@@ -74,7 +74,8 @@ clroffset   equ $78               ;offset from screen to color
 screen      equ $1e00             ;3k ram
 clrram      equ $9600             ; color ram for screen (3k)
 #endif        
-defaultISR  equ $eabf             ;os default IRQ
+;defaultISR  equ $eabf             ;os default IRQ
+defaultISR  equ  $eb15        
 defaultVol  equ 8                 ;default volume for app
 VICRASTER   equ $9004        
 VICSCRN     equ $9005             ;vic chip character generator pointer
@@ -89,9 +90,6 @@ JOYL        equ $10               ; joy left
 JOYT        equ $20               ; joy fire
 JOYR        equ $80               ; joy right bit
 
-JIIFYH      equ $a0               ; jiffy clock lsb - msb
-JIFFYM      equ $a1
-JIFFYL      equ $a2
 
 chrom1      equ $8000             ; upper case character rom
 chrom2      equ $8400             ; upper case reversed
@@ -218,11 +216,11 @@ SCORE_l         equ $37
 SCORE_h         equ $38
 LevelStartTm    equ $39
 LevelStartTm_h  equ $3a        
-W5              equ $32
-MUSICDONE       equ $43         ;true when intro song is done
-W6              equ $44
-W6_h            equ $45       
-PowerPillTime   equ $46
+W5              equ $3b
+W5_h            equ $3c
+W6              equ $3d
+W6_h            equ $3e       
+PowerPillTime   equ $3f
 ;;;offset for normalizing a 9x9 sprite movement block to the upper left block
 ;;; used by the sprite orientation changing routines
 SPRT_LOCATOR    equ $47
@@ -236,6 +234,7 @@ LASTJOYDIR      equ $4b         ;last joy reading that had a switch thrown
 MOVEMADE        equ $4c         ;true if last pacman move was successful
 TIMER1          equ $4d         ;compared against jiffy clock for chase/scatter modes
 TIMER1_h        equ $4e         ;timer1 high byte
+TIMER1_hh       equ $74        
 r_seed          equ $4f         ;
 Div22Table      equ $50         ;
 ;;; ----------- 10 bytes
@@ -251,11 +250,15 @@ Audio1          equ $69         ;see audio.asm
 FruitSoundOn    equ $70
 FruitPillPtr    equ $71
 FruitIsOut      equ $72         ;true if fruit is displayed
+DeathSoundPtr   equ $73         ;sound table index
          
-SAVE_OFFSET     equ $ab
-SAVE_OFFSET2    equ $ac
-SAVE_DIR        equ $ad
-SAVE_DIR2       equ $ae
+JIFFYH      equ $a0               ; jiffy clock lsb - msb
+JIFFYM      equ $a1
+JIFFYL      equ $a2
+SAVE_OFFSET     equ $a3
+SAVE_OFFSET2    equ $a4
+SAVE_DIR        equ $a5
+SAVE_DIR2       equ $a6
 
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
@@ -331,15 +334,20 @@ PACL            equ [GH3L+4]        ;pacman char number
         ;; test if jiffy timer > timer1
         MAC HasTimerExpired
         
-        lda JIFFYM
-        cmp {1}+1
-        bcc .done
-        lda JIFFYL
-        cmp {1}
-        bcc .done
-        ;; notify timer1 expired
-        jsr {2}
-.done
+           LDA JIFFYH  ; compare high bytes
+           CMP {1}+2
+           BCC .LABEL2 ; if JIFFYH < NUM2H then NUM1 < NUM2
+           BNE .LABEL1 ; if NUM1H <> NUM2H then NUM1 > NUM2 (so NUM1 >= NUM2)
+           LDA JIFFYM  ; compare middle bytes
+           CMP {1}+1
+           BCC .LABEL2 ; if NUM1M < NUM2M then NUM1 < NUM2
+           BNE .LABEL1 ; if NUM1M <> NUM2M then NUM1 > NUM2 (so NUM1 >= NUM2)
+           LDA JIFFYL  ; compare low bytes
+           CMP {1}
+           BCC .LABEL2 ; if NUM1L < NUM2L then NUM1 < NUM2
+.LABEL1        ;; notify timer1 expired
+           jsr {2}
+.LABEL2
         ENDM
         ;; compare {1} with #{2} 
         MAC cmp16Im
@@ -822,7 +830,8 @@ g3Start         equ screen+22*11+11
 g4Start         equ screen+22*11+11
 #endif        
         
-Sprite_loc      equ cassStart
+;Sprite_loc      equ cassStart
+Sprite_loc      equ $a7
 Sprite_loc2     equ Sprite_loc+10    ;new screen loc
 Sprite_back     equ Sprite_loc2+10   ;background char before other sprites drawn
 Sprite_back2    equ Sprite_back+5    ;static screen background
@@ -904,7 +913,6 @@ Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
 ;;; ghosts try to find their way to these home tiles
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1 ;15
-FruitScore      dc.b 00,       
 sirenBase  equ 223
 sirenStep  equ 5
 WakaIdx    dc.b 0
@@ -1392,6 +1400,9 @@ initChaseTimer
         lda JIFFYM
         adc TIMER1+1
         sta TIMER1+1
+        lda TIMER1_hh
+        adc #0
+        sta TIMER1_hh
         
 ;        Display1 "S",10,#1
         inx                     ;add 1 such that even/odd works the way we want
@@ -1526,7 +1537,30 @@ isr5_reset
         sta FruitIsOut
         sta FruitPillPtr        ;reset index to 0
         rts
-
+        ;; 
+        ;; update the jiffy clock manually
+        ;;
+        MAC UpdateJiffyCounter
+;        clc
+        INC $A2
+        BNE .dd
+        INC $A1
+        BNE .dd
+        INC $A0
+.dd        
+        ENDM
+        ;;
+        ;; ISR for playing the death sound
+        ;; 
+DeathISR subroutine
+        ldx DeathSoundPtr
+        lda DeathSound,X
+        sta 36876
+        bne .skip
+        jsr uninstall_isr       ;sound is finished remove ISR
+.skip        
+        inc DeathSoundPtr
+        jmp isr2_done2 
 ;;; main entry for interrupt driven sound
 ;;; pacman eating sound, or power pill on sound
 ;;; or possible fruit eating sound
@@ -1539,6 +1573,7 @@ isr2 subroutine
         jsr isr5
         ;jmp .done2
 .not_fruit        
+
         lda POWER_UP
         beq .not_power
         jsr isr4                ;power up sound
@@ -1547,7 +1582,7 @@ isr2 subroutine
         jsr isr3                ;run the siren
 .waka        
         lda eat_halted
-        beq .done2
+        beq isr2_done2
         ldx WakaIdx
         bmi .reset
 .0        
@@ -1561,27 +1596,22 @@ isr2 subroutine
         sta WakaTimer
 .done
         dec WakaTimer
-.done2
-;        lda #8
-;        sta 36878
-        INC $A2
-        BNE .dd
-        INC $A1
-        BNE .dd
-        INC $A0
-.dd        
-;                jmp $eabf
-        jmp $eb15
+isr2_done2
+        ;; manually update jiffy clock
+        UpdateJiffyCounter
+        jmp defaultISR
 .reset
-        lda eat_halt
+        lda eat_halt            ;are we commanded to stop the eating sound?
         bne .nothalted
         sta eat_halted          ;A is 0
         sta 36877               ;stop noise channel with 0
-        beq .done2
+        beq isr2_done2
 .nothalted        
         ldx #SirenTableEnd-SirenTable
         bne .0                  ;jmp .0
+;;; 
 ;;; silence all sound voices
+;;; 
 stopSound subroutine
         lda #0                   ;stop all sound channels
         sta voice4
@@ -1593,7 +1623,7 @@ stopSound subroutine
 ;;; remove current sound service routine
 uninstall_isr subroutine
         sei
-        store16 defaultISR,$0314 ;replace standard isr
+        store16 isr2_done2,$0314 ;replace standard isr
         cli                     ;reenable interrupts
         jmp stopSound           ;rts for us
 ;        rts
@@ -1717,11 +1747,6 @@ SoundGhostEaten SUBROUTINE
         sta S2
         resAll
         rts
-;;; pacman dies scene
-deathStartNote equ 220              ;death start note
-deathStep      equ 2                ;note step
-deathCount     equ 5                ;iterations
-deathStopNote  equ deathStartNote-[deathCount*deathStep]
         ;; 
         ;; perform a C style longjmp
         ;; no return from this method
@@ -1766,19 +1791,14 @@ death subroutine
 
         ClearPacSite
 #if 1
-        move16 Sprite_loc,W1
-        ldx #0
-.loop
-        lda DeathSound,X
-        beq .done
-        sta 36876
-        ldy #0
-;        sta (W1),Y
-        lda #02
-        jsr WaitTime_
-        
-        inx
-        jmp .loop
+
+        sei
+        lda #0
+        sta DeathSoundPtr
+        store16 DeathISR,$0314
+        cli
+        WaitTime 3
+
 #endif        
 .done
 ;        RestorePacSite
@@ -2184,6 +2204,8 @@ main SUBROUTINE
         brk
 #endif
         sei
+;        store16 isr2_done2,$0314 ;replace standard isr with minimal ISR ( jiffy clock only )
+
 
         lda #0
         sta $9113               ;joy VIA to input
