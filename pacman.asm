@@ -20,7 +20,8 @@ STARTLEVEL equ -1
 ;;; for faster debugging when running through levels
 ;FLASHMAZE equ 1
 ;;; maximum number of cherries that can appear on left side
-MAXLEVELCHERRIES equ 15        
+MAXLEVELCHERRIES equ 15
+
 ;;;
 ;;; PACMAN 2014 ( hopefully )
 ;;; VIC20 6502 versions for +3k and +8k machines
@@ -124,6 +125,8 @@ tunnelLCol      equ 1           ;column to start warp to right side
 ;;; or tunnelRCol-tunnelLen
 tunnelLen       equ 3           ;length of tunnel
 tunnelSpeed     equ 2           ;Sprite_speed setting for tunnel
+;;; amount of time a fruit is display
+fruitTime       equ 200
         
 BLACK        equ 0
 WHITE        equ 1
@@ -1753,42 +1756,23 @@ death subroutine
         jsr PowerPillOff        ;call off routine to clean up
         jsr EatSoundOff            ;stop waka
         WaitTime 2              ;delay for 2 second 
-;        WaitKey 9 ;small pause before death
 
         ClearPacSite
-        store16 PAC1,PACDEATH
-
-        lda #deathStartNote
-        sta S3                  ;initial note
-        sta S4                  ;no zero = pitch mode for 'delay'
-;        lda #5
-.top
-        move16 PACDEATH,Sprite_src
-        lda #2                  ;animation frame is pac mouth open
-        sta Sprite_frame
-        ldx #0                  ;select pacman sprite
-        jsr render_sprite       ;render bits
-        Invert Sprite_page      ;
-        ldx #0                  ;select pacman sprite
-        jsr drwsprt1            ;place tiles on screen
-
-        lda S3
-        sta voice2
-        ldy #1                  ;set delay mode
-        sty S2
-        jsr delay               ;delay
-        lda S3                  ;decrement note
-        sec
-        sbc #deathStep
-        cmp #deathStopNote      ;are we at end of scale
-        beq .done               ;yes, skip out
-        sta S3                  ;no, store new note value
-
-        add16im PACDEATH,32
-        cmp16Im PACDEATH,PAC_LAST ;have we reached last position
-        bne .top                  ;nope
-        store16 PAC1,PACDEATH     ;yes, reset to position1
-        jmp .top
+#if 1
+        move16 Sprite_loc,W1
+        ldx #0
+.loop
+        lda DeathSound,X
+        beq .done
+        sta 36876
+        ldy #0
+;        sta (W1),Y
+        lda #02
+        jsr WaitTime_
+        
+        inx
+        jmp .loop
+#endif        
 .done
 ;        RestorePacSite
         jsr stopSound
@@ -2461,8 +2445,8 @@ mkmaze2 subroutine
         cpy #MazeX-MazeB
         bne .begin
 
-;        lda #totalDots
-;        sta DOTCOUNT            ;dot count to 0
+        lda #totalDots
+        sta DOTCOUNT            ;dot count to 0
         lda #PWR
         placePellets screen
         lda #WHITE
@@ -3020,7 +3004,7 @@ Fruit SUBROUTINE
 SetFruitColor        
         lda #RED
         sta clrram+cherryRow*22+cherryCol
-        lda #185                ;time fruit is out
+        lda #fruitTime                ;time fruit is out
         sta FruitIsOut
         rts
 #if 0        
