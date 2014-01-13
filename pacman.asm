@@ -1,11 +1,13 @@
 ;LARGEMEM equ 1                 ; generate code for 8k expansion
-INVINCIBLE equ 1                ; pacman can't die
+;INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY                     ;enable master slowdown for debugging
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
 ;BASIC equ 1  
-
+;;; uncomment to have unlimited lives
+;;; altough the game will still only display 3
+;UNLIMITED_LIVES equ 1
 ;;; level that the game starts from normal should be -1
 ;;; at 2 ghost are as fast as pacman
 ;;; at 4 ghosts are fast than pacman
@@ -13,7 +15,7 @@ STARTLEVEL equ -1
 ;;; set below to something to run a 'short maze'
 ;;; that is whatever you set this to, will be the number of dots
 ;;; you have to eat before the level ends and moves to the next
-SHORTMAZE equ 75
+;SHORTMAZE equ 75
 ;;; comment this out to not flash the maze at the end of the levels
 ;;; for faster debugging when running through levels
 ;FLASHMAZE equ 1
@@ -2097,10 +2099,12 @@ reset_game1 subroutine
 lifeStart equ 22*[22-5]         ;location on left of screen to show lives meter
 ;;; 
 DecrementLives subroutine
+#ifnconst UNLIMITED_LIVES        
         dec PacLives
         bne .done
         ;; game is over
         GameOver
+#endif        
 .done        
         rts
 ;;; display pacman icons in the lower left
@@ -4438,9 +4442,8 @@ ready_msg
 ready_msg_sz equ * - ready_msg   ; length of msg
         dc.b 0
 gameover_msg
-        ;; msg is press f5
-        dv.b mkletter "P","R","E","S","S"," ","F"
-        dc.b [48+5]|$80              ;48 is '0' ascii
+        ;; text of game over message
+        dv.b mkletter "G","A","M","E"," ","O","V","E","R"
 gameover_msg_sz equ * - gameover_msg ; length of msg
         dc.b 0
 ;;; 
