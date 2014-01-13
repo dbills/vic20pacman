@@ -1564,7 +1564,14 @@ isr2 subroutine
 .done2
 ;        lda #8
 ;        sta 36878
-        jmp $eabf
+        INC $A2
+        BNE .dd
+        INC $A1
+        BNE .dd
+        INC $A0
+.dd        
+;                jmp $eabf
+        jmp $eb15
 .reset
         lda eat_halt
         bne .nothalted

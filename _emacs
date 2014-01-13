@@ -153,7 +153,7 @@
   (copy-file "c:/projects/my_test_data/merchantlink-ip_tcpip-settings.bak" "c:/projects/xpay-core/config/merchantlink-ip/merchantlink-ip_tcpip-settings.xml"  t))
 
 (server-start)
-(setq compile-command "dasm pacman.asm -opac.p00;dasm pacman.asm -opac.p00 -lpac.lst")
+(setq compile-command "dasm pacman.asm -opac.p00;dasm pacman.asm -opac.p00 -lpac.lst;grep -B 1 -i '$1c00' pac.lst")
 (global-set-key "" 'undo
 )
 (set-default-font "-outline-Courier New-bold-normal-normal-mono-*-*-*-*-c-*-iso8859-7");
