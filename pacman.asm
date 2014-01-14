@@ -151,114 +151,111 @@ SPRITES      equ 5             ;count of sprites in system (1 based)
 ;;; S or byte, short for 'scratch' and are
 ;;; usually bytes
 W1              equ 0
-W2              equ 2
-W3              equ 4        ; 16 bit work 3
-W4              equ 6        ;2 byte work var
-S0              equ 7        
-S1              equ 8        ; 1 byte scratch reg
-S2              equ 9        ; 1 byte scratch reg
-S3              equ 10
-S4              equ 11
-        
-DIV22_WORK      equ $c          ;word
-;;;                 13
-DIV22_RSLT      equ $e          ;div22 result
+W2              equ W1+2
+W3              equ W2+2     ; 16 bit work 3
+W4              equ W3+2        ;2 byte work var
+S0              equ W4+2     
+S1              equ S0+1        ; 1 byte scratch reg
+S2              equ S1+1        ; 1 byte scratch reg
+S3              equ S2+1
+S4              equ S3+1
+DIV22_WORK      equ S4+1          ;word
+DIV22_RSLT      equ DIV22_WORK+2          ;div22 result
 #endif
 ;;; it's ok the next 2 use the same address
 ;;; they are never used at the same time
-SPRITEIDX       equ $f        ;sprite index for main loop
-MASTERCNT       equ $f        ;countdown; see masterDelay
+SPRITEIDX       equ DIV22_RSLT+1        ;sprite index for main loop
+MASTERCNT       equ SPRITEIDX+1        ;countdown; see masterDelay
 ;;; 
-CSPRTFRM        equ $10        ; number of frames in the currently processing sprite
-DOTCOUNT        equ $11        ;dots eaten
+CSPRTFRM        equ MASTERCNT+1        ; number of frames in the currently processing sprite
+DOTCOUNT        equ CSPRTFRM+1        ;dots eaten
 frameCount      equ 4          ;number of pacman animation frames
-PACFRAMED       equ $12        ;pacframe dir
-UNUSED0         equ $13        ;when moving a sprite, the next 'set' of source bitmaps
-DSPL_1          equ $14        ;used by DisplayNum routine
-BCD             equ $15        ;used by Bin2Hex routine
-DSPL_2          equ $16        ;
-DSPL_3          equ $17        ;
-CHASEMODE       equ $18        ;ghosts in scatter mode or chase
-GHOST_DIST      equ $19  ; $18 best distance for current ghost AI calcs
-GHOST_DIR       equ $20  ; $19 best move matching GHOST_DIST
-DIV22_REM       equ $21        
-PACCOL          equ $22         ;current pacman column
-PACROW          equ $23         ;current pacman row
+PACFRAMED       equ DOTCOUNT+1        ;pacframe dir
+DSPL_1          equ PACFRAMED+1        ;used by DisplayNum routine
+BCD             equ DSPL_1+1        ;used by Bin2Hex routine
+DSPL_2          equ BCD+1       ;
+DSPL_3          equ DSPL_2+1        ;
+CHASEMODE       equ DSPL_3+1        ;ghosts in scatter mode or chase
+GHOST_DIST      equ CHASEMODE+1  ; $18 best distance for current ghost AI calcs
+GHOST_DIR       equ GHOST_DIST+1  ; $19 best move matching GHOST_DIST
+DIV22_REM       equ GHOST_DIR+1        
+PACCOL          equ DIV22_REM+1         ;current pacman column
+PACROW          equ PACCOL+1         ;current pacman row
 ;;; sprite position used by AI from most recent call to any of the
 ;;; directional changing routines ( up,left etc )
-GHOST_TGTCOL    equ $24
-GHOST_TGTROW    equ $25
-GHOST1_TGTCOL   equ $26
-GHOST1_TGTROW   equ $27
+GHOST_TGTCOL    equ PACROW+1
+GHOST_TGTROW    equ GHOST_TGTCOL+1
+GHOST1_TGTCOL   equ GHOST_TGTROW+1
+GHOST1_TGTROW   equ GHOST1_TGTCOL+1
 ;;; amount sprite move routines can shave off during cornering
 ;;; pacman get +1 on corners, ghosts get 0
-CORNER_SHAVE    equ $28
+CORNER_SHAVE    equ GHOST1_TGTROW+1
 ;;; non zero when pacman is powred up, indicate 'gameloop units' 
 ;;; left in power mode, this does not use the jiffy timer
-POWER_UP        equ $29
+POWER_UP        equ CORNER_SHAVE+1
 basePowerTime   equ 245         ;initial power pill time
-BlinkyS1        equ $2a         
-BlinkyS2        equ $2b
-InkyDots        equ $2c
-PinkyDots       equ $2d
-ClydeDots       equ $2e
-PacSaveSpd      equ $2f         ;pacman previous speed when slowed by dots
-S5              equ $30         ;scratch 5
-S6              equ $31
-PACXPIXEL       equ $32
-PACYPIXEL       equ $33        
-BlinkyCruise    equ $34         ;see BlinkyCruise1 and 2 
+BlinkyS1        equ POWER_UP+1         
+BlinkyS2        equ BlinkyS1+1
+InkyDots        equ BlinkyS2+1
+PinkyDots       equ InkyDots+1
+ClydeDots       equ PinkyDots+1
+PacSaveSpd      equ ClydeDots+1         ;pacman previous speed when slowed by dots
+S5              equ PacSaveSpd+1         ;scratch 5
+S6              equ S5+1
+PACXPIXEL       equ S6+1
+PACYPIXEL       equ PACXPIXEL+1       
+BlinkyCruise    equ PACYPIXEL+1         ;see BlinkyCruise1 and 2 
 
-GHOST_COL       equ $35        
-GHOST_ROW       equ $36
+GHOST_COL       equ BlinkyCruise+1
+GHOST_ROW       equ GHOST_COL+1
 
-SCORE_l         equ $37
-SCORE_h         equ $38
-LevelStartTm    equ $39
-LevelStartTm_h  equ $3a        
-W5              equ $3b
-W5_h            equ $3c
-W6              equ $3d
-W6_h            equ $3e       
-PowerPillTime   equ $3f
+SCORE_l         equ GHOST_ROW+1
+SCORE_h         equ SCORE_l+1
+LevelStartTm    equ SCORE_h+1
+LevelStartTm_h  equ LevelStartTm+1        
+W5              equ LevelStartTm_h+1
+W5_h            equ W5+1
+W6              equ W5_h+1
+W6_h            equ W6+1    
+PowerPillTime   equ W6_h+1
 ;;;offset for normalizing a 9x9 sprite movement block to the upper left block
 ;;; used by the sprite orientation changing routines
-SPRT_LOCATOR    equ $47
+SPRT_LOCATOR    equ PowerPillTime+1
 ;value that indicates end of smooth scrolling
-END_SCRL_VAL    equ $48
+END_SCRL_VAL    equ SPRT_LOCATOR+1
 ;;;amount to increase or decrease sprite offset
 ;;; used as input by scroll_horiz
-SCRL_VAL        equ $49
-LASTJOY         equ $4a
-LASTJOYDIR      equ $4b         ;last joy reading that had a switch thrown
-MOVEMADE        equ $4c         ;true if last pacman move was successful
-TIMER1          equ $4d         ;compared against jiffy clock for chase/scatter modes
-TIMER1_h        equ $4e         ;timer1 high byte
-TIMER1_hh       equ $74        
-r_seed          equ $4f         ;
-Div22Table      equ $50         ;
+SCRL_VAL        equ END_SCRL_VAL+1
+LASTJOY         equ SCRL_VAL+1
+LASTJOYDIR      equ LASTJOY+1         ;last joy reading that had a switch thrown
+MOVEMADE        equ LASTJOYDIR+1         ;true if last pacman move was successful
+TIMER1          equ MOVEMADE+1         ;compared against jiffy clock for chase/scatter modes
+TIMER1_h        equ TIMER1+1         ;timer1 high byte
+TIMER1_hh       equ TIMER1_h+1        
+r_seed          equ TIMER1_hh+1         ;
+Div22Table      equ r_seed+1         ;
 ;;; ----------- 10 bytes
-Sprite_offset   equ $5a
-;;; ------------equ $64
-PacLives        equ $6a ;
-SirenIdx        equ $6b ;
-EatenIdx        equ $6c ; number of ghosts eaten since power pill
-PACDEATH        equ $66 ; pacman death animation pointer
-ChaseTableIdx   equ $67
-PowerPillPtr    equ $68         ;ptr to power pill sound
-Audio1          equ $69         ;see audio.asm
-FruitSoundOn    equ $70
-FruitPillPtr    equ $71
-FruitIsOut      equ $72         ;true if fruit is displayed
-DeathSoundPtr   equ $73         ;sound table index
+Sprite_offset   equ Div22Table+10
+;;; ------------5 bytes
+PacLives        equ Sprite_offset+5
+SirenIdx        equ PacLives+1
+EatenIdx        equ SirenIdx+1 ; number of ghosts eaten since power pill
+PACDEATH        equ EatenIdx+1 ; pacman death animation pointer
+ChaseTableIdx   equ PACDEATH+1
+PowerPillPtr    equ ChaseTableIdx+1         ;ptr to power pill sound
+Audio1          equ PowerPillPtr+1         ;see audio.asm
+FruitSoundOn    equ Audio1+1
+FruitPillPtr    equ FruitSoundOn+1
+FruitIsOut      equ FruitPillPtr+1        ;true if fruit is displayed
+DeathSoundPtr   equ FruitIsOut+1         ;sound table index
          
-JIFFYH      equ $a0               ; jiffy clock lsb - msb
-JIFFYM      equ $a1
-JIFFYL      equ $a2
-SAVE_OFFSET     equ $a3
-SAVE_OFFSET2    equ $a4
-SAVE_DIR        equ $a5
-SAVE_DIR2       equ $a6
+JIFFYH      equ DeathSoundPtr+1               ; jiffy clock lsb - msb
+JIFFYM      equ JIFFYH+1
+JIFFYL      equ JIFFYM+1
+SAVE_OFFSET     equ JIFFYL+1
+SAVE_OFFSET2    equ SAVE_OFFSET+1
+SAVE_DIR        equ SAVE_OFFSET2+1
+SAVE_DIR2       equ SAVE_DIR+1
 
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
@@ -1542,11 +1539,11 @@ isr5_reset
         ;;
         MAC UpdateJiffyCounter
 ;        clc
-        INC $A2
+        INC JIFFYL
         BNE .dd
-        INC $A1
+        INC JIFFYM
         BNE .dd
-        INC $A0
+        INC JIFFYH
 .dd        
         ENDM
         ;;
