@@ -7,7 +7,7 @@
 ;BASIC equ 1  
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
-;UNLIMITED_LIVES equ 1
+UNLIMITED_LIVES equ 1
 ;;; level that the game starts from normal should be -1
 ;;; at 2 ghost are as fast as pacman
 ;;; at 4 ghosts are fast than pacman
@@ -21,7 +21,8 @@ STARTLEVEL equ -1
 ;FLASHMAZE equ 1
 ;;; maximum number of cherries that can appear on left side
 MAXLEVELCHERRIES equ 15
-
+;;; comment out to have fruit that never spoils
+;AGEFRUIT equ 1        
 ;;;
 ;;; PACMAN 2014 ( hopefully )
 ;;; VIC20 6502 versions for +3k and +8k machines
@@ -256,7 +257,16 @@ SAVE_OFFSET     equ JIFFYL+1
 SAVE_OFFSET2    equ SAVE_OFFSET+1
 SAVE_DIR        equ SAVE_OFFSET2+1
 SAVE_DIR2       equ SAVE_DIR+1
-
+Sprite_src      equ SAVE_DIR2+1 ;10 bytes
+Sprite_motion   equ Sprite_src+10
+Sprite_turn     equ Sprite_motion+5 ;5 bytes
+SirenDir        equ Sprite_turn+5   ;
+;;; signals to stop the waka sound after completion of next cylce
+;;; see SoundOn 0 = halted 1 = not halted
+eat_halt        equ SirenDir+1
+;;; signals that the waka sound is stopped
+eat_halted      equ eat_halt+1
+WakaIdx         equ eat_halted+1
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -856,11 +866,11 @@ Sprite_frame    equ Sprite_base+5  ; animation frame of sprite as offset from _s
 ;;; points for eating fruits
 fruitPoints     equ Sprite_frame+5 
 Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,GH3L      ;foreground char
-Sprite_src      dc.w PAC1,GHOST,GHOST,GHOST,GHOST ;sprite source bitmap
+;Sprite_src      dc.w PAC1,GHOST,GHOST,GHOST,GHOST ;sprite source bitmap
 ;;; sprite chargen ram ( where to put the source bmap )
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8)     , mychars+(GH2L*8)     , mychars+(GH3L*8)    
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16), mychars+(GH2L*8)+(16),mychars+(GH3L*8)+(16)
-Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; see motion defines
+;;Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; see motion defines
 ;;; table of sprite offset for ghosts in box
 inBoxTable      dc.b 0,0,0,2,6
 ;;; for eating ghosts 200,400,800,1600 in bcd
@@ -880,7 +890,7 @@ Speed_standard   equ 18         ;95%
 Speed_slow       equ 10         ;90%
 Speed_fast       equ 255        ;100%
 ;Sprite_base      dc.b Speed_standard,Speed_slow,Speed_slow,Speed_slow,Speed_slow
-Sprite_turn      dc.b 5,9,6,3,7        
+;Sprite_turn      dc.b 5,9,6,3,7        
 Sprite_color     dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
 blinkyCruise1    equ 1
@@ -912,7 +922,7 @@ GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHo
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1 ;15
 sirenBase  equ 223
 sirenStep  equ 5
-WakaIdx    dc.b 0
+;WakaIdx    dc.b 0
 WakaTimer  dc.b 2        
 SirenTable      
         dc.b sirenBase+[sirenStep*0]
@@ -1466,7 +1476,7 @@ PowerPillOn SUBROUTINE
         
 sirenBot equ 211+5-3
 sirenTop equ 222+5
-SirenDir dc.b 1
+;SirenDir dc.b 1
 ;;; 
 ;;; run the siren soundtrack
 ;;; siren changes pitch when blinky gets faster
@@ -1495,13 +1505,6 @@ XsirenBot                       ;self modifying code
         sta SirenDir
         bne .add                ;sirendir is never 0
 
-;;; signals to stop the waka sound after completion of next cylce
-;;; see SoundOn 0 = halted 1 = not halted
-eat_halt
-        dc.b  0
-;;; signals that the waka sound is stopped
-eat_halted
-        dc.b 0
         
 ;;; power pill sound tale
 PowerPillTable dc.b 227,232,236,239,241,247,0 ;null terminated
@@ -1914,7 +1917,11 @@ reset_game subroutine
         sta Sprite_offset2,X
         sta Sprite_offset,X
         lda #0
+        sta WakaIdx
+        sta eat_halted
+        sta eat_halt
         sta FruitIsOut
+        sta Sprite_turn,X
         sta Sprite_page
         sta Sprite_frame,X
         sta Sprite_sback,X
@@ -1963,6 +1970,7 @@ reset_game subroutine
         
         sta LASTJOYDIR
         lda #1
+        sta SirenDir
         sta PACFRAMED
         lda JIFFYL              ;seed random number generator
         sta r_seed
@@ -2316,7 +2324,7 @@ MainLoop0
 
         lda #RED                ;yes, restore its color from sprites that destroy it
         sta clrram+cherryRow*22+cherryCol
-#if 1  
+#ifconst AGEFRUIT
         ;; age the fruit, so it dissappears after a while
         dec FruitIsOut
         bne .player1            ;fruit is still good, no worries
