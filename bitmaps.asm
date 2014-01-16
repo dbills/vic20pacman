@@ -3,12 +3,12 @@ CHAR_BEGIN
 BIT_PWR0        
         ;; power pellet2
         dc.b %00000000
-        dc.b %00000000
         dc.b %00011000
         dc.b %00111100
         dc.b %00111100
+        dc.b %00111100
+        dc.b %00111100
         dc.b %00011000
-        dc.b %00000000
         dc.b %00000000
 BIT_PWR1        
         ;; power pellet

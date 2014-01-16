@@ -22,7 +22,7 @@ STARTLEVEL equ -1
 ;;; maximum number of cherries that can appear on left side
 MAXLEVELCHERRIES equ 15
 ;;; comment out to have fruit that never spoils
-;AGEFRUIT equ 1        
+AGEFRUIT equ 1        
 ;;;
 ;;; PACMAN 2014 ( hopefully )
 ;;; VIC20 6502 versions for +3k and +8k machines
@@ -125,7 +125,7 @@ tunnelLCol      equ 1           ;column to start warp to right side
 tunnelLen       equ 3           ;length of tunnel
 tunnelSpeed     equ 2           ;Sprite_speed setting for tunnel
 ;;; amount of time a fruit is display
-fruitTime       equ 200
+fruitTime       equ 210
         
 BLACK        equ 0
 WHITE        equ 1
@@ -267,6 +267,9 @@ eat_halt        equ SirenDir+1
 ;;; signals that the waka sound is stopped
 eat_halted      equ eat_halt+1
 WakaIdx         equ eat_halted+1
+flashRate       equ 36            ;in 60s second
+PwrFlashCnt     equ WakaIdx+1   ;countdown to flash power pill
+PwrFlashSt      equ PwrFlashCnt+1 ;state of power pill flash 0 = blank
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -926,21 +929,25 @@ sirenStep  equ 5
 WakaTimer  dc.b 2        
 SirenTable      
         dc.b sirenBase+[sirenStep*0]
+        dc.b sirenBase+[sirenStep*0]
+        dc.b sirenBase+[sirenStep*1]
         dc.b sirenBase+[sirenStep*1]
         dc.b sirenBase+[sirenStep*2]
+        dc.b sirenBase+[sirenStep*2]
         dc.b sirenBase+[sirenStep*3]
-;        dc.b sirenBase+[sirenStep*3]
-;        dc.b sirenBase+[sirenStep*5]
+        dc.b sirenBase+[sirenStep*3]
         dc.b 0
-;        dc.b 0
-;        dc.b sirenBase+[sirenStep*5]
-;        dc.b sirenBase+[sirenStep*3]
+        dc.b 0
+        dc.b sirenBase+[sirenStep*3]
         dc.b sirenBase+[sirenStep*3]
         dc.b sirenBase+[sirenStep*2]
+        dc.b sirenBase+[sirenStep*2]
+        dc.b sirenBase+[sirenStep*1]
         dc.b sirenBase+[sirenStep*1]
         dc.b sirenBase+[sirenStep*0]
+        dc.b sirenBase+[sirenStep*0]
         dc.b 0
-;        dc.b 0
+        dc.b 0
 SirenTableEnd
 
 
@@ -1496,7 +1503,7 @@ XsirenBot                       ;self modifying code
         sta SirenIdx
         sta 36876
 .done
-;        jmp $eabf
+
         rts
 .reverse
         lda #$ff
@@ -1566,7 +1573,24 @@ DeathISR subroutine
 ;;; or possible fruit eating sound
 isr2 subroutine
         sei                     ;disable interrupts while in interrupt
-
+        ;; I don't see why above is needed?
+        ;;
+        ;; flash the power pellets
+        dec PwrFlashCnt
+        bne .00
+        ;; zero out the character to make it blank i.e. flash
+        ldx #flashRate
+        stx PwrFlashCnt
+        ldx #6
+.next1
+        lda PwrFlashSt
+        beq .blankit
+        lda BIT_PWR0+1,X
+.blankit
+        sta BIT_PWR1+1,X
+        dex
+        bpl .next1
+        Invert PwrFlashSt
 .00
         lda FruitSoundOn        ;should be be playing fruit eaten sound?
         beq .not_fruit
@@ -1574,10 +1598,10 @@ isr2 subroutine
         ;jmp .done2
 .not_fruit        
 
-        lda POWER_UP
+        lda POWER_UP            ;are we powered up?  
         beq .not_power
         jsr isr4                ;power up sound
-        jmp .waka               ;skip the siren
+        jmp .waka               ;skip the siren sound
 .not_power        
         jsr isr3                ;run the siren
 .waka        
@@ -1588,14 +1612,8 @@ isr2 subroutine
 .0        
         ldy SirenTable,X
         sty 36877
-        lda WakaTimer
-        bne .done
         dex
         stx WakaIdx
-        lda #2
-        sta WakaTimer
-.done
-        dec WakaTimer
 isr2_done2
         ;; manually update jiffy clock
         UpdateJiffyCounter
@@ -1917,6 +1935,8 @@ reset_game subroutine
         sta Sprite_offset2,X
         sta Sprite_offset,X
         lda #0
+        sta PwrFlashSt
+        sta POWER_UP            ;power pill off
         sta WakaIdx
         sta eat_halted
         sta eat_halt
@@ -1963,6 +1983,8 @@ reset_game subroutine
         lda #modePacman
         sta Sprite_mode+0
 
+        lda #flashRate          ;powr pill flash timer init
+        sta PwrFlashCnt
         lda #8
         sta 36879               ; border and screen colors
         sta volume              ; turn up the volume to 8
@@ -1972,8 +1994,6 @@ reset_game subroutine
         lda #1
         sta SirenDir
         sta PACFRAMED
-        lda JIFFYL              ;seed random number generator
-        sta r_seed
         
 #if 0
         ;; store the time the level was started
@@ -2208,9 +2228,16 @@ main SUBROUTINE
         jsr DisplayBCD
         brk
 #endif
+
+.try_again        
+        lda $a2                 ;jiffy as random seed
+        beq .try_again          ;can't be zero
+        sta r_seed
+        
         sei
 ;        store16 isr2_done2,$0314 ;replace standard isr with minimal ISR ( jiffy clock only )
-
+        lda #$7f
+        sta $911e               ;disable nmi
 
         lda #0
         sta $9113               ;joy VIA to input
@@ -2356,12 +2383,13 @@ MainLoop0
 MainLoopEnd
 ;        Display1 "D",0,DOTCOUNT
         jmp IntroLoop
-        
+
+PelletRow equ 3
 ;;; place power pellets
 ;;; W1 pointer
         MAC placePellets
-        sta {1}+22*3+2
-        sta {1}+22*3+22-2
+        sta {1}+22*PelletRow + 2
+        sta {1}+22*PelletRow + 22-2
         sta {1}+22*17+2
         sta {1}+22*17+22-2
         ENDM
