@@ -3438,7 +3438,7 @@ Ghost4AI SUBROUTINE
 ;        Display1 "X",3,GHOST_COL
         lda S3
         ;; < N and we are too close, flee
-        cmp #10
+        cmp #7
         beq .tooclose
         bcc .tooclose
         ;; not too close, pursue
@@ -3454,29 +3454,20 @@ Ghost4AI SUBROUTINE
         bcs .paconright
         ;; pac on left
         lda #22-5
-        sta GHOST_TGTCOL
-        lda PACROW
-        cmp #11
-        bcs .paconbottom0
-        ;; pac on top
-        lda #15
-        sta  GHOST_TGTROW
-.paconbottom0
-        lda #4
-        sta  GHOST_TGTROW
-        rts
+        bne  .testvert          ;jmp
 .paconright
         lda #5
-        sta GHOST_TGTCOL
-        
-        lda PACROW
+.testvert                       ;test vertical quadrants
+        sta GHOST_TGTCOL        ;save target column
+        lda PACROW              ;determine on top or bottom
         cmp #11
         bcs .paconbottom
         ;; pac on top
         lda #15
-        sta GHOST_TGTROW
+        bne .leave
 .paconbottom        
         lda #4
+.leave        
         sta GHOST_TGTROW
         rts
 ;;;
