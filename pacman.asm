@@ -1,6 +1,7 @@
 ;LARGEMEM equ 1                 ; generate code for 8k expansion
 ;INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY                     ;enable master slowdown for debugging
+PACDEATHGFX equ 1        
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
@@ -1808,7 +1809,7 @@ death subroutine
         WaitTime 2              ;delay for 2 second 
 
         ClearPacSite
-#if 1
+
 	;; install the death sound
         sei
         lda #0
@@ -1816,37 +1817,27 @@ death subroutine
         store16 DeathISR,$0314
         cli
 	;; perform some animation
-#if 0
-	move16 PACDEATH,Sprite_src
-	lda #2                  ;animation frame is pac mouth open
+	lda #0                  ;animation frame is pac mouth open
 	sta Sprite_frame
+	store16 BIT_DEATH1,Sprite_src
+.loop0
 	ldx #0                  ;select pacman sprite
 	jsr render_sprite       ;render bits
 	Invert Sprite_page      ;
 	ldx #0                  ;select pacman sprite
 	jsr drwsprt1            ;place tiles on screen
-	
-	lda S3
-	sta voice2
-	ldy #1                  ;set delay mode
-	sty S2
-	jsr delay               ;delay
-	lda S3                  ;decrement note
-	sec
-	sbc #deathStep
-	cmp #deathStopNote      ;are we at end of scale
-	beq .done               ;yes, skip out
-	sta S3                  ;no, store new note value
-	
-	add16im PACDEATH,32
-	cmp16Im PACDEATH,PAC_LAST ;have we reached last position
-	bne .top                  ;nope
-	store16 PAC1,PACDEATH     ;yes, reset to position1
-	jmp .top
-#endif
-	WaitTime 3
-	
-#endif        
+
+        lda #12
+        jsr WaitTime_
+        
+        inc Sprite_frame
+        lda #7
+        cmp Sprite_frame
+        bne .loop0
+        lda #0
+        sta Sprite_frame
+        jmp .loop0
+
 .done
 ;        RestorePacSite
         jsr stopSound
@@ -4567,7 +4558,7 @@ copychar    SUBROUTINE
 #if 0
 
 TEXTS        
-        dv.b mkletter "C","O","D","E"
+        dv.b mkletter "C","O","D","E"
         dc.b 58|$80
         dv.b mkletter "D","A","N","E"
         dv.b mkletter "M","U","S","I","C"
@@ -4701,6 +4692,71 @@ done:
         rts
 #endif        
 
+#ifconst PACDEATHGFX
+BIT_DEATH1
+	dc.b %00000000
+	dc.b %01000010
+	dc.b %11000011
+	dc.b %11100111
+	dc.b %11111111
+	dc.b %11111111
+	dc.b %01111110
+	dc.b %00111100
+
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %01000010
+	dc.b %11100111
+	dc.b %11111111
+	dc.b %11111111
+	dc.b %01111110
+	dc.b %00111100
+
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %11100111
+	dc.b %01111110
+	dc.b %01111110
+	dc.b %00111100
+	dc.b %00000000
+
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %01111110
+	dc.b %01111110
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00000000
+
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00011000
+	dc.b %01100110
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00000000
+
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00011000
+	dc.b %00100100
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00000000
+
+	dc.b %00000000
+	dc.b %00001000
+	dc.b %00100000
+	dc.b %00000000
+	dc.b %00000010
+	dc.b %00100000
+	dc.b %00001000
+	dc.b %00000000
+#endif // PACDEATH        
 ;;;
 ;;;
 ;;;
@@ -4810,6 +4866,3 @@ todo:
         blinky bonus isn't working in vertical mode beause tiles is always even or odd depending
         on column you are in
 #endif
-
-        
-
