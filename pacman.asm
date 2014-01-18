@@ -1482,7 +1482,7 @@ PowerPillOn SUBROUTINE
 
         rts
         
-sirenBot equ 211+5-3
+sirenBot equ 211+5-2
 sirenTop equ 222+5
 ;SirenDir dc.b 1
 ;;; 
@@ -1493,10 +1493,10 @@ isr3 subroutine
         ldy SirenIdx
 XsirenTop                       ;self modifying code
         cpy #sirenTop
-        beq .reverse
+        bcs .reverse
 XsirenBot                       ;self modifying code
         cpy #sirenBot
-        beq .reverse
+        bcc .reverse
 .add
         tya
         clc
@@ -2957,6 +2957,8 @@ ResetBlinky subroutine
         sta XsirenBot+1
         lda #sirenBot+1
         sta SirenIdx
+        lda #1
+        sta SirenDir
         cli
         rts
 ;;;
