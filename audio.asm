@@ -1,5 +1,6 @@
 
 DeathSound
+        dc.b 2                  ;frame 1
         dc.b 233
         dc.b 234
         dc.b 235
@@ -8,6 +9,7 @@ DeathSound
         dc.b 238
         dc.b 239
         dc.b 236
+        dc.b 2                  ;frame 2
         dc.b 233
         dc.b 230
         dc.b 231
@@ -16,6 +18,7 @@ DeathSound
         dc.b 234
         dc.b 235
         dc.b 236
+        dc.b 2                  ;frame 3
         dc.b 233
         dc.b 230
         dc.b 227
@@ -24,6 +27,7 @@ DeathSound
         dc.b 230
         dc.b 231
         dc.b 232
+        dc.b 2                  ;frame 4
         dc.b 233
         dc.b 230
         dc.b 227
@@ -32,6 +36,7 @@ DeathSound
         dc.b 226
         dc.b 227
         dc.b 228
+        dc.b 2                  ;frame 5
         dc.b 229
         dc.b 230
         dc.b 227
@@ -45,6 +50,7 @@ DeathSound
         dc.b 227
         dc.b 224
         dc.b 221
+        dc.b 2                  ;frame 6
         dc.b 128
         dc.b 143
         dc.b 157
@@ -54,6 +60,7 @@ DeathSound
         dc.b 203
         dc.b 212
         dc.b 220
+        dc.b 2                  ;frame 7
         dc.b 128
         dc.b 143
         dc.b 157

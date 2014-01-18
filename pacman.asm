@@ -1809,35 +1809,46 @@ death subroutine
         WaitTime 2              ;delay for 2 second 
 
         ClearPacSite
-
+#if 0
 	;; install the death sound
         sei
         lda #0
         sta DeathSoundPtr
         store16 DeathISR,$0314
         cli
+#endif        
 	;; perform some animation
 	lda #0                  ;animation frame is pac mouth open
 	sta Sprite_frame
+        sta DeathSoundPtr
 	store16 BIT_DEATH1,Sprite_src
 .loop0
+        ldx DeathSoundPtr
+        lda DeathSound,X
+        beq .done
+        inc DeathSoundPtr
+        cmp #2
+        beq .nextFrame
+        
+        sta 36876
+        lda JIFFYL
+.wait1        
+        cmp JIFFYL
+        beq .wait1
+        
+        jmp .loop0
+.nextFrame        
 	ldx #0                  ;select pacman sprite
 	jsr render_sprite       ;render bits
 	Invert Sprite_page      ;
 	ldx #0                  ;select pacman sprite
 	jsr drwsprt1            ;place tiles on screen
 
-        lda #12
-        jsr WaitTime_
+;        lda #12
+;        jsr WaitTime_
         
         inc Sprite_frame
-        lda #7
-        cmp Sprite_frame
         bne .loop0
-        lda #0
-        sta Sprite_frame
-        jmp .loop0
-
 .done
 ;        RestorePacSite
         jsr stopSound
@@ -4702,7 +4713,7 @@ BIT_DEATH1
 	dc.b %11111111
 	dc.b %01111110
 	dc.b %00111100
-
+BIT_DEATH2
 	dc.b %00000000
 	dc.b %00000000
 	dc.b %01000010
@@ -4711,7 +4722,7 @@ BIT_DEATH1
 	dc.b %11111111
 	dc.b %01111110
 	dc.b %00111100
-
+BIT_DEATH3
 	dc.b %00000000
 	dc.b %00000000
 	dc.b %00000000
@@ -4720,7 +4731,7 @@ BIT_DEATH1
 	dc.b %01111110
 	dc.b %00111100
 	dc.b %00000000
-
+BIT_DEATH4
 	dc.b %00000000
 	dc.b %00000000
 	dc.b %00000000
@@ -4729,7 +4740,7 @@ BIT_DEATH1
 	dc.b %00000000
 	dc.b %00000000
 	dc.b %00000000
-
+BIT_DEATH5
 	dc.b %00000000
 	dc.b %00000000
 	dc.b %00000000
@@ -4738,7 +4749,7 @@ BIT_DEATH1
 	dc.b %00000000
 	dc.b %00000000
 	dc.b %00000000
-
+BIT_DEATH6
 	dc.b %00000000
 	dc.b %00000000
 	dc.b %00000000
@@ -4747,7 +4758,7 @@ BIT_DEATH1
 	dc.b %00000000
 	dc.b %00000000
 	dc.b %00000000
-
+BIT_DEATH7
 	dc.b %00000000
 	dc.b %00001000
 	dc.b %00100000
