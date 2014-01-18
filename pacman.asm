@@ -1806,7 +1806,7 @@ death subroutine
         jsr uninstall_isr
         jsr PowerPillOff        ;call off routine to clean up
         jsr EatSoundOff            ;stop waka
-        WaitTime 2              ;delay for 2 second 
+        WaitTime 1              ;delay for 2 second 
 
         ClearPacSite
 #if 0
@@ -1831,10 +1831,16 @@ death subroutine
         beq .nextFrame
         
         sta 36876
-        lda JIFFYL
-.wait1        
-        cmp JIFFYL
-        beq .wait1
+.ll
+        lda VICRASTER
+        bne .ll
+.wait2        
+        lda VICRASTER
+;        cmp #13
+;        bcs .wait2
+        cmp #70
+        bne .wait2
+        
         
         jmp .loop0
 .nextFrame        
@@ -1844,12 +1850,11 @@ death subroutine
 	ldx #0                  ;select pacman sprite
 	jsr drwsprt1            ;place tiles on screen
 
-;        lda #12
-;        jsr WaitTime_
-        
         inc Sprite_frame
         bne .loop0
 .done
+        lda #1
+        jsr WaitTime_
 ;        RestorePacSite
         jsr stopSound
         jsr DecrementLives
