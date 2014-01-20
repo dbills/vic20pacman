@@ -1,46 +1,62 @@
 
 DeathSound
-        dc.b 2                  ;frame 1
+        dc.b 2      ;f1
+        dc.b 233
         dc.b 233
         dc.b 234
+        dc.b 234
         dc.b 235
+        dc.b 235
+        dc.b 236
         dc.b 236
         dc.b 237
-        dc.b 238
-        dc.b 239
         dc.b 236
-        dc.b 2                  ;frame 2
+        dc.b 235
+        dc.b 234
         dc.b 233
+        dc.b 2      ;f2
+        dc.b 230
         dc.b 230
         dc.b 231
+        dc.b 231
+        dc.b 232
         dc.b 232
         dc.b 233
-        dc.b 234
-        dc.b 235
-        dc.b 236
-        dc.b 2                  ;frame 3
         dc.b 233
+        dc.b 234
+        dc.b 233
+        dc.b 232
+        dc.b 231
         dc.b 230
+        dc.b 2     ;f3
         dc.b 227
         dc.b 228
         dc.b 229
         dc.b 230
         dc.b 231
         dc.b 232
-        dc.b 2                  ;frame 4
         dc.b 233
-        dc.b 230
+        dc.b 234
+        dc.b 235
+        dc.b 233
+        dc.b 231
+        dc.b 229
         dc.b 227
+        dc.b 2     ;f4
         dc.b 224
         dc.b 225
         dc.b 226
         dc.b 227
         dc.b 228
-        dc.b 2                  ;frame 5
         dc.b 229
         dc.b 230
-        dc.b 227
+        dc.b 231
+        dc.b 232
+        dc.b 230
+        dc.b 228
+        dc.b 226
         dc.b 224
+        dc.b 2    ;f5
         dc.b 221
         dc.b 222
         dc.b 223
@@ -48,28 +64,36 @@ DeathSound
         dc.b 225
         dc.b 226
         dc.b 227
-        dc.b 224
+        dc.b 228
+        dc.b 229
+        dc.b 227
+        dc.b 225
+        dc.b 223
         dc.b 221
-        dc.b 2                  ;frame 6
-        dc.b 128
-        dc.b 143
-        dc.b 157
-        dc.b 170
-        dc.b 182
-        dc.b 193
-        dc.b 203
-        dc.b 212
-        dc.b 220
-        dc.b 2                  ;frame 7
-        dc.b 128
-        dc.b 143
-        dc.b 157
-        dc.b 170
-        dc.b 182
-        dc.b 193
-        dc.b 203
-        dc.b 212
-        dc.b 220
+        dc.b 2     ;f6
+        dc.b 148
+        dc.b 162
+        dc.b 175
+        dc.b 187
+        dc.b 198
+        dc.b 208
+        dc.b 217
+        dc.b 225
+        dc.b 232
+        dc.b 238
+        dc.b 243
+        dc.b 2      ;f7
+        dc.b 148
+        dc.b 162
+        dc.b 175
+        dc.b 187
+        dc.b 198
+        dc.b 208
+        dc.b 217
+        dc.b 225
+        dc.b 232
+        dc.b 238
+        dc.b 243
         dc.b 0     
 FruitSound
         dc.b 248                ;unused due to sloppy,but. byte saving code in game
