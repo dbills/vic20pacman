@@ -8,7 +8,7 @@ PACDEATHGFX equ 1
 ;BASIC equ 1  
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
-UNLIMITED_LIVES equ 1
+;UNLIMITED_LIVES equ 1
 ;;; level that the game starts from normal should be -1
 ;;; at 2 ghost are as fast as pacman
 ;;; at 4 ghosts are fast than pacman
@@ -131,7 +131,7 @@ tunnelLCol      equ 1           ;column to start warp to right side
 tunnelLen       equ 3           ;length of tunnel
 tunnelSpeed     equ 2           ;Sprite_speed setting for tunnel
 ;;; amount of time a fruit is display
-fruitTime       equ 210
+fruitTime       equ 255
         
 BLACK        equ 0
 WHITE        equ 1
@@ -2192,10 +2192,15 @@ reset_game1 subroutine
         store16 screen+leftMargin+22*msgRow+21/2-gameover_msg_sz/2,W1      ;post the player ready message
         store16 gameover_msg,W2
         jsr ndPrint
-        WaitKey 9
+        jsr WaitFire
         jsr rsPrint
         JmpReset modeResetGame    ;longjmp to reset of game
         ENDM
+;;; 
+;;; bonus life routine
+IncrementLives subroutine
+        inc PacLives
+        rts
 ;;; 
 ;;; -1 pacman lives
 ;;; and update dislay
@@ -2310,6 +2315,9 @@ main SUBROUTINE
 
         lda #0
         sta $9113               ;joy VIA to input
+        sta JIFFYL
+        sta JIFFYM
+        sta JIFFYH
 
         lda VICSCRN
         and #$f0
@@ -2596,7 +2604,7 @@ mkmaze2 subroutine
         bne .fetch_byte         ;jmp .fetch_byte
         
         rts
-#if 0
+#if 1
 ;;; waits for joystick to be pressed
 ;;; and released
 WaitFire SUBROUTINE
