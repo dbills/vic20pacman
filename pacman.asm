@@ -16,7 +16,7 @@ STARTLEVEL equ -1
 ;;; set below to something to run a 'short maze'
 ;;; that is whatever you set this to, will be the number of dots
 ;;; you have to eat before the level ends and moves to the next
-;SHORTMAZE equ 75
+;SHORTMAZE equ 25
 ;;; comment this out to not flash the maze at the end of the levels
 ;;; for faster debugging when running through levels
 ;FLASHMAZE equ 1
@@ -29,7 +29,8 @@ AGEFRUIT equ 1
 ;NOGHOSTDOTS equ 1
 ;;; uncomment to show chase/scatter mode debugging at top of screen
 ;SHOWTIMER1 equ 1
-;;; score when a bonus life is given
+;;; score when a bonus life is given ( the middle byte of a BCD number )
+;;; e.g. 8000 points is 008000 or $80
 BONUSLIFE equ $80
 ;;;
 ;;; PACMAN 2014 ( hopefully )
@@ -278,7 +279,8 @@ WakaIdx         equ eat_halted+1
 flashRate       equ 36            ;in 60s second
 PwrFlashCnt     equ WakaIdx+1   ;countdown to flash power pill
 PwrFlashSt      equ PwrFlashCnt+1 ;state of power pill flash 0 = blank
-BonusAwarded    equ PwrFlashSt+1       
+BonusAwarded    equ PwrFlashSt+1  ;true if bonus life was awarded
+Agonizer        equ BonusAwarded+1 ;keeps track of when to increment difficulty
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -2125,8 +2127,10 @@ end_level subroutine
 
         ;; modify difficulty settings based on level
         lda LevelsComplete
-        and #1                  ;odd numbered levels completed?
-        bne .1                  ;no, keep everything the same
+        dec Agonizer
+        bne .1
+        lda #2
+        sta Agonizer
         ;; make level harder by increasing ghost chase-mode
         ;; durations in ChaseTable
         ldx ChaseTableSz-1
@@ -2179,6 +2183,9 @@ reset_game1 subroutine
         sta PlayerScore_m
         sta PlayerScore_h
         sta POWER_UP            ;power up to 0
+
+        lda #2
+        sta Agonizer
 
         lda #pacLives           ;1 based : number of lives + 1
         sta PacLives
