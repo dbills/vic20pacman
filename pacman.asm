@@ -29,6 +29,8 @@ AGEFRUIT equ 1
 ;NOGHOSTDOTS equ 1
 ;;; uncomment to show chase/scatter mode debugging at top of screen
 ;SHOWTIMER1 equ 1
+;;; score when a bonus life is given
+BONUSLIFE equ $80
 ;;;
 ;;; PACMAN 2014 ( hopefully )
 ;;; VIC20 6502 versions for +3k and +8k machines
@@ -276,6 +278,7 @@ WakaIdx         equ eat_halted+1
 flashRate       equ 36            ;in 60s second
 PwrFlashCnt     equ WakaIdx+1   ;countdown to flash power pill
 PwrFlashSt      equ PwrFlashCnt+1 ;state of power pill flash 0 = blank
+BonusAwarded    equ PwrFlashSt+1       
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -2003,6 +2006,7 @@ reset_game subroutine
         sta Sprite_offset2,X
         sta Sprite_offset,X
         lda #0
+        sta BonusAwarded
         sta PwrFlashSt
         sta POWER_UP            ;power pill off
         sta WakaIdx
@@ -2200,6 +2204,7 @@ reset_game1 subroutine
 ;;; bonus life routine
 IncrementLives subroutine
         inc PacLives
+        jsr DisplayLives
         rts
 ;;; 
 ;;; -1 pacman lives
@@ -4258,6 +4263,7 @@ EatSoundOff SUBROUTINE
 ;;; update player scorem chains into DisplayScore routine
 ;;; value to add is in A (low)
 ;;; and Y (high)
+;;; 10000
 UpdateScore subroutine
         sei                     ;prevent 6502 bcd/interrupt 'bug'
         sed                     ;decimal mode
@@ -4291,6 +4297,15 @@ DisplayScore subroutine
         sta screen+20-6,y
         dey
         bpl .loop
+        ;; check if bonus life
+        lda BonusAwarded
+        bne .done
+        lda PlayerScore_m
+        cmp #BONUSLIFE
+        bcc .done
+        sta BonusAwarded
+        jsr IncrementLives
+.done        
         rts
 ;;; change orientation to horizontal
 ;;; X sprite to attempt change on
