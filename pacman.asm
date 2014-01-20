@@ -23,7 +23,12 @@ STARTLEVEL equ -1
 ;;; maximum number of cherries that can appear on left side
 MAXLEVELCHERRIES equ 15
 ;;; comment out to have fruit that never spoils
-AGEFRUIT equ 1        
+AGEFRUIT equ 1
+;;; uncomment to prevent ghosts from exiting based on dots eaten count
+;;; they will only exit based on timer criteria
+;NOGHOSTDOTS equ 1
+;;; uncomment to show chase/scatter mode debugging at top of screen
+;SHOWTIMER1 equ 1
 ;;;
 ;;; PACMAN 2014 ( hopefully )
 ;;; VIC20 6502 versions for +3k and +8k machines
@@ -573,15 +578,6 @@ WaitTime_ subroutine
     lda [{1}]+1
     sta [{2}]+1
     endm
-; move16(source,dest),Y
-; dest+y = source ( as opposed to dest[y]=source )
-    mac move16y
-    lda [{1}],Y
-    sta [{2}]
-    iny
-    lda [{1}],Y
-    sta [{2}]+1
-    endm
     ;; move word index by X, does correct pointer
     ;; arithmetic for 'word'
     ;; move16x source[X],dest
@@ -597,6 +593,22 @@ WaitTime_ subroutine
     sta [{2}]+1
     pla
     tax
+    endm
+    ;; move word index by Y, does correct pointer
+    ;; arithmetic for 'word'
+    ;; move16y source[Y],dest
+    mac move16y
+    tya
+    pha
+    asl                         ; x*2 since it's a word
+    tay
+    lda [{1}],y
+    sta [{2}]
+    iny
+    lda [{1}],y
+    sta [{2}]+1
+    pla
+    tay
     endm
 ;;; move source[x],dest[x]
     mac move16xx
@@ -912,7 +924,7 @@ softTimerRes   equ 60
 ;;; 7 seconds, 20 seconds, etc...
 ;;; even values are scatter mode, odd are chase mode
 ;;; iteration starts from end 
-ChaseTable     dc.w  (5*60)*softTimerRes,5*softTimerRes,20*softTimerRes,7*softTimerRes,20*softTimerRes,7*softTimerRes
+ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 20*softTimerRes, 8*softTimerRes
 ChaseTableEnd
 ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
 masterSpeed      equ 1 ;master game delay
@@ -1186,9 +1198,9 @@ CheckFood subroutine
 
         cmp #DOT
         bne .done
-
+#ifnconst NOGHOSTDOTS
         jsr DotEaten
-
+#endif
         ;; handle eating dots
         ;; and figuring out if the level is over
         dec DOTCOUNT
@@ -1206,7 +1218,6 @@ CheckFood subroutine
         JmpReset modeEndLevel
         ;; control never reaches here
 .cherry ;cherry has been eaten
-        ;; TODO: update the score
         ldx #0
         lda fruitPoints,X
         inx
@@ -1394,20 +1405,34 @@ ReverseGhosts SUBROUTINE
 ;;; 
 Timer1Expired SUBROUTINE
         jsr ReverseGhosts
-        ldx ChaseTableIdx       ;move down to next table entry
-        dex
+        ldy ChaseTableIdx       ;load current table entry
+        ;;
+        cpy #5
+        bne .next0
+        ldx #inky
+        jsr LeaveBox
+        ldx #pinky
+        jsr LeaveBox
+.next0        
+        cpy #4
+        bne .next               ;second interval yet?
+        ;; yes, send clyde out
+        ldx #clyde
+        jsr LeaveBox
+.next    
+        dey                     ;move down to nxt table entry
         ;;
         ;; TODO
         ;; if ghosts havn't all come out by the beginning of the third
         ;; scatter period, then send them out
-        ;; 
+        ;;
         bpl .0                  ;branch positive
         ;; < 0 wrapping around table
 initChaseTimer        
-        ldx #ChaseTableSz-1        ;reload table index to top of table
+        ldy #ChaseTableSz-1        ;reload table index to top of table
 .0
-        stx ChaseTableIdx
-        move16x ChaseTable,TIMER1   ;chase time to TIMER1
+        sty ChaseTableIdx
+        move16y ChaseTable,TIMER1   ;chase time to TIMER1
         lda JIFFYL
         clc
         adc TIMER1
@@ -1419,13 +1444,20 @@ initChaseTimer
         adc #0
         sta TIMER1_hh
         
-;        Display1 "S",10,#1
-        inx                     ;add 1 such that even/odd works the way we want
-        txa                     ;
+#ifconst SHOWTIMER1        
+        Display1 "S",10,#1
+#endif
+        
+        iny                     ;add 1 such that even/odd works the way we want
+        tya                     ;
         and #1                  ;bit 0 controls chase or scatter even or odd
         sta CHASEMODE           ;engage chase mode, scatter when clear
+        
+#ifconst SHOWTIMER1        
         beq .done
-;        Display1 "C",10,#1
+        Display1 "C",10,#1
+#endif
+        
 .done
         rts
 
@@ -2269,6 +2301,7 @@ main SUBROUTINE
         lda $a2                 ;jiffy as random seed
         beq .try_again          ;can't be zero
         sta r_seed
+
         
         sei
 ;        store16 isr2_done2,$0314 ;replace standard isr with minimal ISR ( jiffy clock only )
@@ -2925,8 +2958,10 @@ GhostTurn
         jmp .loop
 ;;; 
 ;;; open the door on the ghost box
+;;; register input:
 ;;; X = ghost to leave
-;;; Y unmolested
+;;; X,Y unmolested
+;;; if the ghost is already out of the box then do nothing
 LeaveBox SUBROUTINE
         lda #modeInBox
         cmp Sprite_mode,X       ;is ghost in box?
