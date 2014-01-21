@@ -19,7 +19,7 @@ STARTLEVEL equ -1
 ;SHORTMAZE equ 25
 ;;; comment this out to not flash the maze at the end of the levels
 ;;; for faster debugging when running through levels
-;FLASHMAZE equ 1
+FLASHMAZE equ 1
 ;;; maximum number of cherries that can appear on left side
 MAXLEVELCHERRIES equ 15
 ;;; comment out to have fruit that never spoils
@@ -111,7 +111,7 @@ chrom4      equ $8800             ; upper lower
 ;;; 
 cassStart   equ $033d             ;start of cassette buffer ( 190 bytes)
 cassEnd     equ $03fb
-SaveBuffer  equ cassEnd-10        
+SaveBuffer  equ cassEnd-20
 
 ;; vic-I chip registers
 chrst           equ $9003       ; font map pointer
@@ -1567,7 +1567,11 @@ isr4 subroutine
 isr4_reset
         sta PowerPillPtr        ;reset index to 0
         rts
-
+;;; bonus life sound
+isr6 subroutine
+        lda #225
+        sta 36874
+        rts
 ;;; sound for when pacman eats a fruit
 ;;; 
 isr5 subroutine
@@ -2008,7 +2012,6 @@ reset_game subroutine
         sta Sprite_offset2,X
         sta Sprite_offset,X
         lda #0
-        sta BonusAwarded
         sta PwrFlashSt
         sta POWER_UP            ;power pill off
         sta WakaIdx
@@ -2057,6 +2060,10 @@ reset_game subroutine
         lda #modePacman
         sta Sprite_mode+0
 
+        ;; erase any fruits that may have been left out
+        lda #EMPTY              ;blank tile
+        sta screen+cherryRow*22+cherryCol
+        
         lda #flashRate          ;powr pill flash timer init
         sta PwrFlashCnt
         lda #8
@@ -2177,6 +2184,7 @@ reset_game1 subroutine
         lda #basePowerTime
         sta PowerPillTime
         lda #0
+        sta BonusAwarded
         sta fruitPoints
         sta fruitPoints+1
         sta PlayerScore_l
