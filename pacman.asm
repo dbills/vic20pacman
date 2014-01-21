@@ -31,7 +31,7 @@ AGEFRUIT equ 1
 ;SHOWTIMER1 equ 1
 ;;; score when a bonus life is given ( the middle byte of a BCD number )
 ;;; e.g. 8000 points is 008000 or $80
-BONUSLIFE equ $01
+BONUSLIFE equ $10
 ;;; if uncommented, play the intro music
 ACTORINTRO equ 1
 ;;;
@@ -889,7 +889,7 @@ Sprite_speed    equ Sprite_mode+5  ; current sprite speed
 Sprite_base     equ Sprite_speed+5 ; base speed of sprites for this level
 Sprite_frame    equ Sprite_base+5  ; animation frame of sprite as offset from _src
 ;;; points for eating fruits
-fruitPoints     equ Sprite_frame+5 
+fruitPoints     equ Sprite_frame+5
 Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,GH3L      ;foreground char
 ;Sprite_src      dc.w PAC1,GHOST,GHOST,GHOST,GHOST ;sprite source bitmap
 ;;; sprite chargen ram ( where to put the source bmap )
@@ -944,7 +944,7 @@ Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
 ;;; the home tiles for ghosts that are in 'scatter' mode
 ;;; ghosts try to find their way to these home tiles
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
-VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1 ;15
+VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1,0
 sirenBase  equ 223
 sirenStep  equ 5
 ;WakaIdx    dc.b 0
@@ -1513,13 +1513,15 @@ PowerPillOn SUBROUTINE
         store16y BLUE_GHOST,Sprite_src
         lda Sprite_speed2,Y     ;value from powerpill speed table
         sta Sprite_speed,Y      ;into current speed table
+        lda #2
+        sta Sprite_turn,Y    ;
         ;; ghost in the maze are now frightened
         lda #modeFright
         sta Sprite_mode,Y
 .0        
         dey
         bpl .loop               ;bpl skips pacman which is sprite 0
-.done
+
 
         rts
         
@@ -1586,7 +1588,7 @@ isr6 subroutine
         lda #bonusInterval
         sta BonusSound
         inc BonusAwarded
-        lda #15
+        lda #bonusInterval+15
         cmp BonusAwarded
         bne .done
         lda #0
@@ -1631,14 +1633,16 @@ DeathISR subroutine
         jsr uninstall_isr       ;sound is finished remove ISR
 .skip        
         inc DeathSoundPtr
-        jmp isr2_done2 
+        jmp isr2_done2
+;;; 
 ;;; main entry for interrupt driven sound
 ;;; pacman eating sound, or power pill on sound
 ;;; or possible fruit eating sound
+;;; 
 isr2 subroutine
         sei                     ;disable interrupts while in interrupt
         ;; I don't see why above is needed?
-        ;;
+        ;; 
         ;; flash the power pellets
         dec PwrFlashCnt
         bne .00
@@ -1650,12 +1654,19 @@ isr2 subroutine
         lda PwrFlashSt
         beq .blankit
         lda BIT_PWR0+1,X
-.blankit
+.blankit                        ;blank the power pellet
         sta BIT_PWR1+1,X
         dex
         bpl .next1
         Invert PwrFlashSt
 .00
+        lda BonusSound
+        beq .not_bonus
+        lda #249
+        sta 36875
+        jsr isr6                ;play the bonus pacman sound
+        bne .not_power
+.not_bonus        
         lda FruitSoundOn        ;should be be playing fruit eaten sound?
         beq .not_fruit
         jsr isr5
@@ -1667,10 +1678,6 @@ isr2 subroutine
         jsr isr4                ;power up sound
         jmp .waka               ;skip the siren sound
 .not_power
-        lda BonusSound
-        beq .not_bonus
-        jsr isr6
-.not_bonus        
         jsr isr3                ;run the siren
 .waka        
         lda eat_halted
@@ -1748,34 +1755,14 @@ delay SUBROUTINE
         ldx #0
 .xloop        
         lda VolTable,X
-        sta volume
-
-        ldy S4                  ;are we in raise pitch mode?
-        beq .no_raise           ;nope, skip it
-        clc
-        adc S3
-        sta 36875               ;raise pitch slightly for warble
-.no_raise        
-        inx
-        cpx #VolTableSz         ;have we hit end of table?
         beq .done
-;        bcs .done
-
-        ldy S2
-        bne .yloop              ;longer 1/60 sec delay
+        sta volume
+        inx
         ldy #190
-.short_loop                     ;shorter, hard coded delay
-        nop
-        nop
-        dey
-        beq .xloop
-        bne .short_loop
 .yloop
-.gettime        
-        lda JIFFYL
-.waiting        
-        cmp JIFFYL
-        beq .waiting
+        nop
+        nop
+        nop
         dey
         bne .yloop
         beq .xloop
@@ -1791,14 +1778,9 @@ SoundGhostEaten SUBROUTINE
         pha
         jsr uninstall_isr           ;turn off all sound but this
 
-;        lda #0
-;       sta 36876
-        ldy #1
-;        jsr delay2
+
         ldx #195
 .loop
-        lda #0                  ;delay of 0
-        sta S2
         jsr delay
 
         stx 36876
@@ -1806,21 +1788,8 @@ SoundGhostEaten SUBROUTINE
         inx
 
         cpx #230
-;        bcs .st
         bcs .done
-        txa
-        and #2
-        
-        beq .off                        
-        bne .loop
-.off
-;        inx
-        txa
-        sec
-        sbc #2
-        sta 36876
-;        jmp .loop
-        bne .loop
+        jmp .loop
 .done
         lda #0
         sta 36876
@@ -2246,8 +2215,11 @@ reset_game1 subroutine
 ;;; bonus life routine
 IncrementLives subroutine
         inc PacLives
+        sei
         lda #bonusInterval
         sta BonusSound
+        sta BonusAwarded
+        cli
         jsr DisplayLives
         rts
 ;;; 
@@ -2269,6 +2241,8 @@ DecrementLives subroutine
 ;;; to show remaining lives
 ;;; 
 DisplayLives subroutine         ;entry point for displaying lives only
+        txa
+        pha
         ldx PacLives
         dex                     ;-1 don't display current life
         ldy #maxLives*22
@@ -2293,7 +2267,9 @@ DisplayLives subroutine         ;entry point for displaying lives only
         tay
         dex
         bpl .0
-.done        
+.done
+        pla
+        tax
         rts
 ;;; show the ghost and pacman as quickly as possible
 ;;; used by the intro music 
@@ -2361,6 +2337,7 @@ main SUBROUTINE
 ;        store16 isr2_done2,$0314 ;replace standard isr with minimal ISR ( jiffy clock only )
         lda #$7f
         sta $911e               ;disable nmi
+
 
         lda #0
         sta $9113               ;joy VIA to input
@@ -3096,7 +3073,12 @@ IncreaseBlinky subroutine
         lda #Speed_fast
 .store
         ldx #blinky
+        ldy Sprite_mode+blinky
+        cpy #modeFright
+        beq .fright
         sta Sprite_speed,x
+.fright        
+        sta Sprite_base,X
 .over2
         IncreasePanicLevel
         rts
@@ -4349,7 +4331,6 @@ DisplayScore subroutine
         lda PlayerScore_m
         cmp #BONUSLIFE
         bcc .done
-        sta BonusAwarded
         jsr IncrementLives
 .done        
         rts
@@ -4724,7 +4705,6 @@ splash subroutine
 
 .done        
         rts
-#endif        
 ;;; 
 ;;; Display a BCD number
 DisplayBCD SUBROUTINE
@@ -4739,6 +4719,7 @@ DisplayBCD SUBROUTINE
         inx
         DisplayBCDDigit
         rts
+#endif        
 #if 0        
 ;;; binary to bcd
 Bin2Hex SUBROUTINE        
