@@ -31,7 +31,9 @@ AGEFRUIT equ 1
 ;SHOWTIMER1 equ 1
 ;;; score when a bonus life is given ( the middle byte of a BCD number )
 ;;; e.g. 8000 points is 008000 or $80
-BONUSLIFE equ $80
+BONUSLIFE equ $01
+;;; if uncommented, play the intro music
+ACTORINTRO equ 1
 ;;;
 ;;; PACMAN 2014 ( hopefully )
 ;;; VIC20 6502 versions for +3k and +8k machines
@@ -279,8 +281,10 @@ WakaIdx         equ eat_halted+1
 flashRate       equ 36            ;in 60s second
 PwrFlashCnt     equ WakaIdx+1   ;countdown to flash power pill
 PwrFlashSt      equ PwrFlashCnt+1 ;state of power pill flash 0 = blank
+bonusInterval   equ 6            ;sound interval for award noise
 BonusAwarded    equ PwrFlashSt+1  ;true if bonus life was awarded
 Agonizer        equ BonusAwarded+1 ;keeps track of when to increment difficulty
+BonusSound      equ Agonizer+1        
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -1569,8 +1573,26 @@ isr4_reset
         rts
 ;;; bonus life sound
 isr6 subroutine
-        lda #225
-        sta 36874
+        dec BonusSound
+        bne .done
+        lda 36875
+        beq .off
+        lda #0
+        beq .on
+.off
+        lda #249
+.on        
+        sta 36875
+        lda #bonusInterval
+        sta BonusSound
+        inc BonusAwarded
+        lda #15
+        cmp BonusAwarded
+        bne .done
+        lda #0
+        sta BonusSound
+        sta 36875
+.done        
         rts
 ;;; sound for when pacman eats a fruit
 ;;; 
@@ -1639,12 +1661,16 @@ isr2 subroutine
         jsr isr5
         ;jmp .done2
 .not_fruit        
-
+        
         lda POWER_UP            ;are we powered up?  
         beq .not_power
         jsr isr4                ;power up sound
         jmp .waka               ;skip the siren sound
-.not_power        
+.not_power
+        lda BonusSound
+        beq .not_bonus
+        jsr isr6
+.not_bonus        
         jsr isr3                ;run the siren
 .waka        
         lda eat_halted
@@ -2012,6 +2038,7 @@ reset_game subroutine
         sta Sprite_offset2,X
         sta Sprite_offset,X
         lda #0
+        sta BonusSound
         sta PwrFlashSt
         sta POWER_UP            ;power pill off
         sta WakaIdx
@@ -2219,6 +2246,8 @@ reset_game1 subroutine
 ;;; bonus life routine
 IncrementLives subroutine
         inc PacLives
+        lda #bonusInterval
+        sta BonusSound
         jsr DisplayLives
         rts
 ;;; 
@@ -2370,7 +2399,9 @@ IntroLoop
         ;; through here, since it get's inverted on each pass
         lda Sprite_page         ;sprite's havn't been rendered yet?
         beq MainLoop0           ;yes,go around one more time
+#ifconst ACTORINTRO        
         jsr ActorIntro
+#endif        
 MainLoop0
         
 #ifconst MASTERDELAY        
