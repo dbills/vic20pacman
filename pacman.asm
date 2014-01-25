@@ -1,6 +1,7 @@
 ;LARGEMEM equ 1                 ; generate code for 8k expansion
 ;INVINCIBLE equ 1                ; pacman can't die
-;MASTERDELAY                     ;enable master slowdown for debugging
+;MASTERDELAY equ 1               ;enable master slowdown for debugging
+;masterSpeed      equ 10 ;master game delay
 PACDEATHGFX equ 1        
 ;;;
 ;;; uncomment this to create code that will launch
@@ -278,7 +279,7 @@ eat_halt        equ SirenDir+1
 ;;; signals that the waka sound is stopped
 eat_halted      equ eat_halt+1
 WakaIdx         equ eat_halted+1
-flashRate       equ 36            ;in 60s second
+flashRate       equ 30            ;in 60s second
 PwrFlashCnt     equ WakaIdx+1   ;countdown to flash power pill
 PwrFlashSt      equ PwrFlashCnt+1 ;state of power pill flash 0 = blank
 bonusInterval   equ 6            ;sound interval for award noise
@@ -807,6 +808,7 @@ modePacman      equ 5             ;mode only pacman has
 ;;; causes ghosts to reverse direction
 ;;; changes from scatter to chase cause reverse for example
 modeReverse     equ 6
+modeFright0     equ 7        
 ;;; end valid modes for Sprite_mode
 msgRow          equ 13            ;row number for displaying messages
 cherryCol       equ 21/2+1        ;to display bonus fruit
@@ -911,9 +913,12 @@ Sprite_speed2    dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightS
 ;;; pacman always runs @ 95% of top speed
 ;;; ghosts start at 90%
 ;;; when hard they are at 100%
+;Speed_standard   equ 9         ;95%
 Speed_standard   equ 18         ;95%
 Speed_slow       equ 10         ;90%
 Speed_fast       equ 255        ;100%
+harder1          equ 2          ;level when ghost are speed standard
+harder2          equ 4          ;level when ghosts are faster
 ;Sprite_base      dc.b Speed_standard,Speed_slow,Speed_slow,Speed_slow,Speed_slow
 ;Sprite_turn      dc.b 5,9,6,3,7        
 Sprite_color     dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
@@ -936,7 +941,6 @@ softTimerRes   equ 60
 ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 20*softTimerRes, 8*softTimerRes
 ChaseTableEnd
 ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
-masterSpeed      equ 1 ;master game delay
 ;;; 
 ;;; division table for division by 22
 ;Div22Table_i      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
@@ -1365,8 +1369,8 @@ drwsprt1 SUBROUTINE
 
 ;;; load reverse direction into A
 ReverseDirection subroutine
-        lda #modeOutOfBox
-        sta Sprite_mode,X
+;        lda #modeOutOfBox
+;        sta Sprite_mode,X
         lda Sprite_motion,X
         cmp #motionRight
         beq .right
@@ -1390,24 +1394,23 @@ ReverseDirection subroutine
         cmp16Im W1,ghostBoxExit
         beq .down               ;put it back to up
         lda #motionDown
-.leave        
         rts
 .down
         lda #motionUp
         rts
         
 ReverseGhosts SUBROUTINE
-        InitSpriteLoop          ;foreach sprite
-.loop        
-        dec SPRITEIDX
+        ldx #5
+.loop
+        dex
         beq .done
-        ldx SPRITEIDX
         lda Sprite_mode,X
         cmp #modeOutOfBox
         bne .loop
         lda #modeReverse
         sta Sprite_mode,X
-.done
+        bne .loop               ;jmp .loop
+.done        
         rts
 ;;; 
 ;;; manage switching ghosts from chase to scatter modes
@@ -1442,6 +1445,7 @@ initChaseTimer
 .0
         sty ChaseTableIdx
         move16y ChaseTable,TIMER1   ;chase time to TIMER1
+        sei                         ;prevent clock updates while we do some math
         lda JIFFYL
         clc
         adc TIMER1
@@ -1452,7 +1456,7 @@ initChaseTimer
         lda TIMER1_hh
         adc #0
         sta TIMER1_hh
-        
+        cli                     ;re-enable interrupts
 #ifconst SHOWTIMER1        
         Display1 "S",10,#1
 #endif
@@ -1506,9 +1510,8 @@ PowerPillOn SUBROUTINE
         ldy #SPRITES-1          ;init loop counter
         ;; install new speed map for all sprites
 .loop
-        lda #modeOutOfBox       ;is this ghost in the mze
-        cmp Sprite_mode,Y
-        bne .0                  ;nope, skip
+        lda Sprite_mode,Y       ;#modeInBox
+        beq .0                  ;nope, skip
         ;; install sad ghost bitmaps to sprite
         store16y BLUE_GHOST,Sprite_src
         lda Sprite_speed2,Y     ;value from powerpill speed table
@@ -1516,7 +1519,8 @@ PowerPillOn SUBROUTINE
         lda #2
         sta Sprite_turn,Y    ;
         ;; ghost in the maze are now frightened
-        lda #modeFright
+;        lda #modeFright
+        lda #modeFright0
         sta Sprite_mode,Y
 .0        
         dey
@@ -1690,8 +1694,11 @@ isr2 subroutine
         dex
         stx WakaIdx
 isr2_done2
+        lda POWER_UP
+        bne .notpower2
         ;; manually update jiffy clock
         UpdateJiffyCounter
+.notpower2        
         jmp defaultISR
 .reset
         lda eat_halt            ;are we commanded to stop the eating sound?
@@ -1963,14 +1970,14 @@ AllSoundOff subroutine
 #if 1
 SetGhostSpeed SUBROUTINE
         lda LevelsComplete
-        cmp #2
+        cmp #harder1
         bmi .easy
-        cmp #4
-        bmi .hard1
+        cmp #harder2
+        bmi .hard
         ;; hardest
         lda #Speed_fast
         rts
-.hard1
+.hard
         lda #Speed_standard
         rts
 .easy
@@ -2088,6 +2095,7 @@ reset_game subroutine
 
 .continue        
         SetupDotCounts          ;calc when to release ghosts
+        jsr initChaseTimer      ;reset ghost chase/scatter timer
         jsr DisplayLives        ;show lives meter
         
         rts
@@ -2139,7 +2147,7 @@ end_level subroutine
         ldx ChaseTableSz-1
 .0
         move16x ChaseTable,W1
-        sub16Im W1,[2*softTimerRes]
+        sub16Im W1,[1*softTimerRes]
         cmp16Im W1,#0           ;did this number hit 0?
         bne .not0
         store16 #2,W1           ;no lower on this number
@@ -2173,8 +2181,6 @@ end_level subroutine
 ;;; called after game over
 ;;; 
 reset_game1 subroutine
-        lda #sirenBot+1
-        sta SirenIdx
         lda #STARTLEVEL
         sta LevelsComplete
         lda #basePowerTime
@@ -2337,7 +2343,6 @@ main SUBROUTINE
 ;        store16 isr2_done2,$0314 ;replace standard isr with minimal ISR ( jiffy clock only )
         lda #$7f
         sta $911e               ;disable nmi
-
 
         lda #0
         sta $9113               ;joy VIA to input
@@ -2916,9 +2921,20 @@ GhostTurn
         beq .leaving
         cmp #modeEaten
         beq .eaten
-        bne .normal             ;jmp .normal
+        cmp #modeFright0        ;first fright?
+        bne .next
+        lda #modeFright         ;reverse direction and go to second fright
+        bne .reversing2
+.next                           ;second fright?
+        cmp #modeFright
+        bne .notfrightened
+        jsr FrightAI
+        jmp .continue
 .reversing
-        jsr ReverseDirection
+        lda #modeOutOfBox       ;cancel #modeReverse
+.reversing2                     ;
+        sta Sprite_mode,X
+        jsr ReverseDirection    ;calc opposite direction in A
         sta Sprite_motion,X
         bne .moveghost          ;jmp .moveghost
 .eaten                          ;load target tile for eaten ghosts
@@ -2927,12 +2943,6 @@ GhostTurn
 .leaving                        ;load target tile for ghosts leaving box
         SetLeavingTargetTile
         bne .continue
-.normal
-        lda Sprite_mode,X
-        cmp #modeFright
-        bne .notfrightened
-        jsr FrightAI
-        jmp .continue
 .notfrightened        
 #if 0
         ;; check if we should bother with AI
@@ -3062,16 +3072,18 @@ IncreaseBlinky subroutine
         ;; levels > 2 are done with the IncreaseBlinkyI routine
         ;; otherwise blinky can be increased with Sprite_speed adjustments
         lda LevelsComplete
-        cmp #2
-        bcs .over2              ;greater than 2
-        cpx #1
+        cmp #harder2 ;no sense, ghosts are already fastest
+        bcs .over2              ;ghosts are already fast
+        cpx #1                  ;what cruise mode are we supposed to be entering?
         bne .cruise2
 .cruise1        
         lda #Speed_standard
-        bne .store
+        bne .store              ;jmp .store
 .cruise2
         lda #Speed_fast
 .store
+        ;; don't increase current speed if he is frightened
+        ;; but rather the base speed
         ldx #blinky
         ldy Sprite_mode+blinky
         cpy #modeFright
@@ -4081,8 +4093,17 @@ tail2tail SUBROUTINE
 .done
         rts
         ;; default ghost speed into A
+        ;; used when ghosts are exiting the tunnels
+        ;; if in power mode, don't restore the speeds
+        ;; as the ghosts must remain moving slow
+        ;; and the end of power up phase will properly restore their speed
+        ;; Y used
         MAC GetDefaultSpeed
-        lda Sprite_base,X
+        lda Sprite_base,X       ;assume not powered up
+        ldy POWER_UP            ;are we powered up?
+        beq .done               ;yes, then exit
+        lda Sprite_speed,X      ;no change in speed
+.done        
         ENDM
 ;;; set the speed for an individual ghost
 ;;; X = ghost to set
@@ -4100,7 +4121,7 @@ DecrementHPos SUBROUTINE
         cmp16Im W2,[tunnelRow*22]+tunnelRCol-tunnelLen+screen
         bne .0
         GetDefaultSpeed ; leaving tunnel from right, speed up
-        bne .set_speed
+        bne .set_speed  ;jmp
 .0        
         cmp16Im W2,[tunnelRow*22]+tunnelLCol+tunnelLen+screen
         bne .1
@@ -4624,6 +4645,19 @@ ndPrint subroutine
         bne .0                  ;jmp .0
 .done
         sta SaveBuffer,Y
+        clc
+        lda W1+1
+        pha                     ;save W1
+        adc #clroffset
+        sta W1+1
+        lda #WHITE
+        dey
+.clrloop
+        sta (W1),Y
+        dey
+        bpl .clrloop
+        pla
+        sta W1+1                ;restore W1
         rts
 ;;; restore text underneath a previous
 ;;; ndPrint call
