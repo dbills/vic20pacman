@@ -3846,7 +3846,7 @@ Collisions SUBROUTINE
         sta Sprite_motion,X
         jsr scroll_down
 .notspecial
-DeathDistance equ 5
+DeathDistance equ 3
         ;; output: S1 = x pixels, S2 = y pixels
         TileToPixels GHOST_COL,GHOST_ROW,S1,S2
         lda S1                  ;x pixels
