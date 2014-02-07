@@ -6,7 +6,7 @@ PACDEATHGFX equ 1
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-BASIC equ 1  
+;BASIC equ 1  
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -27,7 +27,6 @@ MAXLEVELCHERRIES equ 15
 AGEFRUIT equ 1
 ;;; uncomment to prevent ghosts from exiting based on dots eaten count
 ;;; they will only exit based on timer criteria
-;;; 
 ;NOGHOSTDOTS equ 1
 ;;; uncomment to show chase/scatter mode debugging at top of screen
 ;SHOWTIMER1 equ 1
@@ -35,21 +34,7 @@ AGEFRUIT equ 1
 ;;; e.g. 8000 points is 008000 or $80
 BONUSLIFE equ $10
 ;;; if uncommented, play the intro music
-ACTORINTRO equ 1                ;
-;;;
-;;; uncomment to activate ghosts
-;;; comment out to cause no ghost movement
-GHOSTS_ON   equ 1    ;
-;;;
-;;; allow the ghost to be moved with
-;;; keyboard commands
-;;; 
-;GHPLAYER    equ 1              ; ghost as player
-;;;
-;;; uncomment to penalize pacman as well as ghosts
-;;; when going through the tunnel
-;;;
-;PACTUNNEL equ 1        
+ACTORINTRO equ 1
 ;;;
 ;;; PACMAN 2014 ( hopefully )
 ;;; VIC20 6502 versions for +3k and +8k machines
@@ -83,6 +68,8 @@ Sprite_page     dc.b 0
 #endif        
 
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
+GHOSTS_ON   equ 1
+;GHPLAYER    equ 1              ; ghost as player
 LARGEMAZE   equ 1                 ;
 _debug      equ 1                 ; true for debugging
 cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
@@ -115,12 +102,8 @@ JOYDWN      equ $8                ; joy down
 JOYL        equ $10               ; joy left
 JOYT        equ $20               ; joy fire
 JOYR        equ $80               ; joy right bit
-;;; 00000000
-;;;   TLDU   
-;;; 00111100
-;;; 10111100 = bc
-;;; 10011100 = 9c
-VALIDMOVE equ $9c
+
+
 chrom1      equ $8000             ; upper case character rom
 chrom2      equ $8400             ; upper case reversed
 chrom3      equ $8c00             ; upper lower reversed
@@ -302,8 +285,7 @@ PwrFlashSt      equ PwrFlashCnt+1 ;state of power pill flash 0 = blank
 bonusInterval   equ 6            ;sound interval for award noise
 BonusAwarded    equ PwrFlashSt+1  ;true if bonus life was awarded
 Agonizer        equ BonusAwarded+1 ;keeps track of when to increment difficulty
-BonusSound      equ Agonizer+1
-NewOffset       equ BonusSound+1 ; used by scroll_horiz routine
+BonusSound      equ Agonizer+1        
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -881,8 +863,7 @@ g2Start         equ screen+22*outOfBoxRow+outOfBoxCol
 g3Start         equ screen+22*11+11
 g4Start         equ screen+22*11+11
 #endif        
-;;; saved tunnel speed when ghosts are in tunnel
-savedSpeed     equ cassStart    ;5 bytes
+        
 ;Sprite_loc      equ cassStart
 Sprite_loc      equ $a7
 Sprite_loc2     equ Sprite_loc+10    ;new screen loc
@@ -2033,7 +2014,6 @@ reset_game subroutine
         sta Sprite_offset2,X
         sta Sprite_offset,X
         lda #0
-        sta savedSpeed,X
         sta BonusSound
         sta PwrFlashSt
         sta POWER_UP            ;power pill off
@@ -2666,12 +2646,17 @@ WaitFire SUBROUTINE
         tay
         and #JOYT               ;was trigger pressed?
         beq .loop1
-        bne .loop
+        tya
+         ;; and #JOYDWN
+         ;; beq .lbrk
+        jmp .loop
+.lbrk
+        brk
 .loop1                          ;wait for trigger to be released
         lda JOY0
         and #JOYT
         bne .fire
-        beq .loop1
+        jmp .loop1
 .fire
         rts
 #endif
@@ -3732,8 +3717,8 @@ PacManTurn
         cmp LASTJOYDIR          ;same as last joystick reading
         beq .uselast            ;then use last reading
 #endif       
-        and #VALIDMOVE
-        eor #VALIDMOVE
+        and #$bc
+        eor #$bc
         beq .uselast
         lda LASTJOY
         jmp .process
@@ -3766,8 +3751,13 @@ PacManTurn
         and #JOYDWN             ; check for down bit
         beq .down
         tya
+        and #JOYT
+        beq .fire
+        tya
         and #JOYR
         beq .right
+        rts
+.fire
         rts
 .left
         store16 PAC_L1,W3
@@ -4104,18 +4094,17 @@ tail2tail SUBROUTINE
         rts
         ;; default ghost speed into A
         ;; used when ghosts are exiting the tunnels
-        ;; to restore their speed to what it was when they entered
-        MAC RestoreSpeed
-        lda savedSpeed,X
-        pha
-        lda #0
-        sta savedSpeed,X
-        pla
+        ;; if in power mode, don't restore the speeds
+        ;; as the ghosts must remain moving slow
+        ;; and the end of power up phase will properly restore their speed
+        ;; Y used
+        MAC GetDefaultSpeed
+        lda Sprite_base,X       ;assume not powered up
+        ldy POWER_UP            ;are we powered up?
+        beq .done               ;yes, then exit
+        lda Sprite_speed,X      ;no change in speed
 .done        
         ENDM
-;;; set speed, if need when entering a tunnel
-;;; note this routine 'chains' into SetSpeed
-SetTunnelSpeed subroutine        
 ;;; set the speed for an individual ghost
 ;;; X = ghost to set
 ;;; A = new speed
@@ -4126,30 +4115,21 @@ SetSpeed subroutine
         sta Sprite_turn,X
         rts
 ;;; handle tunnel left side
-;;; use Y to determine if decrementhpos or incrementhpos
-;;; y=0 decrement y=1 increment
-;;; y must be undamaged on return
 DecrementHPos SUBROUTINE
-#ifnconst PACTUNNEL        
         cpx #0   ;slowing/speeding only applies to ghosts
         beq .1
-#endif
         cmp16Im W2,[tunnelRow*22]+tunnelRCol-tunnelLen+screen
         bne .0
-        RestoreSpeed ; leaving tunnel from right, speed up
-        bne .set_speed  ;jmp to set_speed
-.0                      ;not exiting the tunnel
+        GetDefaultSpeed ; leaving tunnel from right, speed up
+        bne .set_speed  ;jmp
+.0        
         cmp16Im W2,[tunnelRow*22]+tunnelLCol+tunnelLen+screen
         bne .1
-        lda savedSpeed,X
-        bne .1
-        lda Sprite_speed,X
-        sta savedSpeed,X
         ;; entered from the left
         lda #tunnelSpeed ;entered from left, slow down
 .set_speed
         jsr SetSpeed
-        bne .done               ;jmp .done
+        bne .done
 .1        
         cmp16Im W2,[tunnelRow*22]+tunnelLCol+screen
         bne .done
@@ -4161,19 +4141,15 @@ DecrementHPos SUBROUTINE
         rts
 ;;; handle tunnel right side
 IncrementHPos SUBROUTINE
-#ifnconst PACTUNNEL        
         cpx #0                ;slowing/speeding only applies to ghosts
         beq .1
-#endif        
         cmp16Im W2,[tunnelRow*22]+tunnelLCol+tunnelLen+screen
         bne .0
-        RestoreSpeed         ; leaving tunnel from left, speed up
+        GetDefaultSpeed         ; leaving tunnel from left, speed up
         bne .set_speed
 .0        
         cmp16Im W2,[tunnelRow*22]+tunnelRCol-tunnelLen+screen
         bne .1
-        lda Sprite_speed,X
-        sta savedSpeed,X
         lda #tunnelSpeed         ; entered from the right
 .set_speed        
         jsr SetSpeed
@@ -4277,7 +4253,7 @@ scroll_horiz SUBROUTINE
         bmi .left               ;branch to left code
         ;; going right
         lda #0                  ;push potential new sprite offset
-        sta NewOffset
+        pha                     ;save it on stack
         jsr IncrementHPos        ;move over to right one tile
         ldy #01                 ;
         lda (W2),Y              ;check for wall at pos + 2
@@ -4285,10 +4261,11 @@ scroll_horiz SUBROUTINE
         bne .continue           ;there is no wall, we can move
 .cantmove
         sec                     ;can't move, return false
+        pla                     ;pop the single arg we pushed for our own use
         rts
 .left
         lda #8
-        sta NewOffset
+        pha
         jsr DecrementHPos
         ldy #0
         lda (W2),Y
@@ -4296,8 +4273,7 @@ scroll_horiz SUBROUTINE
         beq .cantmove
 .continue
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
- ;       pla                      ;pull new sprite offset from the stack
-        lda NewOffset
+        pla                      ;pull new sprite offset from the stack
 ;        ApplyBlinkyBonus W2
 ;        ApplyAllBonus W2        ;
 .draw
@@ -4853,8 +4829,7 @@ done:
         rts
 #endif        
 
-
-        org $1c00-(8*3)
+#ifconst PACDEATHGFX
 BIT_DEATH1
 	dc.b %00000000
 	dc.b %01000010
@@ -4882,6 +4857,43 @@ BIT_DEATH3
 	dc.b %01111110
 	dc.b %00111100
 	dc.b %00000000
+BIT_DEATH4
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %01111110
+	dc.b %01111110
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00000000
+BIT_DEATH5
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00011000
+	dc.b %01100110
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00000000
+BIT_DEATH6
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00011000
+	dc.b %00100100
+	dc.b %00000000
+	dc.b %00000000
+	dc.b %00000000
+BIT_DEATH7
+	dc.b %00000000
+	dc.b %00001000
+	dc.b %00100000
+	dc.b %00000000
+	dc.b %00000010
+	dc.b %00100000
+	dc.b %00001000
+	dc.b %00000000
+#endif // PACDEATH        
 ;;;
 ;;;
 ;;;
