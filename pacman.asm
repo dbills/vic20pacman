@@ -6,7 +6,7 @@ PACDEATHGFX equ 1
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-BASIC equ 1  
+;BASIC equ 1  
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -1530,7 +1530,8 @@ PowerPillOn SUBROUTINE
         ;; install new speed map for all sprites
 .loop
         lda Sprite_mode,Y       ;#modeInBox
-        beq .0                  ;nope, skip
+        cmp #modeOutOfBox
+        bne .0                  ;nope, skip
         ;; install sad ghost bitmaps to sprite
         store16y BLUE_GHOST,Sprite_src
         lda Sprite_speed2,Y     ;value from powerpill speed table
