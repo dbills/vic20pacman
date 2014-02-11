@@ -1,5 +1,5 @@
 ;LARGEMEM equ 1                 ; generate code for 8k expansion
-INVINCIBLE equ 1                ; pacman can't die
+;INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY equ 1               ;enable master slowdown for debugging
 ;masterSpeed      equ 10 ;master game delay
 PACDEATHGFX equ 1        
@@ -33,7 +33,7 @@ AGEFRUIT equ 1
 ;SHOWTIMER1 equ 1
 ;;; score when a bonus life is given ( the middle byte of a BCD number )
 ;;; e.g. 8000 points is 008000 or $80
-BONUSLIFE equ $10
+BONUSLIFE equ $80
 ;;; if uncommented, play the intro music
 ACTORINTRO equ 1                ;
 ;;;
@@ -86,6 +86,7 @@ Sprite_page     dc.b 0
 LARGEMAZE   equ 1                 ;
 _debug      equ 1                 ; true for debugging
 cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
+wakavoice   equ 36874        
 voice1      equ 36874             ; sound registers
 voice2      equ 36875
 voice3      equ 36876
@@ -296,10 +297,10 @@ eat_halt        equ SirenDir+1
 ;;; signals that the waka sound is stopped
 eat_halted      equ eat_halt+1
 WakaIdx         equ eat_halted+1
-flashRate       equ 30            ;in 60s second
+flashRate       equ 20            ;in 60s second
 PwrFlashCnt     equ WakaIdx+1   ;countdown to flash power pill
 PwrFlashSt      equ PwrFlashCnt+1 ;state of power pill flash 0 = blank
-bonusInterval   equ 6            ;sound interval for award noise
+bonusInterval   equ 7            ;sound interval for award noise
 BonusAwarded    equ PwrFlashSt+1  ;true if bonus life was awarded
 Agonizer        equ BonusAwarded+1 ;keeps track of when to increment difficulty
 BonusSound      equ Agonizer+1
@@ -876,7 +877,7 @@ g3Start         equ screen+22*11+11
 g4Start         equ screen+22*11+11
 #endif        
 ;;; saved tunnel speed when ghosts are in tunnel
-savedSpeed     equ cassStart    ;5 bytes
+
 ;Sprite_loc      equ cassStart
 Sprite_loc      equ $a7
 Sprite_loc2     equ Sprite_loc+10    ;new screen loc
@@ -1702,7 +1703,7 @@ isr2 subroutine
         bmi .reset
 .0        
         ldy SirenTable,X
-        sty 36877
+        sty wakavoice
         dex
         stx WakaIdx
 isr2_done2
@@ -1716,7 +1717,7 @@ isr2_done2
         lda eat_halt            ;are we commanded to stop the eating sound?
         bne .nothalted
         sta eat_halted          ;A is 0
-        sta 36877               ;stop noise channel with 0
+        sta wakavoice           ;stop noise channel with 0
         beq isr2_done2
 .nothalted        
         ldx #SirenTableEnd-SirenTable
@@ -2026,7 +2027,6 @@ reset_game subroutine
         sta Sprite_offset2,X
         sta Sprite_offset,X
         lda #0
-        sta savedSpeed,X
         sta BonusSound
         sta PwrFlashSt
         sta POWER_UP            ;power pill off
@@ -2116,18 +2116,20 @@ reset_game subroutine
 DisplayLevelMeter subroutine
         store16 screen+22,W1    ;screen pointer
         store16 clrram+22,W2    ;color ram pointer
-        ldx LevelsComplete      ;loop counter
-        ;; we don't want to run down the screen too far
-        cpx #MAXLEVELCHERRIES   ;less than max?
-        bcc .lessthan
-        ldx #MAXLEVELCHERRIES   ;fix loop to max
-.lessthan        
+        ldx #MAXLEVELCHERRIES   ;loop counter
+        lda LevelsComplete
+        sta S1                  ;temp counter
+        inc S1
         ldy #0                  ;indexed addr to 0
 .0
+        lda #EMPTY              ;empty tile to clear cherries if any are present
+        dec S1                  ;cherries drawn counter
+        bmi .blank                  ;skip drawing cherry
         lda #CHERRY
+.blank        
         sta (W1),Y              ;cherry on screen
         lda #RED
-        sta (W2),Y              ;make red
+        sta (W2),Y              ;make red in color ram
         add16Im W1,#22          ;bump screen ptr
         add16Im W2,#22          ;bump color ptr
         dex                     ;dec loop counter
