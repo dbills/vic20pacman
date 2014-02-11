@@ -1,5 +1,5 @@
 ;LARGEMEM equ 1                 ; generate code for 8k expansion
-;INVINCIBLE equ 1                ; pacman can't die
+INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY equ 1               ;enable master slowdown for debugging
 ;masterSpeed      equ 10 ;master game delay
 PACDEATHGFX equ 1        
@@ -760,13 +760,7 @@ WaitTime_ subroutine
         ENDM
 ;; beq on joy right A has bit 7 of last reading from JOY0B
         MAC onjoyr
-        lda #127
-        sta VIA2DDR             ;setup VIA for joystick read
         lda JOY0B               
-        pha
-        lda #$ff                ;restore VIA2 so keyboard can be read
-        sta VIA2DDR
-        pla                     ;pull out  our joystick reading
         and #JOYR
         ENDM
         
@@ -1526,26 +1520,24 @@ PowerPillOn SUBROUTINE
         sta EatenIdx            ;initial ghost bonus points
         lda PowerPillTime       ;init power pill time
         sta POWER_UP            ;store in timer
-        ldy #SPRITES-1          ;init loop counter
+        ldx #SPRITES-1          ;init loop counter
         ;; install new speed map for all sprites
 .loop
-        lda Sprite_mode,Y       ;#modeInBox
+        lda Sprite_mode,X       ;#modeInBox
         cmp #modeOutOfBox
         bne .0                  ;nope, skip
         ;; install sad ghost bitmaps to sprite
-        store16y BLUE_GHOST,Sprite_src
-        lda Sprite_speed2,Y     ;value from powerpill speed table
-        sta Sprite_speed,Y      ;into current speed table
-        lda #2
-        sta Sprite_turn,Y    ;
+        store16x BLUE_GHOST,Sprite_src
+        lda Sprite_speed2,X     ;value from powerpill speed table
+        jsr SetSpeed
         ;; ghost in the maze are now frightened
 ;        lda #modeFright
         lda #modeFright0
-        sta Sprite_mode,Y
+        sta Sprite_mode,X
 .0        
-        dey
+        dex
         bpl .loop               ;bpl skips pacman which is sprite 0
-
+        ldx #0  
 
         rts
         
@@ -2365,6 +2357,9 @@ main SUBROUTINE
         lda #$7f
         sta $911e               ;disable nmi
 
+        lda #127
+        sta VIA2DDR             ;setup VIA for joystick read
+
         lda #0
         sta $9113               ;joy VIA to input
         sta JIFFYL
@@ -3065,7 +3060,6 @@ ResetBlinky subroutine
 soundInc equ 3        
         MAC IncreasePanicLevel
         sei
-        stx BlinkyCruise
         lda XsirenTop+1
         clc
         adc #soundInc
@@ -3085,6 +3079,7 @@ soundInc equ 3
 ;;; X: in, blinky cruise level
 ;;; X clobbered
 IncreaseBlinky subroutine
+        stx BlinkyCruise        ;store the current blinky cruise mode
         ;; levels > 2 are done with the IncreaseBlinkyI routine
         ;; otherwise blinky can be increased with Sprite_speed adjustments
         lda LevelsComplete
@@ -3130,21 +3125,6 @@ DotEaten SUBROUTINE
 .noslowdown        
         ;; 
         ldy DOTCOUNT
-        lda BlinkyCruise
-        cmp #blinkyCruise2      ;already in cruise mode 2?
-        beq .01                 ;yes, no checking needed
-        cmp #blinkyCruise1
-        beq XBlinkyS2
-XBlinkyS1        
-        cpy #[totalDots/2]      ;time to go into mode 1
-        bcs XBlinkyS2           ;nope, skip mode 1
-        ldx #blinkyCruise1      ;select speed mode
-        jsr IncreaseBlinky      ;invoke
-XBlinkyS2
-        cpy #[totalDots/3]      ;time to go into mode 2?
-        bcs .01                 ;nope, skip mode2
-        ldx #blinkyCruise2      ;select speed mode into A
-        jsr IncreaseBlinky      ;invoke
 .01        
         lda #modeLeaving
 XPinkyDots        
@@ -3173,6 +3153,23 @@ XClydeDots
         ldx #clyde
         jsr LeaveBox
 .4
+        lda BlinkyCruise
+        cmp #blinkyCruise2      ;already in cruise mode 2?
+        beq .5                 ;yes, no checking needed
+        cmp #blinkyCruise1
+        beq XBlinkyS2
+XBlinkyS1        
+        cpy #[totalDots/2]      ;time to go into mode 1
+        bcs .5                  ;nope, skip mode 1
+        ldx #blinkyCruise1      ;select speed mode
+        jsr IncreaseBlinky      ;invoke
+        ldy DOTCOUNT            ;Y was clobbered by previous, remember this is dots remaining
+XBlinkyS2
+        cpy #[totalDots/3]      ;time to go into mode 2?
+        bcs .5                  ;< dots needed  skip mode2
+        ldx #blinkyCruise2      ;select speed mode into A
+        jsr IncreaseBlinky      ;invoke
+.5        
         resX
         rts
 ;;; return true ( Z=1 ) if character in A is a wall
@@ -3500,9 +3497,22 @@ FrightAI SUBROUTINE
         ;; to become our target tile
         store16 screen,W2       ;because ScreentoColRow uses W1
         jsr rand_8
-        add W2,r_seed           ;
+        pha
         jsr rand_8
-        add W2,r_seed
+        ;;  one random numbers are pushed on the stack
+        clc
+        adc W2+1
+        sta W2+1
+        lda #0
+        adc W2
+        sta W2
+        pla
+        clc
+        adc W2+1
+        sta W2+1
+        lda #0
+        adc W2
+        sta W2
         ;; W2 is the screen location of our target tile ;
 
         ScreenToColRow W2,GHOST_TGTCOL,GHOST_TGTROW
@@ -4107,11 +4117,11 @@ tail2tail SUBROUTINE
         ;; used when ghosts are exiting the tunnels
         ;; to restore their speed to what it was when they entered
         MAC RestoreSpeed
-        lda savedSpeed,X
-        pha
-        lda #0
-        sta savedSpeed,X
-        pla
+        ;; if ghosts are frightened leave their speed alone
+        lda Sprite_mode,X
+        cmp #modeFright
+        beq .done
+        lda Sprite_base,X
 .done        
         ENDM
 ;;; set speed, if need when entering a tunnel
@@ -4142,10 +4152,6 @@ DecrementHPos SUBROUTINE
 .0                      ;not exiting the tunnel
         cmp16Im W2,[tunnelRow*22]+tunnelLCol+tunnelLen+screen
         bne .1
-        lda savedSpeed,X
-        bne .1
-        lda Sprite_speed,X
-        sta savedSpeed,X
         ;; entered from the left
         lda #tunnelSpeed ;entered from left, slow down
 .set_speed
@@ -4173,8 +4179,6 @@ IncrementHPos SUBROUTINE
 .0        
         cmp16Im W2,[tunnelRow*22]+tunnelRCol-tunnelLen+screen
         bne .1
-        lda Sprite_speed,X
-        sta savedSpeed,X
         lda #tunnelSpeed         ; entered from the right
 .set_speed        
         jsr SetSpeed
@@ -4206,43 +4210,6 @@ IncrementHPos SUBROUTINE
         tya
         AddScroll
         jmp .done1
-.done0
-        tya
-.done1        
-        ENDM
-        ;; if blinky is in cruise elroy mode, he get's a plus one
-        ;; advantage to his scroll value when course scrolling
-        ;; account for that here
-        ;; do not use A in this routine unless you restore it
-        ;; {1} is the sprite location, this routine uses it
-        ;; to apply the bonus scroll on every course scroll
-        ;; or every other course scroll, depending on
-        ;; blinky's accel mode
-        MAC ApplyBlinkyBonus
-
-        ;; only worry about this routine if > level 2
-        lda LevelsComplete      
-        cmp #3
-        bcc .done1               ; < level 2, leave
-
-        brk
-        tay
-        cpx #blinky
-        bne .done1
-        lda BlinkyCruise
-        cmp #2
-        beq .0
-        cmp #1
-        bne .done0
-        lda {1}
-        and #1
-        bne .done0
-.0
-        tya
-;        brk
-        AddScroll
-        jmp .done1
-;        bcc .done1
 .done0
         tya
 .done1        
@@ -4299,8 +4266,6 @@ scroll_horiz SUBROUTINE
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
  ;       pla                      ;pull new sprite offset from the stack
         lda NewOffset
-;        ApplyBlinkyBonus W2
-;        ApplyAllBonus W2        ;
 .draw
         ApplyScroll
 
@@ -4616,8 +4581,6 @@ scroll_down2 SUBROUTINE
 .wasup        
         move16x2 W2,Sprite_loc2  ;save the new sprite screen location
         pla
-;        ApplyAllBonus W2
-;        ApplyBlinkyBonus W2       ;blinky's speed bonus on course scrolls
 .fine
         ApplyScroll
         sta Sprite_offset2,X
