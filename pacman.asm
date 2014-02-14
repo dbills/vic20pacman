@@ -963,32 +963,30 @@ Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
 ;;; ghosts try to find their way to these home tiles
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1,0
-sirenBase  equ 223
-sirenStep  equ 5
 ;WakaIdx    dc.b 0
 WakaTimer  dc.b 2        
-SirenTable      
-        dc.b sirenBase+[sirenStep*0]
-        dc.b sirenBase+[sirenStep*0]
-        dc.b sirenBase+[sirenStep*1]
-        dc.b sirenBase+[sirenStep*1]
-        dc.b sirenBase+[sirenStep*2]
-        dc.b sirenBase+[sirenStep*2]
-        dc.b sirenBase+[sirenStep*3]
-        dc.b sirenBase+[sirenStep*3]
+WakaTable      
+        dc.b 235
+        dc.b 238
+        dc.b 241
+        dc.b 243
+        dc.b 245
+        dc.b 247
+        dc.b 248
         dc.b 0
         dc.b 0
-        dc.b sirenBase+[sirenStep*3]
-        dc.b sirenBase+[sirenStep*3]
-        dc.b sirenBase+[sirenStep*2]
-        dc.b sirenBase+[sirenStep*2]
-        dc.b sirenBase+[sirenStep*1]
-        dc.b sirenBase+[sirenStep*1]
-        dc.b sirenBase+[sirenStep*0]
-        dc.b sirenBase+[sirenStep*0]
+        dc.b 0
+        dc.b 248
+        dc.b 247
+        dc.b 245
+        dc.b 243
+        dc.b 241
+        dc.b 238
+        dc.b 235
         dc.b 0
         dc.b 0
-SirenTableEnd
+        dc.b 0
+WakaTableEnd
 
 
 VolTableSz equ 15        
@@ -1702,7 +1700,7 @@ isr2 subroutine
         ldx WakaIdx
         bmi .reset
 .0        
-        ldy SirenTable,X
+        ldy WakaTable,X
         sty wakavoice
         dex
         stx WakaIdx
@@ -1720,7 +1718,7 @@ isr2_done2
         sta wakavoice           ;stop noise channel with 0
         beq isr2_done2
 .nothalted        
-        ldx #SirenTableEnd-SirenTable
+        ldx #WakaTableEnd-WakaTable
         bne .0                  ;jmp .0
 ;;; 
 ;;; silence all sound voices
@@ -4685,7 +4683,8 @@ copychar    SUBROUTINE
 #if 0
 
 TEXTS        
-        dv.b mkletter "C","O","D","E"
+        dv.b mkletter "C","O","D","E"
+
         dc.b 58|$80
         dv.b mkletter "D","A","N","E"
         dv.b mkletter "M","U","S","I","C"
