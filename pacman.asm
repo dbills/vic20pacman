@@ -2736,7 +2736,8 @@ MoveGhostI SUBROUTINE
         beq .left
         cmp #motionUp
         beq .up
-        brk
+;        brk
+        rts
 .left
         jsr scroll_left
         store16 GHOST,W3
@@ -3411,6 +3412,10 @@ RestoreSprite SUBROUTINE
 ;; .not        
         ENDM
 ;;; X ghost to check
+;;; the AI has determined a target tile for us
+;;; this routine looks at every possible move we could make
+;;; and figures out which one has the least Euclidean distance
+;;; to the target tile
 ;;; locals: S3,S4,S0 current min distance
 PossibleMoves SUBROUTINE
         lda #noChoice
