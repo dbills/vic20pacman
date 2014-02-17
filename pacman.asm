@@ -6,7 +6,7 @@ PACDEATHGFX equ 1
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-;BASIC equ 1  
+BASIC equ 1  
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -430,14 +430,7 @@ PACL            equ [GH3L+4]        ;pacman char number
         ENDM
         ;; double a signed byte
         MAC DoubleSigned
-        bpl .positive
-        Abs                     ;absolute value
         asl                     ;times 2
-        MakeNegative            ;make negative again
-        bmi .done
-.positive
-        asl                     ;simple times 2
-.done        
         ENDM
         ;; compare word in {1} with {2}
         MAC cmp16
@@ -2178,6 +2171,39 @@ end_level subroutine
         inc LevelsComplete      ;inc levels complete counter
         jsr DisplayLevelMeter   ;show cherries for level
         rts
+#ifconst LARGEMEM        
+;;; row 5 for panicman logo
+Vanity SUBROUTINE
+        lda #8
+        sta 36879
+        ;; 
+        store16 clrram,W2
+        store16 screen,W1
+        ldy #0
+.loop0
+        cmp16Im W2,clrram+22*23
+        beq .0
+        lda #BLUE
+        sta (W2),Y
+        lda #EMPTY
+        sta (W1),Y
+        inc16 W2
+        inc16 W1
+        jmp .loop0
+.0        
+        
+        store16 screen+(5*22)+3,W1
+        store16 panicman_msg,W2
+        jsr ndPrint
+        store16 dbills_msg,W2
+        store16 screen+(7*22)+3,W1
+        jsr ndPrint
+        store16 screen+(9*22)+3,W1
+        store16 jmessner_msg,W2
+        jsr ndPrint
+        jsr WaitFire
+        rts
+#endif        
 ;;; full game system reset
 ;;; called after game over
 ;;; 
@@ -2388,7 +2414,9 @@ main SUBROUTINE
         bne .loop2
         lda #0
         sta SirenTable,X
-
+#ifconst LARGEMEM
+        jsr Vanity
+#endif
         lda #modeResetGame      ;ask reset game to do full reset
         sta S1                  ;arg to reset_game below
 PacDeathEntry                   ;code longjmp's here on pacman death
@@ -3742,11 +3770,6 @@ Divide22_16 SUBROUTINE
         tax
 
         rts
-        ;; {1}=border {2}=background
-        MAC SetBorderAndBackgroundColor
-        lda #[{1}&%11]|[{2}&%f0]
-        sta 36879
-        ENDM
 
 ;;; 
 ;;; Service PACMAN, read joystick and move
@@ -4640,6 +4663,19 @@ gameover_msg
         dv.b mkletter "G","A","M","E"," ","O","V","E","R"
 gameover_msg_sz equ * - gameover_msg ; length of msg
         dc.b 0
+panicman_msg
+        dv.b mkletter "P","A","N","I","C","M","A","N"
+        dc.b 0
+jmessner_msg
+        dv.b mkletter "J"
+        dc.b EMPTY
+        dv.b mkletter "M","E","S","S","N","E","R"
+        dc.b 0
+dbills_msg
+        dv.b mkletter "D"
+        dc.b EMPTY
+        dv.b mkletter "B","I","L","L","S"
+        dc.b 0
 ;;; 
 ;;; non destructive print
 ;;; save text to SaveBuffer
@@ -4736,20 +4772,6 @@ TEXTE
 ;;; message box in center of screen
 splash subroutine
 
-        store16 clrram,W2
-        store16 screen,W1
-        ldy #0
-.loop0
-        cmp16Im W2,clrram+22*23
-        beq .0
-        lda #BLUE
-        sta (W2),Y
-        lda #EMPTY
-        sta (W1),Y
-        inc16 W2
-        inc16 W1
-        jmp .loop0
-.0        
 
         store16 screen+22*4,W1
 ;        add16Im W1,22
