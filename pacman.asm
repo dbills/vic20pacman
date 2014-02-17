@@ -6,7 +6,7 @@ PACDEATHGFX equ 1
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-BASIC equ 1  
+;BASIC equ 1  
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -81,6 +81,9 @@ Sprite_page     dc.b 0
         INCLUDE "bitmaps.asm"
         org $1400+$800          ;full 2K character set
 #endif        
+
+sirenBot equ 211+5-2
+sirenTop equ 222+5
 
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 LARGEMAZE   equ 1                 ;
@@ -307,6 +310,7 @@ BonusSound      equ Agonizer+1
 NewOffset       equ BonusSound+1 ; used by scroll_horiz routine
 PrevSprtMotion  equ NewOffset+1
 SirenTable      equ PrevSprtMotion+1 ;
+SirenOffset     equ SirenTable+((sirenTop-sirenBot)*2)
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -962,8 +966,7 @@ Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
 ;;; ghosts try to find their way to these home tiles
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1,0
-;WakaIdx    dc.b 0
-WakaTimer  dc.b 2        
+
 WakaTable      
         dc.b 235
         dc.b 238
@@ -1538,38 +1541,22 @@ PowerPillOn SUBROUTINE
         ldx #0  
 
         rts
-        
-sirenBot equ 211+5-2
-sirenTop equ 222+5
-;SirenDir dc.b 1
 ;;; 
 ;;; run the siren soundtrack
 ;;; siren changes pitch when blinky gets faster
 ;;; 
 isr3 subroutine
         ldy SirenIdx
-XsirenTop                       ;self modifying code
-        cpy #sirenTop
-        bcs .reverse
-XsirenBot                       ;self modifying code
-        cpy #sirenBot
-        bcc .reverse
-.add
-        tya
+        lda SirenTable,Y
+        beq .reset
         clc
-        adc SirenDir
-        sta SirenIdx
+        adc SirenOffset
         sta 36876
-.done
-
+        inc SirenIdx
         rts
-.reverse
-        lda #$ff
-        eor SirenDir
-        ora #1
-        sta SirenDir
-        bne .add                ;sirendir is never 0
-
+.reset
+        sta SirenIdx
+        rts
         
 ;;; power pill sound tale
 PowerPillTable dc.b 227,232,236,239,241,247,0 ;null terminated
@@ -2024,6 +2011,7 @@ reset_game subroutine
         sta Sprite_offset2,X
         sta Sprite_offset,X
         lda #0
+        sta SirenOffset
         sta BonusSound
         sta PwrFlashSt
         sta POWER_UP            ;power pill off
@@ -2380,10 +2368,26 @@ main SUBROUTINE
         sta VICSCRN
 #endif        
         ;; build the siren table
-;        lda #sirenBot
-;        ldx #0
-;        sta SirenTable,X
-
+        lda #sirenBot
+        sta S0
+        ldx #0
+.loop                           ;build table up
+        lda S0
+        sta SirenTable,X
+        inc S0
+        inx
+        cpx #sirenTop-sirenBot
+        bne .loop
+        
+.loop2                          ;build table down
+        lda S0
+        sta SirenTable,X
+        dec S0
+        inx
+        cpx #((sirenTop-sirenBot)*2)
+        bne .loop2
+        lda #0
+        sta SirenTable,X
 
         lda #modeResetGame      ;ask reset game to do full reset
         sta S1                  ;arg to reset_game below
@@ -3057,14 +3061,8 @@ ResetBlinky subroutine
         sei
         lda #blinkyCruiseOff
         sta BlinkyCruise
-        lda #sirenTop
-        sta XsirenTop+1
-        lda #sirenBot
-        sta XsirenBot+1
-        lda #sirenBot+1
-        sta SirenIdx
-        lda #1
-        sta SirenDir
+        lda #0
+        sta SirenOffset
         cli
         rts
 ;;;
@@ -3074,16 +3072,10 @@ ResetBlinky subroutine
 soundInc equ 3        
         MAC IncreasePanicLevel
         sei
-        lda XsirenTop+1
+        lda SirenOffset
         clc
         adc #soundInc
-        sta XsirenTop+1
-        lda XsirenBot+1
-        adc #soundInc
-        sta XsirenBot+1
-        lda SirenIdx
-        adc #soundInc
-        sta SirenIdx
+        sta SirenOffset
         cli
         ENDM
 ;;; increases the speed of blinky
