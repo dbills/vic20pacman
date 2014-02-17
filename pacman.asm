@@ -305,7 +305,8 @@ BonusAwarded    equ PwrFlashSt+1  ;true if bonus life was awarded
 Agonizer        equ BonusAwarded+1 ;keeps track of when to increment difficulty
 BonusSound      equ Agonizer+1
 NewOffset       equ BonusSound+1 ; used by scroll_horiz routine
-PrevSprtMotion  equ NewOffset+1        
+PrevSprtMotion  equ NewOffset+1
+SirenTable      equ PrevSprtMotion+1 ;
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -2118,6 +2119,7 @@ DisplayLevelMeter subroutine
         inc S1
         ldy #0                  ;indexed addr to 0
 .0
+        lda S2
         lda #EMPTY              ;empty tile to clear cherries if any are present
         dec S1                  ;cherries drawn counter
         bmi .blank                  ;skip drawing cherry
@@ -2377,9 +2379,10 @@ main SUBROUTINE
         ora #$0f                    ;char ram pointer is lower 4 bits
         sta VICSCRN
 #endif        
-        ;; lda $9002
-        ;; and %10000000           ;set to zero column
-        ;; sta $9002
+        ;; build the siren table
+;        lda #sirenBot
+;        ldx #0
+;        sta SirenTable,X
 
 
         lda #modeResetGame      ;ask reset game to do full reset
