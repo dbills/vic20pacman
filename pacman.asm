@@ -926,7 +926,7 @@ Speed_fast       equ 255        ;100%
 harder1          equ 2          ;level when ghost are speed standard
 harder2          equ 4          ;level when ghosts are faster
 ;Sprite_base      dc.b Speed_standard,Speed_slow,Speed_slow,Speed_slow,Speed_slow
-;Sprite_turn      dc.b 5,9,6,3,7        
+Sprite_turnbase  dc.b 5,9,6,3,7        
 Sprite_color     dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy timer for blinky
 blinkyCruise1    equ 1
@@ -1997,6 +1997,8 @@ reset_game subroutine
         lda inBoxTable,X
         sta Sprite_offset2,X
         sta Sprite_offset,X
+        lda Sprite_turnbase,X
+        sta Sprite_turn,X
         lda #0
         sta SirenOffset
         sta BonusSound
@@ -2006,7 +2008,7 @@ reset_game subroutine
         sta eat_halted
         sta eat_halt
         sta FruitIsOut
-        sta Sprite_turn,X
+;        sta Sprite_turn,X
         sta Sprite_page
         sta Sprite_frame,X
         sta Sprite_sback,X
@@ -2506,7 +2508,7 @@ MainLoop0
         beq .player1            ;only age fruit every other frame
         dec FruitIsOut
         bne .player1            ;fruit is still good, no worries
-        ;; fruit is spoiled , removed it
+      ;; fruit is spoiled , removed it
         lda #EMPTY              ;blank tile
         sta screen+cherryRow*22+cherryCol
 #endif        
