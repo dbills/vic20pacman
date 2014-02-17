@@ -6,7 +6,7 @@ PACDEATHGFX equ 1
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-;BASIC equ 1  
+BASIC equ 1  
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -426,17 +426,6 @@ PACL            equ [GH3L+4]        ;pacman char number
         eor #$ff
         clc
         adc #1
-.done        
-        ENDM
-        ;; double a signed byte
-        MAC DoubleSigned
-        bpl .positive
-        Abs                     ;absolute value
-        asl                     ;times 2
-        MakeNegative            ;make negative again
-        bmi .done
-.positive
-        asl                     ;simple times 2
 .done        
         ENDM
         ;; compare word in {1} with {2}
@@ -968,10 +957,9 @@ GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHo
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1,0
 
 WakaTable      
-        dc.b 235
-        dc.b 238
-        dc.b 241
-        dc.b 243
+        dc.b 236
+        dc.b 239
+        dc.b 242
         dc.b 245
         dc.b 247
         dc.b 248
@@ -981,10 +969,9 @@ WakaTable
         dc.b 248
         dc.b 247
         dc.b 245
-        dc.b 243
-        dc.b 241
-        dc.b 238
-        dc.b 235
+        dc.b 242
+        dc.b 239
+        dc.b 236
         dc.b 0
         dc.b 0
         dc.b 0
@@ -2323,11 +2310,6 @@ main SUBROUTINE
 #endif        
 #if 0
         lda #$ea
-        DoubleSigned
-        brk
-#endif
-#if 0
-        lda #$ea
         STA BCD
         ldx #0
         jsr DisplayBCD
@@ -3497,7 +3479,7 @@ PossibleMoves SUBROUTINE
         lda {1}
         sec
         sbc {2}
-        DoubleSigned            ;adding this qty to blinky's position gives the target tile
+        asl             ;DoubleSigned -adding this qty to blinky's position gives the target tile
         sta {3}
         lda {1}
         sec
