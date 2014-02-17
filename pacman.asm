@@ -1,12 +1,12 @@
 ;LARGEMEM equ 1                 ; generate code for 8k expansion
-;INVINCIBLE equ 1                ; pacman can't die
+INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY equ 1               ;enable master slowdown for debugging
 ;masterSpeed      equ 10 ;master game delay
 PACDEATHGFX equ 1        
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-;BASIC equ 1  
+BASIC equ 1  
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -77,7 +77,7 @@ Sprite_page     dc.b 0
 Sprite_page     dc.b 0
 #endif
 #ifconst LARGEMEM
-        org $1400
+        org $1400-(8*3)
         INCLUDE "bitmaps.asm"
         org $1400+$800          ;full 2K character set
 #endif        
@@ -101,8 +101,8 @@ clroffset   equ $78               ;offset from screen to color
 screen      equ $1e00             ;3k ram
 clrram      equ $9600             ; color ram for screen (3k)
 #endif        
-;defaultISR  equ $eabf             ;os default IRQ
-defaultISR  equ  $eb15        
+;defaultISR  equ $eabf            ;os default IRQ
+defaultISR  equ  $eb15            ;the minimum isr ( no keyboard polling or other stuff )
 defaultVol  equ 8                 ;default volume for app
 VICRASTER   equ $9004        
 VICSCRN     equ $9005             ;vic chip character generator pointer
@@ -216,7 +216,7 @@ PACROW          equ PACCOL+1         ;current pacman row
 ;;; directional changing routines ( up,left etc )
 GHOST_TGTCOL    equ PACROW+1
 GHOST_TGTROW    equ GHOST_TGTCOL+1
-GHOST1_TGTCOL   equ GHOST_TGTROW+1
+GHOST1_TGTCOL   equ GHOST_TGTROW+1 ;blinkys target tile? calculated from pinky's routine
 GHOST1_TGTROW   equ GHOST1_TGTCOL+1
 ;;; amount sprite move routines can shave off during cornering
 ;;; pacman get +1 on corners, ghosts get 0
@@ -305,6 +305,7 @@ BonusAwarded    equ PwrFlashSt+1  ;true if bonus life was awarded
 Agonizer        equ BonusAwarded+1 ;keeps track of when to increment difficulty
 BonusSound      equ Agonizer+1
 NewOffset       equ BonusSound+1 ; used by scroll_horiz routine
+PrevSprtMotion  equ NewOffset+1        
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -378,7 +379,7 @@ PACL            equ [GH3L+4]        ;pacman char number
         ENDM
         ;; test if jiffy timer > timer1
         MAC HasTimerExpired
-        
+           sei                  ;disable interrupt while we compare against the clock
            LDA JIFFYH  ; compare high bytes
            CMP {1}+2
            BCC .LABEL2 ; if JIFFYH < NUM2H then NUM1 < NUM2
@@ -391,8 +392,10 @@ PACL            equ [GH3L+4]        ;pacman char number
            CMP {1}
            BCC .LABEL2 ; if NUM1L < NUM2L then NUM1 < NUM2
 .LABEL1        ;; notify timer1 expired
+           cli
            jsr {2}
 .LABEL2
+           cli
         ENDM
         ;; compare {1} with #{2} 
         MAC cmp16Im
@@ -482,9 +485,7 @@ PACL            equ [GH3L+4]        ;pacman char number
 ;;; display in hex
 ;;; display a single byte {3} at offset {2} on top line prefixed by char {1}
         MAC Display1
-        pha                     ;save A
-        txa
-        pha
+        saveAll
         
         lda #[{1}-"A"+1 | $80]
         ldx #{2}
@@ -507,10 +508,7 @@ PACL            equ [GH3L+4]        ;pacman char number
         sta BCD
         jsr DisplayBCD
 #endif        
-        pla
-        tax
-
-        pla                     ;restore A
+        resAll
 
         ENDM
 WaitTime_ subroutine
@@ -2350,10 +2348,13 @@ main SUBROUTINE
         lda $a2                 ;jiffy as random seed
         beq .try_again          ;can't be zero
         sta r_seed
-
         
-        sei
-;        store16 isr2_done2,$0314 ;replace standard isr with minimal ISR ( jiffy clock only )
+        sei                     ;disable interrupts
+;        store16 maingo,$0316    ;on error, restart game
+        ldx #$ff                ;init stack to top of page 1
+        txs
+        stx ResetPoint
+        store16 defaultISR,$0314 ;replace standard isr with minimal ISR ( jiffy clock only )
         lda #$7f
         sta $911e               ;disable nmi
 
@@ -2380,8 +2381,6 @@ main SUBROUTINE
         ;; and %10000000           ;set to zero column
         ;; sta $9002
 
-        tsx
-        stx ResetPoint
 
         lda #modeResetGame      ;ask reset game to do full reset
         sta S1                  ;arg to reset_game below
@@ -2991,7 +2990,18 @@ GhostTurn
         bne .continue
         jsr Ghost1AI
 .continue
+        ;; this is a hack due to some bugs in the AI routine
+        ;; for inky right now -- check if the AI decided upon a move
+        ;; if not, keep going in the previous direction
+        lda Sprite_motion,X
+        sta PrevSprtMotion
         jsr PossibleMoves
+        lda #noChoice
+        cmp GHOST_DIR
+        bne .isok
+        lda PrevSprtMotion
+        sta GHOST_DIR
+.isok        
 ;        cpx #focusGhost
 ;        bne .notfocus
 ;        Display1 "G",17,GHOST_DIR
@@ -3481,18 +3491,27 @@ PossibleMoves SUBROUTINE
 .endright        
 .done
         rts
-;;;  BlinkyRow,pacrow+2,inky target row
+;;; this routine calculates inky's target tile
+;;; for either X or Y
+;;; 
+;;; arguments are:
+;;;  BlinkyRow,pacrow+2,inky target row (output)
 ;;;  e.g. foo DIV22_RESLT,GHOST1_TGTROW,GHOST_TGTROW
         MAC InkyTargetTile
         lda {1}
         sec
         sbc {2}
-        DoubleSigned
+        DoubleSigned            ;adding this qty to blinky's position gives the target tile
         sta {3}
         lda {1}
         sec
         sbc {3}
+;        clc
+;        adc {3}
         sta {3}
+        bvc .end1
+        brk
+.end1        
         ENDM
 
 ;;; ghost running away AI
@@ -3608,7 +3627,8 @@ Ghost1AI SUBROUTINE
 
         ;; our initial target it 2 in front of pacman
         ;; we'll leverage ghost 3's work for us
-        ;; his target tile was 4 in front of pacman
+        ;; his target tile was 4 in front of pacman and he already did
+        ;; pac+2 for us in GHOST1_TGT
         saveX
 
         ;; blinky ( ghost 2 ) calculated just before us, so we'll use
@@ -3616,15 +3636,17 @@ Ghost1AI SUBROUTINE
         ldx #2
         move16x Sprite_loc2,W1
         sub16Im W1,screen ;w1 = offset from screen start, input to divide
-        jsr Divide22_16
-        lda DIV22_RSLT          ;blinky's row
+        jsr Divide22_16   ;DIV22_RSLT = blinky's row, W1 = col
+;        Display1 "Y",2,GHOST1_TGTROW
+;        Display1 "X",5,GHOST1_TGTCOL
+        
         ;; determine the Y distance between blinky and our target tile
         ;; then , double it
         InkyTargetTile DIV22_RSLT,GHOST1_TGTROW,GHOST_TGTROW
         InkyTargetTile W1,GHOST1_TGTCOL,GHOST_TGTCOL
 
-;        Display1 "Y",22,GHOST_TGTROW
-;        Display1 "X",25,GHOST_TGTCOL
+;        Display1 "Y",2,GHOST_TGTROW
+;        Display1 "X",5,GHOST_TGTCOL
         ;; should have our final target tile
         
         resX
@@ -3639,6 +3661,8 @@ Ghost2AI  SUBROUTINE
         sta GHOST_TGTCOL
         lda PACROW
         sta GHOST_TGTROW
+;        Display1 "Y",2,GHOST_TGTROW
+;        Display1 "X",5,GHOST_TGTCOL
         rts
 ;;; ghost 1 AI ( Pinky )
 Ghost3AI SUBROUTINE
@@ -4683,6 +4707,22 @@ copychar    SUBROUTINE
         jmp .loop
 .done
         rts
+
+;;; 
+;;; Display a BCD number
+DisplayBCD SUBROUTINE
+        lda BCD
+        lsr
+        lsr
+        lsr
+        lsr
+        DisplayBCDDigit
+        lda BCD
+        and #$0f
+        inx
+        DisplayBCDDigit
+        rts
+
 #endif                          ;LARGEMEM
         
 #if 0
@@ -4732,20 +4772,6 @@ splash subroutine
         bne .loop
 
 .done        
-        rts
-;;; 
-;;; Display a BCD number
-DisplayBCD SUBROUTINE
-        lda BCD
-        lsr
-        lsr
-        lsr
-        lsr
-        DisplayBCDDigit
-        lda BCD
-        and #$0f
-        inx
-        DisplayBCDDigit
         rts
 #endif        
 #if 0        
@@ -4823,40 +4849,11 @@ done:
         rts
 #endif        
 
-
-        org $1c00-(8*3)
-BIT_DEATH1
-	dc.b %00000000
-	dc.b %01000010
-	dc.b %11000011
-	dc.b %11100111
-	dc.b %11111111
-	dc.b %11111111
-	dc.b %01111110
-	dc.b %00111100
-BIT_DEATH2
-	dc.b %00000000
-	dc.b %00000000
-	dc.b %01000010
-	dc.b %11100111
-	dc.b %11111111
-	dc.b %11111111
-	dc.b %01111110
-	dc.b %00111100
-BIT_DEATH3
-	dc.b %00000000
-	dc.b %00000000
-	dc.b %00000000
-	dc.b %11100111
-	dc.b %01111110
-	dc.b %01111110
-	dc.b %00111100
-	dc.b %00000000
 ;;;
 ;;;
 ;;;
 #ifnconst LARGEMEM        
-        org $1c00
+        org $1c00-(8*3)
         INCLUDE "bitmaps.asm"
 #endif
         
