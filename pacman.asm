@@ -158,7 +158,7 @@ tunnelLCol      equ 1           ;column to start warp to right side
 tunnelLen       equ 3           ;length of tunnel
 tunnelSpeed     equ 2           ;Sprite_speed setting for tunnel
 ;;; amount of time a fruit is display
-fruitTime       equ 255
+fruitTime       equ 140
         
 BLACK        equ 0
 WHITE        equ 1
@@ -2485,6 +2485,8 @@ MainLoop0
         sta clrram+cherryRow*22+cherryCol
 #ifconst AGEFRUIT
         ;; age the fruit, so it dissappears after a while
+        lda Sprite_page
+        beq .player1            ;only age fruit every other frame
         dec FruitIsOut
         bne .player1            ;fruit is still good, no worries
         ;; fruit is spoiled , removed it
@@ -3061,8 +3063,7 @@ ResetBlinky subroutine
         sei
         lda #blinkyCruiseOff
         sta BlinkyCruise
-        lda #0
-        sta SirenOffset
+        sta SirenOffset         ;should be 0
         cli
         rts
 ;;;
