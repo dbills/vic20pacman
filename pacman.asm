@@ -1,5 +1,5 @@
 ;LARGEMEM equ 1                 ; generate code for 8k expansion
-INVINCIBLE equ 1                ; pacman can't die
+;INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY equ 1               ;enable master slowdown for debugging
 ;masterSpeed      equ 10 ;master game delay
 PACDEATHGFX equ 1        
@@ -310,7 +310,7 @@ BonusSound      equ Agonizer+1
 NewOffset       equ BonusSound+1 ; used by scroll_horiz routine
 PrevSprtMotion  equ NewOffset+1
 SirenTable      equ PrevSprtMotion+1 ;
-SirenOffset     equ SirenTable+((sirenTop-sirenBot)*2)
+SirenOffset     equ SirenTable+((sirenTop-sirenBot)*2)+1
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
