@@ -428,13 +428,6 @@ PACL            equ [GH3L+4]        ;pacman char number
         adc #1
 .done        
         ENDM
-<<<<<<< HEAD
-        ;; double a signed byte
-        MAC DoubleSigned
-        asl                     ;times 2
-        ENDM
-=======
->>>>>>> ad0d7976921d226144f516e170b05ac440df7a51
         ;; compare word in {1} with {2}
         MAC cmp16
         lda {1}+1
