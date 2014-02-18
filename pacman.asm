@@ -1,4 +1,4 @@
-;LARGEMEM equ 1                 ; generate code for 8k expansion
+LARGEMEM equ 1                 ; generate code for 8k expansion
 ;INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY equ 1               ;enable master slowdown for debugging
 ;masterSpeed      equ 10 ;master game delay
@@ -31,9 +31,9 @@ AGEFRUIT equ 1
 ;NOGHOSTDOTS equ 1
 ;;; uncomment to show chase/scatter mode debugging at top of screen
 ;SHOWTIMER1 equ 1
-;;; score when a bonus life is given ( the middle byte of a BCD number )
-;;; e.g. 8000 points is 008000 or $80
-BONUSLIFE equ $80
+;;; score when a bonus life is given ( the high byte of a 3 byte BCD number )
+;;; e.g. 10000 points is 010000 or $01
+BONUSLIFE equ $01
 ;;; if uncommented, play the intro music
 ACTORINTRO equ 1                ;
 ;;;
@@ -3521,12 +3521,12 @@ PossibleMoves SUBROUTINE
         lda {1}
         sec
         sbc {3}
+        bpl .notneg
+        lda #0
+.notneg   
 ;        clc
 ;        adc {3}
         sta {3}
-        bvc .end1
-        brk
-.end1        
         ENDM
 
 ;;; ghost running away AI
@@ -3640,11 +3640,12 @@ Ghost4AI SUBROUTINE
 ;;; and uses the result as his target tile
 Ghost1AI SUBROUTINE
 
-        ;; our initial target it 2 in front of pacman
-        ;; we'll leverage ghost 3's work for us
-        ;; his target tile was 4 in front of pacman and he already did
-        ;; pac+2 for us in GHOST1_TGT
         saveX
+        ;; our initial target it 2 in front of pacman
+        ;; we'll leverage ghost 3's routines for us
+        ;; his target tile is 4 in front of pacman and he can
+        ;; calc +2 for is
+        jsr Ghost3AI
 
         ;; blinky ( ghost 2 ) calculated just before us, so we'll use
         ;; his position
@@ -4378,7 +4379,7 @@ DisplayScore subroutine
         ;; check if bonus life
         lda BonusAwarded
         bne .done
-        lda PlayerScore_m
+        lda PlayerScore_h
         cmp #BONUSLIFE
         bcc .done
         jsr IncrementLives
@@ -4480,6 +4481,8 @@ changehoriz SUBROUTINE
         cmp #modeFright         ;are we frightened out of box mode?
         beq .done               ;yes, then its considered a wall
         cmp #modePacman         ;and pacman ain't allowed in here
+        beq .done
+        cmp #modeFright0
         beq .done
         ;; we are eaten or leaving the box, this move is ok
         ;note: Z=0
@@ -4654,6 +4657,7 @@ gameover_msg
         dv.b mkletter "G","A","M","E"," ","O","V","E","R"
 gameover_msg_sz equ * - gameover_msg ; length of msg
         dc.b 0
+#ifconst LARGEMEM
 panicman_msg
         dv.b mkletter "P","A","N","I","C","M","A","N"
         dc.b 0
@@ -4667,6 +4671,7 @@ dbills_msg
         dc.b EMPTY
         dv.b mkletter "B","I","L","L","S"
         dc.b 0
+#endif        
 ;;; 
 ;;; non destructive print
 ;;; save text to SaveBuffer
