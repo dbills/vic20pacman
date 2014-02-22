@@ -82,8 +82,8 @@ Sprite_page     dc.b 0
         org $1400+$800          ;full 2K character set
 #endif        
 
-sirenBot equ 211+5-2
-sirenTop equ 222+5
+sirenBot equ 227
+sirenTop equ 238
 
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 LARGEMAZE   equ 1                 ;
