@@ -1406,15 +1406,9 @@ Timer1Expired SUBROUTINE
         ldy ChaseTableIdx       ;load current table entry
         ;;
         cpy #5
-        bne .next0
-        ldx #inky
-        jsr LeaveBox
+        bne .next
         ldx #pinky
         jsr LeaveBox
-.next0        
-        cpy #4
-        bne .next               ;second interval yet?
-        ;; yes, send clyde out
         ldx #clyde
         jsr LeaveBox
 .next    
