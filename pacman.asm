@@ -6,7 +6,7 @@ PACDEATHGFX equ 1
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-BASIC equ 1    
+BASIC equ 1
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -1433,7 +1433,7 @@ initChaseTimer
         lda JIFFYM
         adc TIMER1+1
         sta TIMER1+1
-        lda TIMER1_hh
+        lda JIFFYH
         adc #0
         sta TIMER1_hh
         cli                     ;re-enable interrupts
