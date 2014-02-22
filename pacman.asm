@@ -1,4 +1,4 @@
-;LARGEMEM equ 1                 ; generate code for 8k expansion
+LARGEMEM equ 1                 ; generate code for 8k expansion
 ;INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY equ 1               ;enable master slowdown for debugging
 ;masterSpeed      equ 10 ;master game delay
@@ -6,7 +6,7 @@ PACDEATHGFX equ 1
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-;BASIC equ 1    
+BASIC equ 1    
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -30,7 +30,7 @@ AGEFRUIT equ 1
 ;;; 
 ;NOGHOSTDOTS equ 1
 ;;; uncomment to show chase/scatter mode debugging at top of screen
-;SHOWTIMER1 equ 1
+SHOWTIMER1 equ 1
 ;;; score when a bonus life is given ( the high byte of a 3 byte BCD number )
 ;;; e.g. 10000 points is 010000 or $01
 BONUSLIFE equ $01
@@ -1980,7 +1980,10 @@ reset_game subroutine
         sta Sprite_turn,X
         ;; initialize a bunch of variables that can be 0
         ;; on start
-        lda #0
+        lda #0                  
+        sta JIFFYL              ;game timer to 0
+        sta JIFFYM
+        sta JIFFYH
         sta SirenOffset
         sta BonusSound
         sta PwrFlashSt
@@ -2353,9 +2356,6 @@ main SUBROUTINE
 
         lda #0
         sta $9113               ;joy VIA to input
-        sta JIFFYL
-        sta JIFFYM
-        sta JIFFYH
 
         lda VICSCRN
 #ifconst LARGEMEM
