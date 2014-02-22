@@ -1,4 +1,4 @@
-LARGEMEM equ 1                 ; generate code for 8k expansion
+;LARGEMEM equ 1                 ; generate code for 8k expansion
 ;INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY equ 1               ;enable master slowdown for debugging
 ;masterSpeed      equ 10 ;master game delay
@@ -30,7 +30,7 @@ AGEFRUIT equ 1
 ;;; 
 ;NOGHOSTDOTS equ 1
 ;;; uncomment to show chase/scatter mode debugging at top of screen
-SHOWTIMER1 equ 1
+;SHOWTIMER1 equ 1
 ;;; score when a bonus life is given ( the high byte of a 3 byte BCD number )
 ;;; e.g. 10000 points is 010000 or $01
 BONUSLIFE equ $01
@@ -843,7 +843,7 @@ pinky           equ 3
 clyde           equ 4
 nobody          equ 10        
 focusGhost      equ nobody       ;ghost to print debugging for
-totalDots       equ $A2          ;total dots in maze
+totalDots       equ $A2+4        ;total dots in maze
 ;totalDots       equ 10          ;total dots in maze
 fruit1Dots      equ 70           ;dots to release fruit
 fruit2Dots      equ 120          ;dots to release fruit2
@@ -1200,6 +1200,7 @@ CheckFood subroutine
 #ifnconst NOGHOSTDOTS
         jsr DotEaten
 #endif
+.checkdots        
         ;; handle eating dots
         ;; and figuring out if the level is over
         dec DOTCOUNT
@@ -1225,7 +1226,8 @@ CheckFood subroutine
         lda #1
         jmp isr5_reset          ;activate fruit sound player, rts for us
 .power_pill        
-        jmp PowerPillOn         ;rts for us
+        jsr PowerPillOn         ;rts for us
+        jmp .checkdots
 
 ;;; X = sprite to erase
 ;;; if we are erasing pacman then we need to check if he just ate something
