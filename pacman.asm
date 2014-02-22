@@ -1,4 +1,4 @@
-LARGEMEM equ 1                 ; generate code for 8k expansion
+;LARGEMEM equ 1                 ; generate code for 8k expansion
 ;INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY equ 1               ;enable master slowdown for debugging
 ;masterSpeed      equ 10 ;master game delay
@@ -6,7 +6,7 @@ PACDEATHGFX equ 1
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-BASIC equ 1  
+;BASIC equ 1    
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -944,7 +944,7 @@ softTimerRes   equ 60
 ;;; 7 seconds, 20 seconds, etc...
 ;;; even values are scatter mode, odd are chase mode
 ;;; iteration starts from end 
-ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 20*softTimerRes, 8*softTimerRes
+ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 20*softTimerRes, 7*softTimerRes
 ChaseTableEnd
 ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
 ;;; 
@@ -979,21 +979,6 @@ WakaTableEnd
 
 
 VolTableSz equ 15        
-        MAC MoveSpriteDown
-        saveX
-        txa
-        asl
-        tax
-        lda Sprite_loc,X
-        clc
-        adc #22
-        sta Sprite_loc,X
-        inx
-        lda Sprite_loc,X
-        adc #0
-        sta Sprite_loc,X
-        resX
-        ENDM
 ;;; swap upcoming sprite data with current sprite data
 ;;; i.e. page flip the screen location
         MAC SwapSpritePos
@@ -1999,6 +1984,8 @@ reset_game subroutine
         sta Sprite_offset,X
         lda Sprite_turnbase,X
         sta Sprite_turn,X
+        ;; initialize a bunch of variables that can be 0
+        ;; on start
         lda #0
         sta SirenOffset
         sta BonusSound
@@ -2040,7 +2027,7 @@ reset_game subroutine
 #else
         lda #motionUp
         sta Sprite_motion+3
-#endif        
+#endif
         lda #motionLeft
         sta Sprite_motion+2
         sta Sprite_motion+4
@@ -2066,6 +2053,8 @@ reset_game subroutine
         sta SirenDir
         sta PACFRAMED
         
+        lda #modeLeaving
+        sta Sprite_mode+1       ;inky leaves right away
 #if 0
         ;; store the time the level was started
         lda JIFFYL
@@ -2375,12 +2364,12 @@ main SUBROUTINE
         sta JIFFYH
 
         lda VICSCRN
-        and #$f0
 #ifconst LARGEMEM
         ora #%1101              ;$1400 char ram
         sta VICSCRN
         jsr copychar
 #else        
+;        and #$f0
         ora #$0f                    ;char ram pointer is lower 4 bits
         sta VICSCRN
 #endif        
