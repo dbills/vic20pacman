@@ -91,7 +91,7 @@ sirenTop equ 238
 
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 LARGEMAZE   equ 1                 ;
-;_debug      equ 1                 ; true for debugging
+_debug      equ 1                 ; true for debugging
 cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
 wakavoice   equ 36874        
 voice1      equ 36874             ; sound registers
@@ -304,7 +304,7 @@ eat_halt        equ SirenDir+1
 ;;; signals that the waka sound is stopped
 eat_halted      equ eat_halt+1
 WakaIdx         equ eat_halted+1
-flashRate       equ 20            ;in 60s second
+flashRate       equ 14            ;in 60s second
 PwrFlashCnt     equ WakaIdx+1   ;countdown to flash power pill
 PwrFlashSt      equ PwrFlashCnt+1 ;state of power pill flash 0 = blank
 bonusInterval   equ 7            ;sound interval for award noise
@@ -1141,15 +1141,11 @@ render_sprite SUBROUTINE
         sta S1                  ;setup for blitd,blith,blitc
         blitc        ;
         lda Sprite_dir2,X
-#ifconst _debug        
         cmp #dirHoriz
         beq .horiz
-#endif        
         cmp #dirVert
         beq .vert
-#ifconst _debug
         brk
-#endif        
 .horiz        
         blith
         rts
@@ -1377,9 +1373,7 @@ ReverseDirection subroutine
         beq .left
         cmp #motionUp
         beq .up
-#ifconst _debug
         brk
-#endif        
 .left
         lda #motionRight
         rts
@@ -3374,15 +3368,11 @@ ones:
         sta {4}
         lda Sprite_offset,X
         ldy Sprite_dir,X
-#ifconst _debug        
         cpy #dirVert
         beq .vert
-#endif        
         cpy #dirHoriz
         beq .horiz
-#ifconst _debug        
         brk                     ;unknown
-#endif        
 .vert
         clc
         adc {4}
@@ -3722,15 +3712,11 @@ Ghost2AI  SUBROUTINE
 Ghost3AI SUBROUTINE
         lda Sprite_dir
         ldy Sprite_motion
-#ifconst _debug        
         cmp #1
         beq .horiz
-#endif        
         cmp #22
         beq .vert
-#ifconst _debug        
         brk
-#endif        
 .horiz                          ;pacman is horizontal
         lda PACROW
         sta GHOST_TGTROW
