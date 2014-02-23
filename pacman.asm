@@ -41,6 +41,10 @@ ACTORINTRO equ 1                ;
 ;;; comment out to cause no ghost movement
 GHOSTS_ON   equ 1    ;
 ;;;
+;;; uncomment to see the matrix
+;;; mode, that is no video chars
+;MATRIX equ 1
+;;;
 ;;; allow the ghost to be moved with
 ;;; keyboard commands
 ;;; 
@@ -87,7 +91,7 @@ sirenTop equ 238
 
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 LARGEMAZE   equ 1                 ;
-_debug      equ 1                 ; true for debugging
+;_debug      equ 1                 ; true for debugging
 cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
 wakavoice   equ 36874        
 voice1      equ 36874             ; sound registers
@@ -311,6 +315,7 @@ NewOffset       equ BonusSound+1 ; used by scroll_horiz routine
 PrevSprtMotion  equ NewOffset+1
 SirenTable      equ PrevSprtMotion+1 ;
 SirenOffset     equ SirenTable+((sirenTop-sirenBot)*2)+1
+PowerSnd2Idx    equ SirenOffset+1
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -1136,11 +1141,15 @@ render_sprite SUBROUTINE
         sta S1                  ;setup for blitd,blith,blitc
         blitc        ;
         lda Sprite_dir2,X
+#ifconst _debug        
         cmp #dirHoriz
         beq .horiz
+#endif        
         cmp #dirVert
         beq .vert
+#ifconst _debug
         brk
+#endif        
 .horiz        
         blith
         rts
@@ -1368,7 +1377,9 @@ ReverseDirection subroutine
         beq .left
         cmp #motionUp
         beq .up
+#ifconst _debug
         brk
+#endif        
 .left
         lda #motionRight
         rts
@@ -1528,11 +1539,45 @@ isr3 subroutine
         
 ;;; power pill sound tale
 PowerPillTable dc.b 227,232,236,239,241,247,0 ;null terminated
-
+;;; macro to generate a table based sound player
+;;; {1} the table index
+;;; {2} the voice
+;;; {3} the table base
+        MAC TableSoundPlayer
+        ldy {1}
+        lda {3},Y
+        beq {4}
+        sta {2}
+        inc {1}
+        rts
+{4}
+        sta {1}        ;reset index to 0
+        rts
+        ENDM
+;;; the eyes eating sond
+;;;
+EyesEatenSoundTable
+        dc.b 249,249,249,249,248,248,247,247,246,246,245,244,243,242,0
 ;;;
 ;;; pacman powerpill sound
 ;;; 
 isr4 subroutine
+        ldx #5
+        ;;figure out if there are any eyes in the
+        ;; maze
+.loop0        
+        lda Sprite_mode,X
+        cmp #modeEaten
+        beq .eyessound
+        dex
+        bpl .loop0
+.noeyes        
+        TableSoundPlayer PowerPillPtr,36876,PowerPillTable,isr4_reset
+        
+.eyessound
+        TableSoundPlayer PowerSnd2Idx,36876,EyesEatenSoundTable,whatever
+        
+#if 0        
         ldy PowerPillPtr
         lda PowerPillTable,Y
         beq isr4_reset
@@ -1542,6 +1587,7 @@ isr4 subroutine
 isr4_reset
         sta PowerPillPtr        ;reset index to 0
         rts
+#endif        
 ;;; bonus life sound
 isr6 subroutine
         dec BonusSound
@@ -1986,6 +2032,7 @@ reset_game subroutine
         sta JIFFYL              ;game timer to 0
         sta JIFFYM
         sta JIFFYH
+        sta PowerSnd2Idx
         sta SirenOffset
         sta BonusSound
         sta PwrFlashSt
@@ -2367,7 +2414,9 @@ main SUBROUTINE
 #else        
 ;        and #$f0
         ora #$0f                    ;char ram pointer is lower 4 bits
+#ifnconst MATRIX        
         sta VICSCRN
+#endif        
 #endif        
         ;; build the siren table
         lda #sirenBot
@@ -2690,7 +2739,7 @@ scroll_down SUBROUTINE
         sta END_SCRL_VAL
         lda #1
         sta SCRL_VAL
-        jmp scroll_down2        ;rts for us
+        jmp scroll_vertical        ;rts for us
 
 scroll_up SUBROUTINE
         lda #motionUp
@@ -2699,7 +2748,7 @@ scroll_up SUBROUTINE
         sta END_SCRL_VAL
         lda #-1
         sta SCRL_VAL
-        jmp scroll_down2        ;rts for us
+        jmp scroll_vertical        ;rts for us
 
 
 scroll_left SUBROUTINE
@@ -3325,11 +3374,15 @@ ones:
         sta {4}
         lda Sprite_offset,X
         ldy Sprite_dir,X
+#ifconst _debug        
         cpy #dirVert
         beq .vert
+#endif        
         cpy #dirHoriz
         beq .horiz
+#ifconst _debug        
         brk                     ;unknown
+#endif        
 .vert
         clc
         adc {4}
@@ -3669,11 +3722,15 @@ Ghost2AI  SUBROUTINE
 Ghost3AI SUBROUTINE
         lda Sprite_dir
         ldy Sprite_motion
+#ifconst _debug        
         cmp #1
         beq .horiz
+#endif        
         cmp #22
         beq .vert
+#ifconst _debug        
         brk
+#endif        
 .horiz                          ;pacman is horizontal
         lda PACROW
         sta GHOST_TGTROW
@@ -3923,7 +3980,6 @@ DeathDistance equ 3
         ;; control cannot reach here
         rts                     ;leave this here for debugging and commenting jsr death out
 .ghost_eaten                    ;pacman has eaten a ghost in the maze
-
         lda #modeEaten          ;load eaten mode
         cmp Sprite_mode,X       ;check if already in eaten mode
         beq .done               ;already eaten, skip ahead
@@ -4060,7 +4116,6 @@ SPRT_CUR set S2                 ;current sprite
         jsr tail2tail
 .not_tail2tail        
         jmp .loop               ;all possible collisions checked
-        brk
         
 ;;; handle tail to head collisions
 ;;; X is the indexed sprite
@@ -4568,8 +4623,8 @@ ChangeVertFailed       ; we can't change directions  in middle of tile
         sta {1}+1
         resX
         ENDM
-
-scroll_down2 SUBROUTINE
+        
+scroll_vertical SUBROUTINE
         lda Sprite_dir,X
         cmp #dirVert            ;check if already vertical
         beq .00
