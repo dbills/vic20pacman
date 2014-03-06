@@ -1,6 +1,8 @@
 #
 all:
-	dasm pacman.asm -opac.p00;dasm pacman.asm -opac.p00 -lpac.lst
+	dasm pacman.asm -DLARGEMEM=1 -opanicman8k.prg;dasm pacman.asm -opa -lpanicman8k.lst
+	dasm pacman.asm -opanicman3k.prg;dasm pacman.asm -opa -lpanicman3k.lst
+
 maze:
 	perl mz1.pl < pacmaze.txt > maze.asm
 

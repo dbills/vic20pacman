@@ -1,4 +1,6 @@
+#ifnconst LARGEMEM              ;if it wasn't specified on the command line
 ;LARGEMEM equ 1                 ; generate code for 8k expansion
+#endif        
 ;INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY equ 1               ;enable master slowdown for debugging
 ;masterSpeed      equ 10 ;master game delay
@@ -60,13 +62,13 @@ GHOSTS_ON   equ 1    ;
 ;;; title name: Panicman
 ;;; 
 #ifconst LARGEMEM
-        org $1200
+        org $1201
 #else        
-        org $0400
+        org $0401
 #endif        
         processor 6502
 #ifconst BASIC
-Sprite_page     dc.b 0
+;Sprite_page     dc.b 0
 ;;; inject code for a BASIC 'sys' command
         HEX 0c 04 0a 00  9e 20
 #ifconst LARGEMEM
@@ -78,7 +80,7 @@ Sprite_page     dc.b 0
         jmp main
 #else                           ;not basic startup
         jmp main
-Sprite_page     dc.b 0
+;Sprite_page     dc.b 0
 #endif
 #ifconst LARGEMEM
         org $1400-(8*3)
@@ -316,6 +318,8 @@ PrevSprtMotion  equ NewOffset+1
 SirenTable      equ PrevSprtMotion+1 ;
 SirenOffset     equ SirenTable+((sirenTop-sirenBot)*2)+1
 PowerSnd2Idx    equ SirenOffset+1
+FrameLock       equ PowerSnd2Idx+1
+Sprite_page     equ FrameLock+1        
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -1650,6 +1654,7 @@ DeathISR subroutine
 ;;; 
 isr2 subroutine
         sei                     ;disable interrupts while in interrupt
+        dec FrameLock
         ;; I don't see why above is needed?
         ;; 
         ;; flash the power pellets
@@ -2022,7 +2027,8 @@ reset_game subroutine
         sta Sprite_turn,X
         ;; initialize a bunch of variables that can be 0
         ;; on start
-        lda #0                  
+        lda #0
+        sta FrameLock
         sta JIFFYL              ;game timer to 0
         sta JIFFYM
         sta JIFFYH
@@ -2459,11 +2465,15 @@ MainLoop0
         lda #masterSpeed
         sta MASTERCNT
 #endif
-        
+.lockloop        
+        lda FrameLock
+        bne .lockloop
 .iloop        
         lda VICRASTER           ;load raster line
         bne .iloop
 
+        lda #2                  ;lock to .5 frame per interrupt
+        sta FrameLock           ;to prevent jerkiness
 #ifconst MASTERDELAY        
         dec MASTERCNT
         bne .iloop
@@ -4680,7 +4690,9 @@ ready_msg_sz equ * - ready_msg   ; length of msg
         dc.b 0
 gameover_msg
         ;; text of game over message
-        dv.b mkletter "G","A","M","E"," ","O","V","E","R"
+        dv.b mkletter "G","A","M","E"
+        dc.b EMPTY
+        dv.b mkletter "O","V","E","R"
 gameover_msg_sz equ * - gameover_msg ; length of msg
         dc.b 0
 #ifconst LARGEMEM
