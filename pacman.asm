@@ -36,6 +36,8 @@ AGEFRUIT equ 1
 ;;; score when a bonus life is given ( the high byte of a 3 byte BCD number )
 ;;; e.g. 10000 points is 010000 or $01
 BONUSLIFE equ $01
+;;; 0 based number of levels between each difficulty increase
+AGONYCNT  equ 2
 ;;; if uncommented, play the intro music
 ACTORINTRO equ 1                ;
 ;;;
@@ -319,7 +321,7 @@ SirenTable      equ PrevSprtMotion+1 ;
 SirenOffset     equ SirenTable+((sirenTop-sirenBot)*2)+1
 PowerSnd2Idx    equ SirenOffset+1
 FrameLock       equ PowerSnd2Idx+1
-Sprite_page     equ FrameLock+1        
+Sprite_page     equ FrameLock+1
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -861,8 +863,9 @@ inkyDots        equ totalDots-10 ;dots to release inky  ( )
 pinkyDots       equ totalDots-20 ;dots to release pinky ( should be 1)
 ;blinkyS2Dots    equ [totalDots/4]*3
 
-maxLives        equ 4           ;max lives ever possible on left display
-pacLives        equ 3           ;default starting lives for pacman
+maxLives        equ 3           ;max lives ever possible on left display
+lifeStart       equ 22*[23-6]   ;location on left of screen to show lives meter 
+pacLives        equ 3           ;default starting lives for pacman 
 #ifconst LARGEMAZE
 g1Start         equ screen+22*11+9
 g2StartI        equ 22*outOfBoxRow+outOfBoxCol
@@ -953,7 +956,7 @@ softTimerRes   equ 60
 ;;; 7 seconds, 20 seconds, etc...
 ;;; even values are scatter mode, odd are chase mode
 ;;; iteration starts from end 
-ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 20*softTimerRes, 7*softTimerRes
+ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes
 ChaseTableEnd
 ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
 ;;; 
@@ -2018,8 +2021,13 @@ reset_game subroutine
         ;; init loop counter
         ldx #SPRITES-1          ;SPRITES is 1 based, so -1
 .0
+        ;; don't erase the sprites if it's the first run of the program
+        ;; as they don't have any 'previous' location/background data
+        ;; and there is no need anyway
+        lda FirstRun        
+        beq .firstrun
         jsr erasesprt
-
+.firstrun
         lda inBoxTable,X
         sta Sprite_offset2,X
         sta Sprite_offset,X
@@ -2048,6 +2056,7 @@ reset_game subroutine
         sta Sprite_mode,X
         lda #dirHoriz
         sta Sprite_dir2,X
+        sta Sprite_dir,X
 
         cpx #0             ;are we pacman, then
         beq .skip_bmap     ;skip setting ghost bitmap and speed
@@ -2165,7 +2174,7 @@ end_level subroutine
         lda LevelsComplete
         dec Agonizer
         bne .1
-        lda #2
+        lda #AGONYCNT
         sta Agonizer
         ;; make level harder by increasing ghost chase-mode
         ;; durations in ChaseTable
@@ -2252,7 +2261,7 @@ reset_game1 subroutine
         sta PlayerScore_h
         sta POWER_UP            ;power up to 0
 
-        lda #2
+        lda #AGONYCNT
         sta Agonizer
 
         lda #pacLives           ;1 based : number of lives + 1
@@ -2290,7 +2299,6 @@ IncrementLives subroutine
 ;;; -1 pacman lives
 ;;; and update dislay
 ;;; 
-lifeStart equ 22*[22-5]         ;location on left of screen to show lives meter
 ;;; 
 DecrementLives subroutine
 #ifnconst UNLIMITED_LIVES        
@@ -2301,6 +2309,14 @@ DecrementLives subroutine
 #endif        
 .done        
         rts
+;;; draw a blank character, or pacman character
+;;; in the lives meter area of the screen
+        MAC DrawLifeTile
+        lda #{1}
+        sta screen+lifeStart,Y
+        lda #{2}
+        sta clrram+lifeStart,Y
+        ENDM
 ;;; display pacman icons in the lower left
 ;;; to show remaining lives
 ;;; 
@@ -2309,28 +2325,25 @@ DisplayLives subroutine         ;entry point for displaying lives only
         pha
         ldx PacLives
         dex                     ;-1 don't display current life
-        ldy #maxLives*22
+        dex                     ;adjust to zero based
+        ;; 2 tiles per life
+        ;; total lives * 2 tiles per life ** screen width
+        ldy #[maxLives-1]*2*22  ;start at bottom of life meter
 .0
-        cpx #0
-        bcc .skip
-        beq .skip
-        lda #PACLIFE             ;load 'life' character tile
-        sta screen+lifeStart,Y
-        lda #YELLOW
-        sta clrram+lifeStart,Y
+        cpx #0                  ;is there a life to draw
+        bmi .skip
+        DrawLifeTile PACLIFE,YELLOW
         jmp .cont
 .skip        
-        lda #EMPTY
-        sta screen+lifeStart,Y
-        lda #BLACK
-        sta clrram+lifeStart,Y
-.cont        
+        DrawLifeTile EMPTY,BLACK
+.cont
         tya
         sec
-        sbc #44                 ;move down screen 2 spaces
+        sbc #44                 ;move down screen 1 spaces
         tay
+        bmi .done               ;have we reached top of life meter?
         dex
-        bpl .0
+        jmp .0                  ;next 
 .done
         pla
         tax
@@ -2367,25 +2380,12 @@ ActorIntro subroutine
         jsr initChaseTimer
         
         rts
+
+FirstRun dc.b 0
 ;-------------------------------------------
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
-#if 0        
-        lda #8
-        sta 36879               ; border and screen colors
-        sta volume              ; turn up the volume to 8
-        cli
-        jsr player
-#endif        
-#if 0
-        lda #$ea
-        STA BCD
-        ldx #0
-        jsr DisplayBCD
-        brk
-#endif
-
 .try_again        
         lda $a2                 ;jiffy as random seed
         beq .try_again          ;can't be zero
@@ -2446,6 +2446,8 @@ main SUBROUTINE
         sta S1                  ;arg to reset_game below
 PacDeathEntry                   ;code longjmp's here on pacman death
         jsr reset_game
+        lda #1
+        sta FirstRun
         ;; Sprite_page=0 now
         
         jmp .background         ;sneakily enter the main game loop halfway through
@@ -2673,9 +2675,10 @@ process_nibble2 subroutine
 ;;; draw maze
 ;;; restore DOTCOUNT
 mkmaze2 subroutine
-        store16 screen,W2
+        store16 screen+22,W2
         ;; clear top line, and left line
         ldx #22
+        ldy #0
 .loop   
         lda #EMPTY
         sta screen,x
