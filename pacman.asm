@@ -1,7 +1,7 @@
 #ifnconst LARGEMEM              ;if it wasn't specified on the command line
 ;LARGEMEM equ 1                 ; generate code for 8k expansion
 #endif        
-;INVINCIBLE equ 1                ; pacman can't die
+INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY equ 1               ;enable master slowdown for debugging
 ;masterSpeed      equ 10 ;master game delay
 PACDEATHGFX equ 1        
@@ -36,8 +36,6 @@ AGEFRUIT equ 1
 ;;; score when a bonus life is given ( the high byte of a 3 byte BCD number )
 ;;; e.g. 10000 points is 010000 or $01
 BONUSLIFE equ $01
-;;; 0 based number of levels between each difficulty increase
-AGONYCNT  equ 2
 ;;; if uncommented, play the intro music
 ACTORINTRO equ 1                ;
 ;;;
@@ -321,7 +319,7 @@ SirenTable      equ PrevSprtMotion+1 ;
 SirenOffset     equ SirenTable+((sirenTop-sirenBot)*2)+1
 PowerSnd2Idx    equ SirenOffset+1
 FrameLock       equ PowerSnd2Idx+1
-Sprite_page     equ FrameLock+1
+Sprite_page     equ FrameLock+1        
 CURKEY          equ $c5         ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
@@ -740,13 +738,13 @@ WaitTime_ subroutine
 ;;; find the character font address of the tile
 ;;; underneath a sprite
 ;;; on entry: A = tile in question
-;;; W4 (out) font address of tile underneath
+;;; {1} (out) font address of tile underneath
 ;;; uses S5,S6,W5
         MAC mergeTile
         ldy #0
         sty W5
         sty W5+1
-        clc
+;        clc
         asl 
         rol W5+1
         asl
@@ -756,10 +754,10 @@ WaitTime_ subroutine
 
         clc
         adc #mychars&$ff
-        sta W4
+        sta {1}
         lda W5+1
         adc #mychars >> 8
-        sta W4+1
+        sta {1}+1
 
         ENDM
 ;; beq on joy right A has bit 7 of last reading from JOY0B
@@ -863,9 +861,8 @@ inkyDots        equ totalDots-10 ;dots to release inky  ( )
 pinkyDots       equ totalDots-20 ;dots to release pinky ( should be 1)
 ;blinkyS2Dots    equ [totalDots/4]*3
 
-maxLives        equ 3           ;max lives ever possible on left display
-lifeStart       equ 22*[23-6]   ;location on left of screen to show lives meter 
-pacLives        equ 3           ;default starting lives for pacman 
+maxLives        equ 4           ;max lives ever possible on left display
+pacLives        equ 3           ;default starting lives for pacman
 #ifconst LARGEMAZE
 g1Start         equ screen+22*11+9
 g2StartI        equ 22*outOfBoxRow+outOfBoxCol
@@ -932,22 +929,20 @@ Sprite_speed2    dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightS
 ;;; ghosts start at 90%
 ;;; when hard they are at 100%
 ;Speed_standard   equ 9         ;95%
-Speed_standard   equ 18         ;95%
-Speed_slow       equ 10         ;90%
-Speed_fast       equ 255        ;100%
+;Speed_standard   equ 18         ;95%
+Speed_standard   equ 36         ;85%
+;Speed_slow       equ 34         ;80%
+Speed_slow       equ 40         ;80%
+Speed_fast       equ 40         ;100%
 harder1          equ 2          ;level when ghost are speed standard
 harder2          equ 4          ;level when ghosts are faster
 ;Sprite_base      dc.b Speed_standard,Speed_slow,Speed_slow,Speed_slow,Speed_slow
-Sprite_turnbase  dc.b 5,9,6,3,7        
+Sprite_turnbase  dc.b 40,40,40,40,40
 Sprite_color     dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
-;;; cruise elroy timer for blinky
+;;; cruise elroy setting for blinky
 blinkyCruise1    equ 1
 blinkyCruise2    equ 2
 blinkyCruiseOff  equ 0
-;;; controls the speed of blinky
-;;; the lower 4 bits control which ghost gets the speed boost
-;;; if BlinkyCruise & 0x7 == ghost then cruise mode on
-;;; bit 7 controls cruise mode 1 or 2
 ;;; 
 ;;; resolution of system timer in 1/x seconds
 softTimerRes   equ 60
@@ -956,7 +951,7 @@ softTimerRes   equ 60
 ;;; 7 seconds, 20 seconds, etc...
 ;;; even values are scatter mode, odd are chase mode
 ;;; iteration starts from end 
-ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes
+ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 20*softTimerRes, 7*softTimerRes
 ChaseTableEnd
 ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
 ;;; 
@@ -1006,12 +1001,12 @@ VolTableSz equ 15
 ;;; W2 = top half font ram
 ;;; W3 = bottom half font ram
         MAC blitc 
-        ldy #16
+        ldy #15
         lda #0
 .loop
-        dey
         sta (W2),Y
-        bne .loop
+        dey
+        bpl .loop
 .done
         ENDM
 ;;; horizontal blit
@@ -1026,37 +1021,31 @@ VolTableSz equ 15
         ldx S2
 
         lda Sprite_sback,X      ;input to mergeTile
-        mergeTile               ;font address of underneath tile into W4
-        move16 W4,W6
+        mergeTile W6              ;font address of underneath tile into W4
 
         lda Sprite_sback2,X
-        mergeTile
+        mergeTile W4
 #endif        
         ldy #7
-        ldx S1                  ;amount to shift sprite
+        ldx #0
 .nextbyte
-        lda (W1),Y
-        sta (W2),Y
-        ldx S1
-        beq .shiftdone
+        stx S4
+        lda (W1),Y              ;load sprite source byte
+        sta S3
+        ldx S1                  ;load amount to scroll to right
+        beq .shiftdone          ;done scrolling?
 .loop
-        lda (W2),y
-        lsr
-        sta (W2),Y
-        lda (W3),Y
-        ror
-        sta (W3),Y
+        lsr S3                    ;scroll head tile
+        ror S4                    ;scroll it
         dex
         bne .loop
 .shiftdone
-#if 1        
         lda (W6),Y              ;load left tile underneath bits
-        ora (W2),Y              ;overlay to left tile
+        ora S3
         sta (W2),Y
         lda (W4),Y              ;load right tile underneath bits
-        ora (W3),Y              ;overlay to right tile
+        ora S4
         sta (W3),Y
-#endif        
         dey
         bpl .nextbyte
 .done
@@ -1075,7 +1064,7 @@ VolTableSz equ 15
         ldx S2                 
         lda Sprite_sback,X      ;input to mergeTile
 
-        mergeTile               ;font address of underneath tile into W4
+        mergeTile W4            ;font address of underneath tile into W4
 
         ldx #0
         ldy #0
@@ -1096,7 +1085,7 @@ VolTableSz equ 15
         ldx S2
         lda Sprite_sback2,X
 
-        mergeTile
+        mergeTile W4
 
         ldx #0                  
 
@@ -1132,21 +1121,17 @@ render_sprite SUBROUTINE
         adc W1+1
         sta W1+1
         
-        ;; assume tile pair 0
-        ;; if we are currently on tile pair 0 , then render into pair 1
-        move16x Sprite_bmap2,W2  ;left tile chargen ram
-        ldy #0
-        cpy Sprite_page
-;        ldy #1
+        lda Sprite_page         ;
         beq .page0
-        ;; else currently on tile pair 1, render into page 0
         move16x Sprite_bmap,W2  ;left tile chargen ram
+        jmp .cont
 .page0
+        move16x Sprite_bmap2,W2  ;left tile chargen ram
+.cont        
         addxx W2,W3,#$8          ;right tile chargen ram
         
         lda Sprite_offset2,X
         sta S1                  ;setup for blitd,blith,blitc
-        blitc        ;
         lda Sprite_dir2,X
         cmp #dirHoriz
         beq .horiz
@@ -1154,6 +1139,7 @@ render_sprite SUBROUTINE
         beq .vert
         brk
 .horiz        
+;        blitc
         blith
         rts
 .vert
@@ -1331,16 +1317,22 @@ UpdateColorRam SUBROUTINE
         ;; below checks if we need to set the color in the
         ;; head, tail or both head and tail 
         ldy Sprite_offset,X     ;check if we need to update
+        beq .inheadonly
         cpy #8                  ;color in head
         beq .intailonly         ;sprite lives in tail only
+        ;; else both need updated
         ldy #0
         sta (W1),Y              ;write head tile color ram
-.intailonly        
-        ldy Sprite_offset,X     ;check if we need to update
-        beq .singletile
         ldy Sprite_dir,X        ;write tail tile color ram 
         sta (W1),Y
-.singletile        
+        rts
+.inheadonly        
+        ldy #0
+        sta (W1),Y              ;write head tile color ram
+        rts
+.intailonly        
+        ldy Sprite_dir,X        ;write tail tile color ram 
+        sta (W1),Y
         rts
 ;;; 
 ;;; X = sprite to move
@@ -1657,8 +1649,8 @@ DeathISR subroutine
 ;;; 
 isr2 subroutine
         sei                     ;disable interrupts while in interrupt
-        dec FrameLock
         ;; I don't see why above is needed?
+;        dec FrameLock
         ;; 
         ;; flash the power pellets
         dec PwrFlashCnt
@@ -2021,13 +2013,8 @@ reset_game subroutine
         ;; init loop counter
         ldx #SPRITES-1          ;SPRITES is 1 based, so -1
 .0
-        ;; don't erase the sprites if it's the first run of the program
-        ;; as they don't have any 'previous' location/background data
-        ;; and there is no need anyway
-        lda FirstRun        
-        beq .firstrun
         jsr erasesprt
-.firstrun
+
         lda inBoxTable,X
         sta Sprite_offset2,X
         sta Sprite_offset,X
@@ -2036,7 +2023,7 @@ reset_game subroutine
         ;; initialize a bunch of variables that can be 0
         ;; on start
         lda #0
-        sta FrameLock
+;        sta FrameLock
         sta JIFFYL              ;game timer to 0
         sta JIFFYM
         sta JIFFYH
@@ -2056,7 +2043,6 @@ reset_game subroutine
         sta Sprite_mode,X
         lda #dirHoriz
         sta Sprite_dir2,X
-        sta Sprite_dir,X
 
         cpx #0             ;are we pacman, then
         beq .skip_bmap     ;skip setting ghost bitmap and speed
@@ -2106,6 +2092,7 @@ reset_game subroutine
         sta LASTJOYDIR
         lda #1
         sta SirenDir
+        sta FrameLock
         sta PACFRAMED
         
         lda #modeLeaving
@@ -2174,7 +2161,7 @@ end_level subroutine
         lda LevelsComplete
         dec Agonizer
         bne .1
-        lda #AGONYCNT
+        lda #2
         sta Agonizer
         ;; make level harder by increasing ghost chase-mode
         ;; durations in ChaseTable
@@ -2261,7 +2248,7 @@ reset_game1 subroutine
         sta PlayerScore_h
         sta POWER_UP            ;power up to 0
 
-        lda #AGONYCNT
+        lda #2
         sta Agonizer
 
         lda #pacLives           ;1 based : number of lives + 1
@@ -2299,6 +2286,7 @@ IncrementLives subroutine
 ;;; -1 pacman lives
 ;;; and update dislay
 ;;; 
+lifeStart equ 22*[22-5]         ;location on left of screen to show lives meter
 ;;; 
 DecrementLives subroutine
 #ifnconst UNLIMITED_LIVES        
@@ -2309,14 +2297,6 @@ DecrementLives subroutine
 #endif        
 .done        
         rts
-;;; draw a blank character, or pacman character
-;;; in the lives meter area of the screen
-        MAC DrawLifeTile
-        lda #{1}
-        sta screen+lifeStart,Y
-        lda #{2}
-        sta clrram+lifeStart,Y
-        ENDM
 ;;; display pacman icons in the lower left
 ;;; to show remaining lives
 ;;; 
@@ -2325,25 +2305,28 @@ DisplayLives subroutine         ;entry point for displaying lives only
         pha
         ldx PacLives
         dex                     ;-1 don't display current life
-        dex                     ;adjust to zero based
-        ;; 2 tiles per life
-        ;; total lives * 2 tiles per life ** screen width
-        ldy #[maxLives-1]*2*22  ;start at bottom of life meter
+        ldy #maxLives*22
 .0
-        cpx #0                  ;is there a life to draw
-        bmi .skip
-        DrawLifeTile PACLIFE,YELLOW
+        cpx #0
+        bcc .skip
+        beq .skip
+        lda #PACLIFE             ;load 'life' character tile
+        sta screen+lifeStart,Y
+        lda #YELLOW
+        sta clrram+lifeStart,Y
         jmp .cont
 .skip        
-        DrawLifeTile EMPTY,BLACK
-.cont
+        lda #EMPTY
+        sta screen+lifeStart,Y
+        lda #BLACK
+        sta clrram+lifeStart,Y
+.cont        
         tya
         sec
-        sbc #44                 ;move down screen 1 spaces
+        sbc #44                 ;move down screen 2 spaces
         tay
-        bmi .done               ;have we reached top of life meter?
         dex
-        jmp .0                  ;next 
+        bpl .0
 .done
         pla
         tax
@@ -2380,12 +2363,25 @@ ActorIntro subroutine
         jsr initChaseTimer
         
         rts
-
-FirstRun dc.b 0
 ;-------------------------------------------
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
+#if 0        
+        lda #8
+        sta 36879               ; border and screen colors
+        sta volume              ; turn up the volume to 8
+        cli
+        jsr player
+#endif        
+#if 0
+        lda #$ea
+        STA BCD
+        ldx #0
+        jsr DisplayBCD
+        brk
+#endif
+
 .try_again        
         lda $a2                 ;jiffy as random seed
         beq .try_again          ;can't be zero
@@ -2446,8 +2442,6 @@ main SUBROUTINE
         sta S1                  ;arg to reset_game below
 PacDeathEntry                   ;code longjmp's here on pacman death
         jsr reset_game
-        lda #1
-        sta FirstRun
         ;; Sprite_page=0 now
         
         jmp .background         ;sneakily enter the main game loop halfway through
@@ -2467,15 +2461,12 @@ MainLoop0
         lda #masterSpeed
         sta MASTERCNT
 #endif
-.lockloop        
-        lda FrameLock
-        bne .lockloop
+
 .iloop        
         lda VICRASTER           ;load raster line
         bne .iloop
 
-        lda #2                  ;lock to .5 frame per interrupt
-        sta FrameLock           ;to prevent jerkiness
+.cont        
 #ifconst MASTERDELAY        
         dec MASTERCNT
         bne .iloop
@@ -2675,10 +2666,9 @@ process_nibble2 subroutine
 ;;; draw maze
 ;;; restore DOTCOUNT
 mkmaze2 subroutine
-        store16 screen+22,W2
+        store16 screen,W2
         ;; clear top line, and left line
         ldx #22
-        ldy #0
 .loop   
         lda #EMPTY
         sta screen,x
@@ -2949,11 +2939,18 @@ SpecialKeys SUBROUTINE
         ;; check if sprite X gets to move this frame
         ;; note: Z=0 on return
         MAC MyTurn2
-        dec Sprite_turn,X
-        bne {1}
+;        dec Sprite_turn,X
+        lda Sprite_turn,X
+        sec
+        sbc #8
+        sta Sprite_turn,X
+;        bne {1}
+        bpl {1}
         ;; we don't get to move this turn
         ;; reset the turn counter
-        lda Sprite_speed,X
+;        lda Sprite_speed,X
+        clc
+        adc Sprite_speed,X
         sta Sprite_turn,X
 
         ENDM
@@ -3024,7 +3021,7 @@ GhostTurn
         SetLeavingTargetTile
         bne .continue
 .notfrightened        
-#if 0
+#if 1
         ;; check if we should bother with AI
         ;; we have to be at an intersection
         lda Sprite_offset,X
@@ -3867,14 +3864,14 @@ PacManTurn
         sta Sprite_motion
         jsr scroll_left
         bcs .uselast            ;couldn't move, use last reading
-        jmp .moveok
+        bcc .moveok
 .up
         store16 PAC_UP1,W3
         lda #motionUp
         sta Sprite_motion
         jsr scroll_up
         bcc .moveok
-        jmp .uselast
+        bcs .uselast
 .down
         lda #1
         sta S1                  ;eat dots from tail
@@ -3883,7 +3880,7 @@ PacManTurn
         sta Sprite_motion
         jsr scroll_down
         bcc .moveok
-        jmp .uselast
+        bcs .uselast
 .right
         lda #1
         sta S1                  ;eat dots from tail
@@ -3892,7 +3889,7 @@ PacManTurn
         sta Sprite_motion
         jsr scroll_right
         bcc .moveok
-        jmp .uselast
+        bcs .uselast
 
 .moveok
 
