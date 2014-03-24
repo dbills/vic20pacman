@@ -88,9 +88,9 @@ GHOSTS_ON   equ 1    ;
         org $1400+$800          ;full 2K character set
 #endif        
 
-sirenBot equ 227
-sirenTop equ 238
-
+sirenBot    equ 227
+sirenTop    equ 238
+speedBase   equ 8
 ;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
 LARGEMAZE   equ 1                 ;
 _debug      equ 1                 ; true for debugging
@@ -162,7 +162,7 @@ tunnelLCol      equ 1           ;column to start warp to right side
 ;;; the speed warp effect would start at tunnelLCol+tunnelLen
 ;;; or tunnelRCol-tunnelLen
 tunnelLen       equ 3           ;length of tunnel
-tunnelSpeed     equ 2           ;Sprite_speed setting for tunnel
+tunnelSpeed     equ speedBase*2 ;Sprite_speed setting for tunnel
 ;;; amount of time a fruit is display
 fruitTime       equ 140
         
@@ -239,8 +239,7 @@ BlinkyS2        equ BlinkyS1+1
 InkyDots        equ BlinkyS2+1
 PinkyDots       equ InkyDots+1
 ClydeDots       equ PinkyDots+1
-PacSaveSpd      equ ClydeDots+1         ;pacman previous speed when slowed by dots
-S5              equ PacSaveSpd+1         ;scratch 5
+S5              equ ClydeDots+1         ;scratch 5
 S6              equ S5+1
 PACXPIXEL       equ S6+1
 PACYPIXEL       equ PACXPIXEL+1       
@@ -248,12 +247,7 @@ BlinkyCruise    equ PACYPIXEL+1         ;see BlinkyCruise1 and 2
 
 GHOST_COL       equ BlinkyCruise+1
 GHOST_ROW       equ GHOST_COL+1
-
-SCORE_l         equ GHOST_ROW+1
-SCORE_h         equ SCORE_l+1
-LevelStartTm    equ SCORE_h+1
-LevelStartTm_h  equ LevelStartTm+1        
-W5              equ LevelStartTm_h+1
+W5              equ GHOST_ROW+1
 W5_h            equ W5+1
 W6              equ W5_h+1
 W6_h            equ W6+1    
@@ -264,7 +258,7 @@ SPRT_LOCATOR    equ PowerPillTime+1
 ;value that indicates end of smooth scrolling
 END_SCRL_VAL    equ SPRT_LOCATOR+1
 ;;;amount to increase or decrease sprite offset
-;;; used as input by scroll_horiz
+;;; used as input by ScrollHoriz
 SCRL_VAL        equ END_SCRL_VAL+1
 LASTJOY         equ SCRL_VAL+1
 LASTJOYDIR      equ LASTJOY+1         ;last joy reading that had a switch thrown
@@ -313,7 +307,7 @@ bonusInterval   equ 7            ;sound interval for award noise
 BonusAwarded    equ PwrFlashSt+1  ;true if bonus life was awarded
 Agonizer        equ BonusAwarded+1 ;keeps track of when to increment difficulty
 BonusSound      equ Agonizer+1
-NewOffset       equ BonusSound+1 ; used by scroll_horiz routine
+NewOffset       equ BonusSound+1 ; used by ScrollHoriz routine
 PrevSprtMotion  equ NewOffset+1
 SirenTable      equ PrevSprtMotion+1 ;
 SirenOffset     equ SirenTable+((sirenTop-sirenBot)*2)+1
@@ -922,7 +916,7 @@ pointTable      dc.b $16,00,$08,00,$04,00,$02,00
 ;;; speeds when pacman is powered up
 eyeSpeed         equ 255                ;sprite_speed setting for eyes
 pacEatSpeed      equ 255
-ghostFrightSpeed equ 2       
+ghostFrightSpeed equ speedBase*2
 ;;; the speed of ghosts when pacman is powered up
 Sprite_speed2    dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed
 ;;; pacman always runs @ 95% of top speed
@@ -2736,7 +2730,7 @@ scroll_down SUBROUTINE
         sta END_SCRL_VAL
         lda #1
         sta SCRL_VAL
-        jmp scroll_vertical        ;rts for us
+        jmp ScrollVertical        ;rts for us
 
 scroll_up SUBROUTINE
         lda #motionUp
@@ -2745,7 +2739,7 @@ scroll_up SUBROUTINE
         sta END_SCRL_VAL
         lda #-1
         sta SCRL_VAL
-        jmp scroll_vertical        ;rts for us
+        jmp ScrollVertical        ;rts for us
 
 
 scroll_left SUBROUTINE
@@ -2755,7 +2749,7 @@ scroll_left SUBROUTINE
         sta END_SCRL_VAL
         lda #$ff                ;-1 into A
         sta SCRL_VAL
-        jmp scroll_horiz        ;rts for us
+        jmp ScrollHoriz        ;rts for us
 
 scroll_right SUBROUTINE
         
@@ -2765,7 +2759,7 @@ scroll_right SUBROUTINE
         sta END_SCRL_VAL
         lda #$01
         sta SCRL_VAL
-        jmp scroll_horiz        ;rts for us
+        jmp ScrollHoriz        ;rts for us
 
 #if 1
         MAC MoveGhost
@@ -2939,10 +2933,12 @@ SpecialKeys SUBROUTINE
         ;; check if sprite X gets to move this frame
         ;; note: Z=0 on return
         MAC MyTurn2
-;        dec Sprite_turn,X
+        lda Sprite_speed
+        cmp #255
+        beq {1}
         lda Sprite_turn,X
         sec
-        sbc #8
+        sbc #speedBase
         sta Sprite_turn,X
 ;        bne {1}
         bpl {1}
@@ -4200,16 +4196,13 @@ tail2tail SUBROUTINE
         lda Sprite_base,X
 .done        
         ENDM
-;;; set speed, if need when entering a tunnel
-;;; note this routine 'chains' into SetSpeed
-SetTunnelSpeed subroutine        
 ;;; set the speed for an individual ghost
 ;;; X = ghost to set
 ;;; A = new speed
 ;;; note: Z != 0 on exit please
 SetSpeed subroutine
         sta Sprite_speed,X ;
-        lda #2             ;only 2 turns left
+        lda #speedBase             ;only 2 turns left
         sta Sprite_turn,X
         rts
 ;;; handle tunnel left side
@@ -4304,12 +4297,11 @@ IncrementHPos SUBROUTINE
 .done        
         ENDM
 ;;; move sprite horizontal
-scroll_horiz SUBROUTINE
+ScrollHoriz SUBROUTINE
         lda Sprite_dir,X        ;get our current orientation
         cmp #dirHoriz           ;are we already horizontal
         beq .ok                 ;ok to move horizontal
-        jsr changehoriz         ;no, switch to horizontal
-        rts                     ;we couldn't change to horizontal
+        jmp  changehoriz         ;no, switch to horizontal and rts
 .ok
         lda Sprite_offset,X     ;get our current pixel offset
         cmp END_SCRL_VAL        ;are we at the end of our tiles?
@@ -4620,13 +4612,12 @@ ChangeVertFailed       ; we can't change directions  in middle of tile
         resX
         ENDM
         
-scroll_vertical SUBROUTINE
+ScrollVertical SUBROUTINE
         lda Sprite_dir,X
         cmp #dirVert            ;check if already vertical
         beq .00
 
-        jsr changevert          ;if not, change us to down
-        rts
+        jmp changevert          ;if not, change us to down and rts
 .00
         lda Sprite_offset,X
         cmp END_SCRL_VAL        ; less than 8? then fine scroll
