@@ -3,7 +3,7 @@
 #endif        
 INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY equ 1               ;enable master slowdown for debugging
-;masterSpeed      equ 10 ;master game delay
+masterSpeed      equ 250 ;master game delay
 PACDEATHGFX equ 1        
 ;;;
 ;;; uncomment this to create code that will launch
@@ -68,7 +68,7 @@ GHOSTS_ON   equ 1    ;
 #endif        
         processor 6502
 #ifconst BASIC
-;Sprite_page     dc.b 0
+
 ;;; inject code for a BASIC 'sys' command
         HEX 0c 04 0a 00  9e 20
 #ifconst LARGEMEM
@@ -80,8 +80,9 @@ GHOSTS_ON   equ 1    ;
         jmp main
 #else                           ;not basic startup
         jmp main
-;Sprite_page     dc.b 0
-#endif
+
+#endif // BASIC
+        
 #ifconst LARGEMEM
         org $1400-(8*3)
         INCLUDE "bitmaps.asm"
@@ -91,31 +92,42 @@ GHOSTS_ON   equ 1    ;
 sirenBot    equ 227
 sirenTop    equ 238
 speedBase   equ 8
-;_SLOWPAC       equ 1            ;pacman doesn't have continuous motion
+;_SLOWPAC       equ 1             ; pacman doesn't have continuous motion
 LARGEMAZE   equ 1                 ;
 _debug      equ 1                 ; true for debugging
-cornerAdv   equ 1                 ;pacman's cornering advantage in pixels
+cornerAdv   equ 1                 ; pacman's cornering advantage in pixels
 wakavoice   equ 36874        
 voice1      equ 36874             ; sound registers
 voice2      equ 36875
 voice3      equ 36876
 voice4      equ 36877        
 volume      equ 36878
-#ifconst LARGEMEM        
+        
+#ifconst LARGEMEM
+        
 screen      equ $1000             ; screen ram
 clrram      equ $9400             ; color ram for screen
-clroffset   equ $84               ;offset from screen to color
-#else        
-clroffset   equ $78               ;offset from screen to color
-screen      equ $1e00             ;3k ram
+clroffset   equ $84               ; offset from screen to color
+mychars     equ $1400             ; >=8K font start
+        
+#else
+        
+clroffset   equ $78               ; offset from screen to color
+screen      equ $1e00             ; 3k ram
 clrram      equ $9600             ; color ram for screen (3k)
+mychars     equ $1c00             ; 3K font start
+        
+#endif // LARGEMEM
+        
+#ifconst GHPLAYER        
+defaultISR  equ $eabf             ; os default IRQ
+#else        
+defaultISR  equ  $eb15            ; the minimum isr ( no keyboard polling or other stuff )
 #endif        
-;defaultISR  equ $eabf            ;os default IRQ
-defaultISR  equ  $eb15            ;the minimum isr ( no keyboard polling or other stuff )
-defaultVol  equ 8                 ;default volume for app
+defaultVol  equ 8                 ; default volume for app
 VICRASTER   equ $9004        
-VICSCRN     equ $9005             ;vic chip character generator pointer
-LIGHPENX    equ $9006             ;used for random number
+VICSCRN     equ $9005             ; vic chip character generator pointer
+LIGHPENX    equ $9006             ; used for random number
 VIA1DDR     equ $9113
 VIA2DDR     equ $9122             ; ?
 JOY0        equ $9111
@@ -145,11 +157,6 @@ SaveBuffer  equ cassEnd-20
 
 ;; vic-I chip registers
 chrst           equ $9003       ; font map pointer
-#ifconst LARGEMEM        
-mychars         equ $1400       ;>=8K font start
-#else
-mychars         equ $1c00       ;3K font start
-#endif        
 charcnt         equ $800
 zeroDigit       equ 48 | $80    ;zero digit character
 motionRight     equ 24          ;sprite locator code for right
@@ -201,31 +208,30 @@ S3              equ S2+1
 S4              equ S3+1
 DIV22_WORK      equ S4+1          ;word
 DIV22_RSLT      equ DIV22_WORK+2          ;div22 result
-#endif
 ;;; it's ok the next 2 use the same address
 ;;; they are never used at the same time
-SPRITEIDX       equ DIV22_RSLT+1        ;sprite index for main loop
-MASTERCNT       equ SPRITEIDX+1        ;countdown; see masterDelay
+SPRITEIDX       equ DIV22_RSLT+1      ; sprite index for main loop
+MASTERCNT       equ SPRITEIDX+1       ; countdown; see masterDelay
 ;;; 
-CSPRTFRM        equ MASTERCNT+1        ; number of frames in the currently processing sprite
-DOTCOUNT        equ CSPRTFRM+1        ;dots eaten
-frameCount      equ 4          ;number of pacman animation frames
-PACFRAMED       equ DOTCOUNT+1        ;pacframe dir
-DSPL_1          equ PACFRAMED+1        ;used by DisplayNum routine
-BCD             equ DSPL_1+1        ;used by Bin2Hex routine
-DSPL_2          equ BCD+1       ;
-DSPL_3          equ DSPL_2+1        ;
-CHASEMODE       equ DSPL_3+1        ;ghosts in scatter mode or chase
-GHOST_DIST      equ CHASEMODE+1  ; $18 best distance for current ghost AI calcs
-GHOST_DIR       equ GHOST_DIST+1  ; $19 best move matching GHOST_DIST
+CSPRTFRM        equ MASTERCNT+1       ; number of frames in the currently processing sprite
+DOTCOUNT        equ CSPRTFRM+1        ; dots eaten
+frameCount      equ 4                 ; number of pacman animation frames
+PACFRAMED       equ DOTCOUNT+1        ; pacframe dir
+DSPL_1          equ PACFRAMED+1       ; used by DisplayNum routine
+BCD             equ DSPL_1+1          ; used by Bin2Hex routine
+DSPL_2          equ BCD+1       
+DSPL_3          equ DSPL_2+1        
+CHASEMODE       equ DSPL_3+1          ; ghosts in scatter mode or chase
+GHOST_DIST      equ CHASEMODE+1       ; best distance for current ghost AI calcs
+GHOST_DIR       equ GHOST_DIST+1      ; best move matching GHOST_DIST
 DIV22_REM       equ GHOST_DIR+1        
-PACCOL          equ DIV22_REM+1         ;current pacman column
-PACROW          equ PACCOL+1         ;current pacman row
+PACCOL          equ DIV22_REM+1       ; current pacman column
+PACROW          equ PACCOL+1          ; current pacman row
 ;;; sprite position used by AI from most recent call to any of the
 ;;; directional changing routines ( up,left etc )
 GHOST_TGTCOL    equ PACROW+1
 GHOST_TGTROW    equ GHOST_TGTCOL+1
-GHOST1_TGTCOL   equ GHOST_TGTROW+1 ;blinkys target tile? calculated from pinky's routine
+GHOST1_TGTCOL   equ GHOST_TGTROW+1    ; blinkys target tile? calculated from pinky's routine
 GHOST1_TGTROW   equ GHOST1_TGTCOL+1
 ;;; amount sprite move routines can shave off during cornering
 ;;; pacman get +1 on corners, ghosts get 0
@@ -923,7 +929,7 @@ Sprite_speed2    dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightS
 ;;; ghosts start at 90%
 ;;; when hard they are at 100%
 ;Speed_standard   equ 9         ;95%
-;Speed_standard   equ 18         ;95%
+;Speed_standard   equ 255         ;95%
 Speed_standard   equ 36         ;85%
 ;Speed_slow       equ 34         ;80%
 Speed_slow       equ 40         ;80%
@@ -990,18 +996,6 @@ VolTableSz equ 15
         lda Sprite_offset2,X
         sta Sprite_offset,X
 
-        ENDM
-;;; clear all bits to 0
-;;; W2 = top half font ram
-;;; W3 = bottom half font ram
-        MAC blitc 
-        ldy #15
-        lda #0
-.loop
-        sta (W2),Y
-        dey
-        bpl .loop
-.done
         ENDM
 ;;; horizontal blit
 ;;; W1 = source bits
@@ -1488,9 +1482,9 @@ PowerPillOn SUBROUTINE
         lda PowerPillTime       ;init power pill time
         sta POWER_UP            ;store in timer
         ldx #SPRITES-1          ;init loop counter
-        ;; install new speed map for all sprites
+        ;; install new speed for ghosts that are out of box
 .loop
-        lda Sprite_mode,X       ;#modeInBox
+        lda Sprite_mode,X    
         cmp #modeOutOfBox
         bne .0                  ;nope, skip
         ;; install sad ghost bitmaps to sprite
@@ -1503,10 +1497,10 @@ PowerPillOn SUBROUTINE
         sta Sprite_mode,X
 .0        
         dex
-        bpl .loop               ;bpl skips pacman which is sprite 0
-        ldx #0  
-
-        rts
+        bne .loop               ;break out of loop on pacman
+        lda Sprite_speed2       ; load pacman speed
+        jmp SetSpeed            ; rts for us
+;        rts
 ;;; 
 ;;; run the siren soundtrack
 ;;; siren changes pitch when blinky gets faster
@@ -2742,7 +2736,7 @@ scroll_up SUBROUTINE
         jmp ScrollVertical        ;rts for us
 
 
-scroll_left SUBROUTINE
+ScrollLeft SUBROUTINE
         lda #motionLeft
         sta SPRT_LOCATOR
         lda #0
@@ -2761,7 +2755,7 @@ scroll_right SUBROUTINE
         sta SCRL_VAL
         jmp ScrollHoriz        ;rts for us
 
-#if 1
+
         MAC MoveGhost
         lda Sprite_mode,X
         beq .done               ;ghost in box don't get to move
@@ -2791,23 +2785,17 @@ MoveGhostI SUBROUTINE
 ;        brk
         rts
 .left
-        jsr scroll_left
         store16 GHOST,W3
-.exit        
-        rts
+        jmp ScrollLeft
 .right
-        jsr scroll_right
         store16 GHOSTR,W3
-        rts
+        jmp scroll_right
 .up
-        jsr scroll_up
         store16 GHOSTR,W3
-        rts
+        jmp scroll_up
 .down
-        jsr scroll_down
         store16 GHOST,W3
-        rts
-#endif
+        jmp scroll_down
         
 #ifconst GHPLAYER
 ;;; move a ghost using the keyboard
@@ -2827,7 +2815,7 @@ GhostAsPlayer SUBROUTINE
         beq .right
         rts
 .left
-        jsr scroll_left
+        jsr ScrollLeft
         rts
 .right
         jsr scroll_right
@@ -2931,9 +2919,11 @@ SpecialKeys SUBROUTINE
         ENDM
         ;; 
         ;; check if sprite X gets to move this frame
+        ;; and branch to {1} if allowed
         ;; note: Z=0 on return
         MAC MyTurn2
-        lda Sprite_speed
+;        jmp {1}
+        lda Sprite_speed,X
         cmp #255
         beq {1}
         lda Sprite_turn,X
@@ -2944,7 +2934,6 @@ SpecialKeys SUBROUTINE
         bpl {1}
         ;; we don't get to move this turn
         ;; reset the turn counter
-;        lda Sprite_speed,X
         clc
         adc Sprite_speed,X
         sta Sprite_turn,X
@@ -2985,7 +2974,7 @@ GhostAI SUBROUTINE
         beq somertn            ;pacman is sprite 0, so we leave
 ailoop0
         MyTurn2 GhostTurn      ;does this ghost get to move this time?
-        bne .loop              ;jmp .loop - no move for ghost
+        jmp .loop        
 GhostTurn
         lda Sprite_mode,X
         cmp #modeReverse
@@ -3177,10 +3166,10 @@ DotEaten SUBROUTINE
         ldy #$0
         jsr UpdateScore
 
-        lda #1
-        bit DOTCOUNT
-        bne .noslowdown         ;penalize pacman every other dot
-        lda #2
+;        lda #1
+;        bit DOTCOUNT
+;        bne .noslowdown         ;penalize pacman every other dot
+        lda #-speedBase
         sta Sprite_turn         ;for pac to slow down 1 frame per dot
 .noslowdown        
         ;; 
@@ -3502,7 +3491,7 @@ PossibleMoves SUBROUTINE
         cmp Sprite_motion,X
         beq .endleft
         ;; check if we can go left
-        jsr scroll_left             ;
+        jsr ScrollLeft             ;
         bcs .endleft
         ;; we could go left
         ldSprtHeadPos Sprite_loc2,W1 ;
@@ -3858,7 +3847,7 @@ PacManTurn
         store16 PAC_L1,W3
         lda #motionLeft
         sta Sprite_motion
-        jsr scroll_left
+        jsr ScrollLeft
         bcs .uselast            ;couldn't move, use last reading
         bcc .moveok
 .up
@@ -4019,6 +4008,8 @@ Animate SUBROUTINE
         eor PACFRAMED
         ora #1
         sta PACFRAMED
+        clc
+        adc Sprite_frame
         rts
         
         ;; load the currently rendered tile for a sprite
@@ -4202,7 +4193,7 @@ tail2tail SUBROUTINE
 ;;; note: Z != 0 on exit please
 SetSpeed subroutine
         sta Sprite_speed,X ;
-        lda #speedBase             ;only 2 turns left
+        lda #-speedBase             ;only 2 turns left
         sta Sprite_turn,X
         rts
 ;;; handle tunnel left side
@@ -4935,7 +4926,7 @@ ghost AI
 
         does the tile distance logic need to be aware of where pacman the sprite is
         withing the tiles?
-        I'm using the same routines we scroll with, scroll_left or scroll_right
+        I'm using the same routines we scroll with, ScrollLeft or scroll_right
         they will take care of knowing whether the move could take place
         if you are at the end of a range or not
 
