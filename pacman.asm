@@ -8,7 +8,7 @@ PACDEATHGFX equ 1
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-BASIC equ 1
+BASIC equ 1    ;
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -199,17 +199,15 @@ SPRITES      equ 5             ;count of sprites in system (1 based)
 ;;; usually bytes
 W1              equ 0
 W2              equ W1+2
-W3              equ W2+2     ; 16 bit work 3
-W4              equ W3+2        ;2 byte work var
+W3              equ W2+2       
+W4              equ W3+2       
 S0              equ W4+2     
-S1              equ S0+1        ; 1 byte scratch reg
-S2              equ S1+1        ; 1 byte scratch reg
+S1              equ S0+1       
+S2              equ S1+1       
 S3              equ S2+1
 S4              equ S3+1
-DIV22_WORK      equ S4+1          ;word
+DIV22_WORK      equ S4+1                  ;word
 DIV22_RSLT      equ DIV22_WORK+2          ;div22 result
-;;; it's ok the next 2 use the same address
-;;; they are never used at the same time
 SPRITEIDX       equ DIV22_RSLT+1      ; sprite index for main loop
 MASTERCNT       equ SPRITEIDX+1       ; countdown; see masterDelay
 ;;; 
@@ -239,17 +237,17 @@ CORNER_SHAVE    equ GHOST1_TGTROW+1
 ;;; non zero when pacman is powred up, indicate 'gameloop units' 
 ;;; left in power mode, this does not use the jiffy timer
 POWER_UP        equ CORNER_SHAVE+1
-basePowerTime   equ 245         ;initial power pill time
+basePowerTime   equ 245               ;initial power pill time
 BlinkyS1        equ POWER_UP+1         
 BlinkyS2        equ BlinkyS1+1
 InkyDots        equ BlinkyS2+1
 PinkyDots       equ InkyDots+1
 ClydeDots       equ PinkyDots+1
-S5              equ ClydeDots+1         ;scratch 5
+S5              equ ClydeDots+1   
 S6              equ S5+1
 PACXPIXEL       equ S6+1
 PACYPIXEL       equ PACXPIXEL+1       
-BlinkyCruise    equ PACYPIXEL+1         ;see BlinkyCruise1 and 2 
+BlinkyCruise    equ PACYPIXEL+1       ;see BlinkyCruise1 and 2 
 
 GHOST_COL       equ BlinkyCruise+1
 GHOST_ROW       equ GHOST_COL+1
@@ -263,17 +261,17 @@ PowerPillTime   equ W6_h+1
 SPRT_LOCATOR    equ PowerPillTime+1
 ;value that indicates end of smooth scrolling
 END_SCRL_VAL    equ SPRT_LOCATOR+1
-;;;amount to increase or decrease sprite offset
+;;; amount to increase or decrease sprite offset
 ;;; used as input by ScrollHoriz
 SCRL_VAL        equ END_SCRL_VAL+1
 LASTJOY         equ SCRL_VAL+1
 LASTJOYDIR      equ LASTJOY+1         ;last joy reading that had a switch thrown
-MOVEMADE        equ LASTJOYDIR+1         ;true if last pacman move was successful
-TIMER1          equ MOVEMADE+1         ;compared against jiffy clock for chase/scatter modes
-TIMER1_h        equ TIMER1+1         ;timer1 high byte
+MOVEMADE        equ LASTJOYDIR+1      ;true if last pacman move was successful
+TIMER1          equ MOVEMADE+1        ;compared against jiffy clock for chase/scatter modes
+TIMER1_h        equ TIMER1+1          ;timer1 high byte
 TIMER1_hh       equ TIMER1_h+1        
-r_seed          equ TIMER1_hh+1         ;
-Div22Table      equ r_seed+1         ;
+r_seed          equ TIMER1_hh+1       ; random number seed
+Div22Table      equ r_seed+1          ; table for fast 22 division
 ;;; ----------- 10 bytes
 Sprite_offset   equ Div22Table+10
 ;;; ------------5 bytes
@@ -282,45 +280,45 @@ SirenIdx        equ PacLives+1
 EatenIdx        equ SirenIdx+1 ; number of ghosts eaten since power pill
 PACDEATH        equ EatenIdx+1 ; pacman death animation pointer
 ChaseTableIdx   equ PACDEATH+1
-PowerPillPtr    equ ChaseTableIdx+1         ;ptr to power pill sound
+PowerPillPtr    equ ChaseTableIdx+1        ;ptr to power pill sound
 Audio1          equ PowerPillPtr+1         ;see audio.asm
 FruitSoundOn    equ Audio1+1
 FruitPillPtr    equ FruitSoundOn+1
-FruitIsOut      equ FruitPillPtr+1        ;true if fruit is displayed
-DeathSoundPtr   equ FruitIsOut+1         ;sound table index
+FruitIsOut      equ FruitPillPtr+1         ;true if fruit is displayed
+DeathSoundPtr   equ FruitIsOut+1           ;sound table index
          
-JIFFYH      equ DeathSoundPtr+1               ; jiffy clock lsb - msb
-JIFFYM      equ JIFFYH+1
-JIFFYL      equ JIFFYM+1
+JIFFYH          equ DeathSoundPtr+1        ; jiffy clock lsb - msb
+JIFFYM          equ JIFFYH+1
+JIFFYL          equ JIFFYM+1
 SAVE_OFFSET     equ JIFFYL+1
 SAVE_OFFSET2    equ SAVE_OFFSET+1
 SAVE_DIR        equ SAVE_OFFSET2+1
 SAVE_DIR2       equ SAVE_DIR+1
-Sprite_src      equ SAVE_DIR2+1 ;10 bytes
+Sprite_src      equ SAVE_DIR2+1           ;10 bytes
 Sprite_motion   equ Sprite_src+10
-Sprite_turn     equ Sprite_motion+5 ;5 bytes
-SirenDir        equ Sprite_turn+5   ;
+Sprite_turn     equ Sprite_motion+5       ;5 bytes
+SirenDir        equ Sprite_turn+5         ; siren scale direction
 ;;; signals to stop the waka sound after completion of next cylce
-;;; see SoundOn 0 = halted 1 = not halted
+;;; see SoundOn. 0 = halted 1 = not halted
 eat_halt        equ SirenDir+1
 ;;; signals that the waka sound is stopped
 eat_halted      equ eat_halt+1
 WakaIdx         equ eat_halted+1
-flashRate       equ 14            ;in 60s second
-PwrFlashCnt     equ WakaIdx+1   ;countdown to flash power pill
-PwrFlashSt      equ PwrFlashCnt+1 ;state of power pill flash 0 = blank
-bonusInterval   equ 7            ;sound interval for award noise
-BonusAwarded    equ PwrFlashSt+1  ;true if bonus life was awarded
-Agonizer        equ BonusAwarded+1 ;keeps track of when to increment difficulty
+flashRate       equ 14              ;in 60s second
+PwrFlashCnt     equ WakaIdx+1       ;countdown to flash power pill
+PwrFlashSt      equ PwrFlashCnt+1   ;state of power pill flash 0 = blank
+bonusInterval   equ 7               ;sound interval for award noise
+BonusAwarded    equ PwrFlashSt+1    ;true if bonus life was awarded
+Agonizer        equ BonusAwarded+1  ;keeps track of when to increment difficulty
 BonusSound      equ Agonizer+1
-NewOffset       equ BonusSound+1 ; used by ScrollHoriz routine
+NewOffset       equ BonusSound+1    ; used by ScrollHoriz routine
 PrevSprtMotion  equ NewOffset+1
-SirenTable      equ PrevSprtMotion+1 ;
+SirenTable      equ PrevSprtMotion+1
 SirenOffset     equ SirenTable+((sirenTop-sirenBot)*2)+1
 PowerSnd2Idx    equ SirenOffset+1
 FrameLock       equ PowerSnd2Idx+1
 Sprite_page     equ FrameLock+1        
-CURKEY          equ $c5         ;OpSys current key pressed
+CURKEY          equ $c5             ;OpSys current key pressed
 ;;; sentinal character, used in tile background routine
 ;;; to indicate tile background hasn't been copied into _sback yet
 NOTCOPY         equ $fd
@@ -328,14 +326,13 @@ NOTCOPY         equ $fd
 noChoice        equ $7f
 
 ;;
-;; misc constants
+;; misc constants for graphical tiles
 ;;
-CHERRY          equ [BIT_CHERRY-CHAR_BEGIN]/8        
+CHERRY          equ [BIT_CHERRY-CHAR_BEGIN]/8 
 EMPTY           equ [BIT_EMPTY-CHAR_BEGIN]/8
 PWR2            equ [BIT_PWR0-CHAR_BEGIN]/8
 PWR             equ [BIT_PWR1-CHAR_BEGIN]/8
 RTOP            equ [BIT_RTOP-CHAR_BEGIN]/8   ;right top corner
-;TEEBOT          equ [BIT_TEEBOT-CHAR_BEGIN]/8 ;bottom tee
 DOT             equ [BIT_DOT-CHAR_BEGIN]/8
 HWALL           equ [BIT_HWALL-CHAR_BEGIN]/8
 VWALL           equ [BIT_VWALL-CHAR_BEGIN]/8
@@ -346,7 +343,7 @@ GHL             equ [GHOST_BEGIN-CHAR_BEGIN]/8
 GH1L            equ [GHL+4]
 GH2L            equ [GH1L+4]
 GH3L            equ [GH2L+4]    
-PACL            equ [GH3L+4]        ;pacman char number
+PACL            equ [GH3L+4] 
 ;
 ;
 ;------------------------------------
@@ -356,8 +353,8 @@ PACL            equ [GH3L+4]        ;pacman char number
         ;; logical not of 1, used to switch between on/off states
         MAC Invert
         lda #1                  ;dbl buffering, switch sprite tiles
-        eor {1}         ; 0 = 1
-        sta {1}         ; or 1 = 0
+        eor {1}                 ; 0 = 1
+        sta {1}                 ; or 1 = 0
         ENDM
         MAC saveY
         tya
@@ -393,7 +390,7 @@ PACL            equ [GH3L+4]        ;pacman char number
         ENDM
         ;; test if jiffy timer > timer1
         MAC HasTimerExpired
-           sei                  ;disable interrupt while we compare against the clock
+           sei         ;disable interrupt while we compare against the clock
            LDA JIFFYH  ; compare high bytes
            CMP {1}+2
            BCC .LABEL2 ; if JIFFYH < NUM2H then NUM1 < NUM2
@@ -405,7 +402,7 @@ PACL            equ [GH3L+4]        ;pacman char number
            LDA JIFFYL  ; compare low bytes
            CMP {1}
            BCC .LABEL2 ; if NUM1L < NUM2L then NUM1 < NUM2
-.LABEL1        ;; notify timer1 expired
+.LABEL1                ; notify timer1 expired
            cli
            jsr {2}
 .LABEL2
@@ -414,7 +411,7 @@ PACL            equ [GH3L+4]        ;pacman char number
         ;; compare {1} with #{2} 
         MAC cmp16Im
         lda {1}+1
-        cmp #{2} >> 8     ; load high byte
+        cmp #{2} >> 8       ; load high byte
         bne .done
         lda {1}
         cmp #[{2}] & $ff    ; load low byte
@@ -447,6 +444,8 @@ PACL            equ [GH3L+4]        ;pacman char number
 .done        
         ENDM
 ;;; initialize the sprite loop counter
+;;; kinda a lame macro I guess
+;;; but I thought the name helped readability
         MAC InitSpriteLoop
         lda #SPRITES
         sta SPRITEIDX
@@ -459,8 +458,8 @@ PACL            equ [GH3L+4]        ;pacman char number
         jsr longJmp
         ENDM
         ;; 
-        ;; display 16 bits debugging
-        ;; 
+        ;; display 16 bit debugging
+        ;; info on screen
         MAC Display2
         pha                     ;save A
         txa
@@ -514,6 +513,7 @@ PACL            equ [GH3L+4]        ;pacman char number
         resAll
 
         ENDM
+        ;; wait for number jiffies in {1}
 WaitTime_ subroutine
         clc
         adc JIFFYL
@@ -760,12 +760,12 @@ WaitTime_ subroutine
         sta {1}+1
 
         ENDM
-;; beq on joy right A has bit 7 of last reading from JOY0B
+;; allows beq on joy right A has bit 7 of last reading from JOY0B
         MAC onjoyr
         lda JOY0B               
         and #JOYR
         ENDM
-        
+;;; read joystick value into LASTJOY
         MAC readJoy
         
         lda JOY0
@@ -779,33 +779,12 @@ WaitTime_ subroutine
 
         INCLUDE "debug.asm"
 
-
-pacframes  equ #3            ; total number of pacman animation frames ( 1 based )
-
-;------------------------------------
-;;;
-;;; class Sprite
-;;; 5 instances, 4 ghosts, 1 pacman
-;;; sprite tile is the 'head tile'
-;;; sprite tile + 1 is the tail tile
-;;; sprite tile + 2 is the upcoming frame's head tile
-;;; sprite tile + 3 is the upcoming frame's tail tile
 ;;; we 'page flip' the tiles so that the expensive bit rendering
 ;;; does not have to be done on the vertical blank as my routines
-;;; which probably suck, take up too much time, and I was
-;;; getting flicker on the first few dozen scan lines because I
-;;; was still busy rendering
-;;; sprite_page control which set of tiles we draw , it alternates
+;;; sprite_page controls which set of tiles we draw , it alternates
 ;;; between 0 and 1
 ;;;
-;;; there are 4 sets of frames
-;;; for the pacman sprite
-;;; the order of sets is left,right,top,bottom
-;;; ghosts have 2 sets of frames
-;;; 
-;;; debugging notes: 22*5+5 is at an intersection
-;;; for testing up/down/left/right transitions
-;------------------------------------
+pacframes       equ #3            ; total number of pacman animation frames ( 1 based )
 dirVert         equ 22            ;sprite oriented vertically
 dirHoriz        equ 1             ;sprite oriented horizontally
 ;;; valid modes for JmpReset
@@ -859,7 +838,7 @@ fruit2Dots      equ 120          ;dots to release fruit2
 clydeDots       equ totalDots-30 ;dots to release clyde ( about 33% )
 inkyDots        equ totalDots-10 ;dots to release inky  ( )
 pinkyDots       equ totalDots-20 ;dots to release pinky ( should be 1)
-;blinkyS2Dots    equ [totalDots/4]*3
+
 
 maxLives        equ 4           ;max lives ever possible on left display
 pacLives        equ 3           ;default starting lives for pacman
@@ -879,7 +858,6 @@ g4Start         equ screen+22*11+11
 #endif        
 ;;; saved tunnel speed when ghosts are in tunnel
 
-;Sprite_loc      equ cassStart
 Sprite_loc      equ $a7
 Sprite_loc2     equ Sprite_loc+10    ;new screen loc
 Sprite_back     equ Sprite_loc2+10   ;background char before other sprites drawn
@@ -908,11 +886,9 @@ Sprite_frame    equ Sprite_base+5  ; animation frame of sprite as offset from _s
 ;;; points for eating fruits
 fruitPoints     equ Sprite_frame+5
 Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,GH3L      ;foreground char
-;Sprite_src      dc.w PAC1,GHOST,GHOST,GHOST,GHOST ;sprite source bitmap
 ;;; sprite chargen ram ( where to put the source bmap )
 Sprite_bmap     dc.w mychars+(PACL*8),      mychars+(GHL*8)      ,mychars+(GH1L*8)     , mychars+(GH2L*8)     , mychars+(GH3L*8)    
 Sprite_bmap2    dc.w mychars+(PACL*8)+(2*8),mychars+(GHL*8)+(16) ,mychars+(GH1L*8)+(16), mychars+(GH2L*8)+(16),mychars+(GH3L*8)+(16)
-;;Sprite_motion   dc.b motionUp,motionRight,motionLeft,motionRight,motionLeft ; see motion defines
 ;;; table of sprite offset for ghosts in box
 inBoxTable      dc.b 0,0,0,2,6
 ;;; for eating ghosts 200,400,800,1600 in bcd
@@ -956,13 +932,12 @@ ChaseTableEnd
 ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
 ;;; 
 ;;; division table for division by 22
-;Div22Table_i      dc.w [22*16],[22*8],[22*4],[22*2],[22*1]
 Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
 ;;; the home tiles for ghosts that are in 'scatter' mode
 ;;; ghosts try to find their way to these home tiles
 GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1,0
-
+;;; eating dots sound, belong in audio.asm 
 WakaTable      
         dc.b 236
         dc.b 239
@@ -986,7 +961,7 @@ WakaTableEnd
 
 
 VolTableSz equ 15        
-;;; swap upcoming sprite data with current sprite data
+;;; swap upcoming sprite position data with current sprite data
 ;;; i.e. page flip the screen location
         MAC SwapSpritePos
         
@@ -1134,6 +1109,7 @@ render_sprite SUBROUTINE
         blitd
         rts
 ;;; perform end level animation
+;;; S1=color
 FlashScreen subroutine
         store16 clrram,W1
         ldy #0
@@ -1296,12 +1272,14 @@ erasesprt SUBROUTINE
 ;;; Y =  byte of color
 ;;; W1 = screen position of sprite
 ;;; X = sprite we are working with
+;;; this routine needs work, it doesn't correctly
+;;; limit the color ram to the minimum cell area
 UpdateColorRam SUBROUTINE
         lda #clroffset          ;W1 now = color ram location
         clc
         adc W1+1
         sta W1+1
-        tya         ;color to A
+        tya                     ;color to A
         ;; below checks if we need to set the color in the
         ;; head, tail or both head and tail 
         ldy Sprite_offset,X     ;check if we need to update
@@ -1322,7 +1300,7 @@ UpdateColorRam SUBROUTINE
         ldy Sprite_dir,X        ;write tail tile color ram 
         sta (W1),Y
         rts
-;;; 
+;;; Draw Sprite Tiles To Screen ram
 ;;; X = sprite to move
 ;;; uses W2,S2
 drwsprt1 SUBROUTINE
@@ -1447,7 +1425,7 @@ initChaseTimer
         
 .done
         rts
-
+;;; 
 ;;; called when a power pill is de-activated
 ;;; 
 PowerPillOff SUBROUTINE
@@ -1468,6 +1446,7 @@ PowerPillOff SUBROUTINE
         bpl .loop
 .done        
         rts
+;;; 
 ;;; called when a power pill is activated
 ;;; 
 PowerPillOn SUBROUTINE
@@ -1491,8 +1470,7 @@ PowerPillOn SUBROUTINE
         store16x BLUE_GHOST,Sprite_src
         lda Sprite_speed2,X     ;value from powerpill speed table
         jsr SetSpeed
-        ;; ghost in the maze are now frightened
-;        lda #modeFright
+        ;; ghosts in the maze are now frightened
         lda #modeFright0
         sta Sprite_mode,X
 .0        
@@ -1518,7 +1496,7 @@ isr3 subroutine
         sta SirenIdx
         rts
         
-;;; power pill sound tale
+;;; power pill sound table
 PowerPillTable dc.b 227,232,236,239,241,247,0 ;null terminated
 ;;; macro to generate a table based sound player
 ;;; {1} the table index
@@ -1634,6 +1612,7 @@ DeathISR subroutine
 ;;; main entry for interrupt driven sound
 ;;; pacman eating sound, or power pill on sound
 ;;; or possible fruit eating sound
+;;; also flashes the power pellets by rewriting the chargen data
 ;;; 
 isr2 subroutine
         sei                     ;disable interrupts while in interrupt
@@ -1730,21 +1709,6 @@ install_isr SUBROUTINE
 ;        store16 isr3,$0314
         cli
         rts
-#if 0        
-delay2 SUBROUTINE
-.wait        
-        lda JIFFYL
-        sta S1
-.again        
-        lda JIFFYL
-        cmp S1
-        beq .again
-        dey
-        beq .done
-        jmp .wait
-.done        
-        rts
-#endif
 ;;; wrap a volume envelope
 ;;; around a specified delay
 ;;; S2 = delay
@@ -1840,21 +1804,13 @@ longJmp subroutine
 ;;; which needs some work :(
 death subroutine
         jsr uninstall_isr
-        jsr PowerPillOff        ;call off routine to clean up
+        jsr PowerPillOff           ;call off routine to clean up
         jsr EatSoundOff            ;stop waka
-        WaitTime 1              ;delay for 2 second 
+        WaitTime 1                 ;delay for 2 second 
 
         ClearPacSite
-#if 0
-	;; install the death sound
-        sei
-        lda #0
-        sta DeathSoundPtr
-        store16 DeathISR,$0314
-        cli
-#endif        
 	;; perform some animation
-	lda #0                  ;animation frame is pac mouth open
+	lda #0                     ;animation frame is pac mouth open
 	sta Sprite_frame
         sta DeathSoundPtr
 	store16 BIT_DEATH1,Sprite_src
@@ -1899,6 +1855,7 @@ death subroutine
         ;; set up dot counts for releasing ghosts
         ;; this is self modifying code, as we are overwriting
         ;; the cpy instruction's argument elsewhere in the code
+        ;; need to clean this up
         ;; 41 is totalDots/4
         ;; totalDots/8 = 20
         ;; /16 = 20
@@ -1983,9 +1940,9 @@ SetGhostSpeed SUBROUTINE
 ;;; S1==modeEndLevel : draw the maze but do not reset the lives, etc
 ;;; outputs:
 ;;; Sprite_page=0
-;;; and a lot more
+;;; and a lot more side effects :(
 reset_game subroutine
-        ResetMainLoop           ;reset main loop to show intro
+        ResetMainLoop        ;reset main loop to show intro
         jsr AllSoundOff
         
         lda S1               ;load 'mode' of reset
@@ -1995,11 +1952,11 @@ reset_game subroutine
 
         cmp #modeResetGame
         bne .00
-        jsr reset_game1         ; full game reset
+        jsr reset_game1      ; full game reset
 .00        
         ResetSpriteLocs
         ;; init loop counter
-        ldx #SPRITES-1          ;SPRITES is 1 based, so -1
+        ldx #SPRITES-1       ;SPRITES is 1 based, so -1
 .0
         jsr erasesprt
 
@@ -2070,7 +2027,7 @@ reset_game subroutine
         lda #EMPTY              ;blank tile
         sta screen+cherryRow*22+cherryCol
         
-        lda #flashRate          ;powr pill flash timer init
+        lda #flashRate          ;power pill flash timer init
         sta PwrFlashCnt
         lda #8
         sta 36879               ; border and screen colors
@@ -2188,6 +2145,8 @@ end_level subroutine
         rts
 #ifconst LARGEMEM        
 ;;; row 5 for panicman logo
+;;; fantasies of making a real intro, but out of time
+;;; and out of memory in +3k version :(
 Vanity SUBROUTINE
         lda #8
         sta 36879
@@ -2322,10 +2281,7 @@ DisplayLives subroutine         ;entry point for displaying lives only
 ;;; show the ghost and pacman as quickly as possible
 ;;; used by the intro music 
 ActorIntro subroutine
-        ;; HideActors
-        ;; lda $9002
-        ;; ora #22
-        ;; sta $9002
+
         store16 screen+leftMargin+22*msgRow+21/2-ready_msg_sz/2,W1      ;post the player ready message
         store16 ready_msg,W2
         jsr ndPrint             ;show message
@@ -2397,7 +2353,7 @@ main SUBROUTINE
         jsr copychar
 #else        
 ;        and #$f0
-        ora #$0f                    ;char ram pointer is lower 4 bits
+        ora #$0f                 ;char ram pointer is lower 4 bits
 #ifnconst MATRIX        
         sta VICSCRN
 #endif        
@@ -2433,12 +2389,12 @@ PacDeathEntry                   ;code longjmp's here on pacman death
         ;; Sprite_page=0 now
         
         jmp .background         ;sneakily enter the main game loop halfway through
-        ;; I don't even remember why anymore
+        ;; I don't even remember why anymore :(
 
 IntroLoop
         ;; checking for Sprite_page assures we make at least 2 passes
-        ;; through here, since it get's inverted on each pass
-        lda Sprite_page         ;sprite's havn't been rendered yet?
+        ;; through here, since it gets inverted on each pass
+        lda Sprite_page         ;sprites havn't been rendered yet?
         beq MainLoop0           ;yes,go around one more time
 #ifconst ACTORINTRO        
         jsr ActorIntro
@@ -2464,7 +2420,7 @@ MainLoop0
 
         Invert Sprite_page      ;dbl buffering, switch sprite tiles
 
-        ;; decrement game based timers such as power pills and attack/scatter
+        ;; decrement game based timers such as power pills and attack/scatter timer
         ldy POWER_UP
         beq .skip
         dey
@@ -2511,7 +2467,7 @@ MainLoop0
         dec SPRITEIDX                
         bmi .player
         ldx SPRITEIDX
-        jsr drwsprt1             ;draw in new location
+        jsr drwsprt1            ;draw in new location
         jmp .drawloop
 .player
         ;; take care of fixing the fruit colors
@@ -2527,7 +2483,7 @@ MainLoop0
         beq .player1            ;only age fruit every other frame
         dec FruitIsOut
         bne .player1            ;fruit is still good, no worries
-      ;; fruit is spoiled , removed it
+        ;; fruit is spoiled , removed it
         lda #EMPTY              ;blank tile
         sta screen+cherryRow*22+cherryCol
 #endif        
@@ -2547,7 +2503,7 @@ MainLoop0
         dec SPRITEIDX
         bmi MainLoopEnd
         ldx SPRITEIDX
-        jsr blargo
+        jsr CompositeSprite
         ldx SPRITEIDX
         jsr render_sprite
         jmp .playerloop
@@ -2615,7 +2571,7 @@ process_nibble2 subroutine
         adc #6                  ;add offset to create tile #
         sta (W2),Y              ;put it on the screen
         jsr set_color
-        cpy #mzMiddle          ;reached middle of screen?
+        cpy #mzMiddle           ;reached middle of screen?
         beq .0
         ;; place mirror side
 
@@ -2960,7 +2916,7 @@ SpecialKeys SUBROUTINE
         ENDM
 somertn        
         rts
-;;; animate a ghost back and forth
+;;; run AI for all ghosts
 GhostAI SUBROUTINE
         lda #0
         sta CORNER_SHAVE        ;ghosts get no cornering bonus
@@ -3204,7 +3160,7 @@ XClydeDots
 .4
         lda BlinkyCruise
         cmp #blinkyCruise2      ;already in cruise mode 2?
-        beq .5                 ;yes, no checking needed
+        beq .5                  ;yes, no checking needed
         cmp #blinkyCruise1
         beq XBlinkyS2
 XBlinkyS1        
@@ -3467,8 +3423,8 @@ RestoreSprite SUBROUTINE
 ;;; locals: S3,S4,S0 current min distance
 PossibleMoves SUBROUTINE
         lda #noChoice
-        sta GHOST_DIST      ;initialize least distance to a big number
-        sta GHOST_DIR       ;initialize best move to an invalid move
+        sta GHOST_DIST          ;initialize least distance to a big number
+        sta GHOST_DIR           ;initialize best move to an invalid move
 
         SaveSprite              ;save sprite data into tempvars
 .checkup                             ;
@@ -3483,7 +3439,7 @@ PossibleMoves SUBROUTINE
         ldSprtHeadPos Sprite_loc2,W1 ;
         jsr CalcDistance             ;
         jsr RestoreSprite            ;
-        IfFocus "U",9            ;
+        IfFocus "U",9                ;
 .endup        
 .checkleft
         ;; don't reverse
@@ -3491,7 +3447,7 @@ PossibleMoves SUBROUTINE
         cmp Sprite_motion,X
         beq .endleft
         ;; check if we can go left
-        jsr ScrollLeft             ;
+        jsr ScrollLeft               ;
         bcs .endleft
         ;; we could go left
         ldSprtHeadPos Sprite_loc2,W1 ;
@@ -3530,11 +3486,12 @@ PossibleMoves SUBROUTINE
 .done
         rts
 ;;; this routine calculates inky's target tile
-;;; for either X or Y
-;;; 
+;;; for either X or Y 
+;;; remember inky aims based on both pacman's and blinky's position
+;;; see pacman dossier for more details
 ;;; arguments are:
-;;;  BlinkyRow,pacrow+2,inky target row (output)
-;;;  e.g. foo DIV22_RESLT,GHOST1_TGTROW,GHOST_TGTROW
+;;;  BlinkyRow,pacrow +2 tiles,inky target row (output)
+;;;  e.g. InkyTargetTile DIV22_RESLT,GHOST1_TGTROW,GHOST_TGTROW
         MAC InkyTargetTile
         lda {1}
         sec
@@ -3561,7 +3518,7 @@ FrightAI SUBROUTINE
         jsr rand_8
         pha
         jsr rand_8
-        ;;  one random numbers are pushed on the stack
+        ;;  one random number is pushed on the stack
         clc
         adc W2+1
         sta W2+1
@@ -3605,7 +3562,7 @@ ScatterGhostAI SUBROUTINE
         rts
 
 ;;; 
-;;; the ghost the runs away when pacman is too close
+;;; the ghost that runs away when pacman is too close
 ;;; sue or clyde
 ;;; opposite quadrants
 ;;; 
@@ -3658,16 +3615,16 @@ Ghost4AI SUBROUTINE
 ;;;
 ;;; ghost 1
 ;;; draws a vector from his initial target tile ( 2 in front of pacman )
-;;; to the current position  of blink
+;;; to the current position  of blinky
 ;;; doubles the length of the vector
 ;;; and uses the result as his target tile
 Ghost1AI SUBROUTINE
 
         saveX
-        ;; our initial target it 2 in front of pacman
+        ;; our initial target is 2 in front of pacman
         ;; we'll leverage ghost 3's routines for us
         ;; his target tile is 4 in front of pacman and he can
-        ;; calc +2 for is
+        ;; calc +2 for us
         jsr Ghost3AI
 
         ;; blinky ( ghost 2 ) calculated just before us, so we'll use
@@ -3978,7 +3935,7 @@ DeathDistance equ 3
 ;        WaitTime 3
 ;        jsr rsPrint
         ldx EatenIdx
-        bmi .skip               ;did we run off the table?
+        bmi .skip               ;did we run off the points table?
         lda pointTable,x        ;load low byte
         dex                     ;move to high byte
         ldy pointTable,x        ;load high byte
@@ -4024,7 +3981,9 @@ Animate SUBROUTINE
 .tileSet0
         endm
 ;;; uses W1,W2,W3
-blargo SUBROUTINE
+;;; composites the tiles underneath a sprite with
+;;; the current sprite image
+CompositeSprite SUBROUTINE
 
 SPRT_IDX set S3                 ;loop counter.  The sprite to check against
 SPRT_CUR set S2                 ;current sprite
@@ -4082,23 +4041,23 @@ SPRT_CUR set S2                 ;current sprite
         cmp16 W2,W3             ;out tail == sprite_idx's head
         bne .not_tail2head
         jsr tail2head
-        ;; we check oue head and tail against oncoming sprites heads , now
+        ;; we checked our head and tail against oncoming sprites heads , now
         ;; it's time to check our head n tail against oncoming sprites tails
 .not_tail2head        
-        ldSprtTailPos Sprite_loc,W3 ;S3 sprite's current tail position into W3
-        cpx  SPRT_CUR           ;are we checking against ourselves
-        beq .ourselves2         ;yes, then W3 is good to go
+        ldSprtTailPos Sprite_loc,W3  ;S3 sprite's current tail position into W3
+        cpx  SPRT_CUR                ;are we checking against ourselves
+        beq .ourselves2              ;yes, then W3 is good to go
         ldSprtTailPos Sprite_loc2,W3 ;not ourselves, load W3 with S3 sprites's new position
 .ourselves2        
-        cmp16 W1,W3             ;our head == sprite_idx's tail?
+        cmp16 W1,W3                  ;our head == sprite_idx's tail?
         bne .not_head2tail
         jsr head2tail 
 .not_head2tail        
-        cmp16 W2,W3             ;our tail  == sprite_idx's tail?
+        cmp16 W2,W3                  ;our tail  == sprite_idx's tail?
         bne .not_tail2tail
         jsr tail2tail
 .not_tail2tail        
-        jmp .loop               ;all possible collisions checked
+        jmp .loop                    ;all possible collisions checked
         
 ;;; handle tail to head collisions
 ;;; X is the indexed sprite
@@ -4137,9 +4096,7 @@ head2head SUBROUTINE
         sta Sprite_sback,X
 .done        
         rts
-        ;; rendering 0 and had a collision with 1
-        ;; ( the ghost is moving over pacman )
-        ;; X the indexing sprite we are checking against
+
 head2tail SUBROUTINE
         cpx SPRT_CUR
         beq .ourselves
@@ -4197,19 +4154,17 @@ SetSpeed subroutine
         sta Sprite_turn,X
         rts
 ;;; handle tunnel left side
-;;; use Y to determine if decrementhpos or incrementhpos
-;;; y=0 decrement y=1 increment
 ;;; y must be undamaged on return
 DecrementHPos SUBROUTINE
 #ifnconst PACTUNNEL        
-        cpx #0   ;slowing/speeding only applies to ghosts
+        cpx #0           ;slowing/speeding only applies to ghosts
         beq .1
 #endif
         cmp16Im W2,[tunnelRow*22]+tunnelRCol-tunnelLen+screen
         bne .0
-        RestoreSpeed ; leaving tunnel from right, speed up
-        bne .set_speed  ;jmp to set_speed
-.0                      ;not exiting the tunnel
+        RestoreSpeed     ;leaving tunnel from right, speed up
+        bne .set_speed   ;jmp to set_speed
+.0                       ;not exiting the tunnel
         cmp16Im W2,[tunnelRow*22]+tunnelLCol+tunnelLen+screen
         bne .1
         ;; entered from the left
@@ -4239,14 +4194,14 @@ IncrementHPos SUBROUTINE
 .0        
         cmp16Im W2,[tunnelRow*22]+tunnelRCol-tunnelLen+screen
         bne .1
-        lda #tunnelSpeed         ; entered from the right
+        lda #tunnelSpeed     ; entered from the right
 .set_speed        
         jsr SetSpeed
         bne .done
 .1        
         cmp16Im W2,[tunnelRow*22]+tunnelRCol+screen
         bne .done
-        ;; leaving from the left, warping to the right
+        ;; leaving from the right, warping to the left
         store16 [tunnelRow*22]+tunnelLCol+screen,W2
         rts
 .done
@@ -4258,7 +4213,7 @@ IncrementHPos SUBROUTINE
         clc
         adc SCRL_VAL
         ENDM
-        
+        ;; not used currently
         MAC ApplyAllBonus
         tay
         cpx #0
@@ -4292,7 +4247,7 @@ ScrollHoriz SUBROUTINE
         lda Sprite_dir,X        ;get our current orientation
         cmp #dirHoriz           ;are we already horizontal
         beq .ok                 ;ok to move horizontal
-        jmp  changehoriz         ;no, switch to horizontal and rts
+        jmp  changehoriz        ;no, switch to horizontal and rts
 .ok
         lda Sprite_offset,X     ;get our current pixel offset
         cmp END_SCRL_VAL        ;are we at the end of our tiles?
@@ -4322,7 +4277,7 @@ ScrollHoriz SUBROUTINE
         jsr IsWall
         beq .cantmove
 .continue
-        move16x2 W2,Sprite_loc2  ;save the new sprite screen location
+        move16x2 W2,Sprite_loc2   ;save the new sprite screen location
  ;       pla                      ;pull new sprite offset from the stack
         lda NewOffset
 .draw
@@ -4428,7 +4383,7 @@ DisplayScore subroutine
 ;;; 
 changehoriz SUBROUTINE
         move16x Sprite_loc,W1
-        lda #1                 ; offset to blank tile in endtile case
+        lda #1                  ; offset to blank tile in endtile case
         sta S3                  ;-offset to ORG in endtile case
         lda Sprite_offset,X     ;where is sprite offset
         cmp CORNER_SHAVE        ;within shave dist of beg tile?
@@ -4587,6 +4542,7 @@ ChangeVertFailed       ; we can't change directions  in middle of tile
         clc                     ;return success
         rts
         ;; move sprite_loc -22 into {1}
+        ;; this is the vertical 'reference' tile
         MAC SpriteVRef
         saveX
         txa
@@ -4614,7 +4570,7 @@ ScrollVertical SUBROUTINE
         cmp END_SCRL_VAL        ; less than 8? then fine scroll
         bne .fine
 .course                         ; course scroll
-        SpriteVRef W2         ; VREF tile loc-22
+        SpriteVRef W2           ; VREF tile loc-22
         lda SCRL_VAL
         bmi .up
         ;; going down
@@ -4892,103 +4848,18 @@ done:
 #endif
         
 #if 0
-;;; scratch text for debugging thoughts
-;; 0 @
-;; 1 a
-;; 2 b
-;; 3 c
-;; 4 d
-;; 5 e
-;; 6 f
-;; 7 g
-;; 8 h
-;; 9 i
-;; a jp
-;; b k
-;;; example of accessing stack local variable passed C style
-;; lda #$ab
-;; pha
-;; tsx
-;; inx
-;; lda $100,X
-;; sta $0
-;;; for debugging, here are the keyboard read codes for the ghost control
-;;; up 9,down 26,left 17,right 18 a,d w,x
-why tile scrolling works
+        
+for debugging, here are the keyboard read codes for the ghost control
+up 9,down 26,left 17,right 18 a,d w,x
+        
+tile scrolling works
 we allow going to 8 or 0 which always allows to make it to the end of a tile set
 so if you are heading towards a wall, you will always be able to touch it
 when you start in the new tile after a course scroll it's always 1 or 7         
 
-I experimented with allowing pacman to cut corner by decreasing the number
-at which we allow the changevert or horz to operate, and it seems to work
-
-ghost AI
-
-        does the tile distance logic need to be aware of where pacman the sprite is
-        withing the tiles?
-        I'm using the same routines we scroll with, ScrollLeft or scroll_right
-        they will take care of knowing whether the move could take place
-        if you are at the end of a range or not
-
-        lets get the tunnel working
-        
-        
         ghost box
         row 11
         col 9
 
-        have a mode where their AI isn't running
-        then when it's time to get out of the box
-        set the target tile
 
-        there are 171 dots in our maze
-
-
-todo:
-
-        blinky cruise mode enable disable
-        siren tone change
-        better corerning advantage for pacman
-        sounds dont disengage when ending game
-        doesn't run under basic cuz of interrupt problems
-        collisions are too tight and also too wide sometimes
-        ghosts need to speed up
-        difficulty needs to speed them up
-        pacman needs to speed up
-        ghosts can't come out like gangbusters on first dot
-        but also need a timer
-
-        here's the speed modes we need
-
-        pacman powered up:
-        ghost turn /2
-        maybe a small boost in pacman speed
-
-        before level 4 pacman is faster than ghosts
-
-        after level 4 pacman is a little slower
-
-        ghosts should be staggered
-
-        general speed up through the master delay swithc
-
-        pacman is slower when eating
-
-        clyde DOES need the timer to come out toward the end if you
-        die
-
-
-        things to do
-        sprite_offset needs set to 0 on death sequence
-        lots of JSR can become macros
-        save quite a bit of space by moving some more things to zero page
-
-        work on pauses between game events
-        when blinky goes to elroy mode, give pacman an extra turn advantage
-
-        consider adding the 'expliot' zone per pacman dossier
-        it gets a littel rough as the top of the maze
-
-        blinky bonus isn't working in vertical mode beause tiles is always even or odd depending
-        on column you are in
 #endif
