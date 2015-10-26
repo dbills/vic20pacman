@@ -2291,7 +2291,16 @@ reset_game1 subroutine
         store16 screen+leftMargin+22*msgRow+21/2-gameover_msg_sz/2,W1      ;post the player ready message
         store16 gameover_msg,W2
         jsr ndPrint
+#ifconst SHADOWVIC
+        ;; wait 4 seconds
+        ldx #120
+.loop:  dc.b $22, $02             ; screen update and frame sync
+        dex
+        bne .loop
+        dc.b $22, $01             ; exit shadowVIC
+#else
         jsr WaitFire
+#endif
         jsr rsPrint
         JmpReset modeResetGame    ;longjmp to reset of game
         ENDM
