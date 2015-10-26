@@ -4,11 +4,15 @@
 ;INVINCIBLE equ 1                ; pacman can't die
 ;MASTERDELAY equ 1               ;enable master slowdown for debugging
 ;masterSpeed      equ 10 ;master game delay
+;SHADOWVIC equ 1                ; run in shadowVIC emulator
 PACDEATHGFX equ 1        
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
+;BASIC equ 1
+#ifnconst SHADOWVIC
 BASIC equ 1
+#endif
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -1887,6 +1891,9 @@ death subroutine
         beq .nextFrame
         
         sta 36876
+#ifconst SHADOWVIC
+        dc.b $22, $02       ; Screen update and frame sync.
+#else
 .ll
         lda VICRASTER
         bne .ll
@@ -1896,6 +1903,7 @@ death subroutine
 ;        bcs .wait2
         cmp #70
         bne .wait2
+#endif
         
         
         jmp .loop0
@@ -2241,6 +2249,9 @@ Vanity SUBROUTINE
         store16 screen+(9*22)+3,W1
         store16 jmessner_msg,W2
         jsr ndPrint
+#ifconst SHADOWVIC
+        dc.b $22, $02   ; Screen update and frame sync.
+#endif
         jsr WaitFire
         rts
 #endif        
@@ -2386,9 +2397,11 @@ FirstRun dc.b 0
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
+#ifnconst SHADOWVIC
 .try_again        
         lda $a2                 ;jiffy as random seed
         beq .try_again          ;can't be zero
+#endif
         sta r_seed
         
         sei                     ;disable interrupts
@@ -2470,9 +2483,14 @@ MainLoop0
 .lockloop        
         lda FrameLock
         bne .lockloop
+
+#ifconst SHADOWVIC
+        dc.b $22, $02           ; Screen update and frame sync.
+#else
 .iloop        
         lda VICRASTER           ;load raster line
         bne .iloop
+#endif
 
         lda #2                  ;lock to .5 frame per interrupt
         sta FrameLock           ;to prevent jerkiness
