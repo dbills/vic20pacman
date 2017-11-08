@@ -905,8 +905,8 @@ Sprite_speed2    dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightS
 ;;; ghosts start at 90%
 ;;; when hard they are at 100%
 ;Speed_standard   equ 9         ;95%
-;Speed_standard   equ 255         ;95%
-Speed_standard   equ 36         ;85%
+Speed_standard   equ 9         ;95%
+;Speed_standard   equ 36         ;85%
 ;Speed_slow       equ 34         ;80%
 Speed_slow       equ 40         ;80%
 Speed_fast       equ 40         ;100%
@@ -2878,24 +2878,13 @@ SpecialKeys SUBROUTINE
         ;; and branch to {1} if allowed
         ;; note: Z=0 on return
         MAC MyTurn2
-;        jmp {1}
-        lda Sprite_speed,X
-        cmp #255
-        beq {1}
-        lda Sprite_turn,X
-        sec
-        sbc #speedBase
-        sta Sprite_turn,X
-;        bne {1}
-        bpl {1}
+        dec Sprite_turn,X
+        bne {1}
         ;; we don't get to move this turn
         ;; reset the turn counter
-        clc
-        adc Sprite_speed,X
+        lda Sprite_speed,X
         sta Sprite_turn,X
-
         ENDM
-
         ;; Place target tile for an eaten ghost
         ;; into GHOST_TGTCOL,GHOST_TGTROW
         ;; returns: Z not set
@@ -4860,6 +4849,61 @@ when you start in the new tile after a course scroll it's always 1 or 7
         ghost box
         row 11
         col 9
+        
+        Speed denominators
+        
+        .40 | 120
+        .45 | 110
+        .50 | 100
+        .55 | 90
+        .60 | 80
+        .71 | 58
+        .79 | 42
+        .80 | 40
+        .83 | 37
+        .85 | 30
+        .87 | 26
+        .90 | 20
+        .95 | 10
+        
+Arcade settings for pacman speed
+        
+level| norm | dots | power | pwrdot
+-----------------------------------
+1      80%    71%    90%     79%   
+2-4    90%    79%    95%     83%   
+5-20   100%   87%    100%    87%   
+21+    90%    79%     -
 
+Arcade settings for ghost speed
+
+level | normal | power | tunnel
+-----------------------------------
+1       75%      50%     40%
+2-4     85%      55%     45%
+5-20    95%      60%     50%
+21+     95%       -      50%
+
+        napkin calculation for above percentages:
+        60 FPS * .71 = 42.6 present
+        * 10 to get rid of floating point
+        426/600 present = 142/200 present
+        200-142 = 58 skipped
+        200/58 = fraction = 3.44
+        We'll use integer addition with error correction
+        add 58, each time we > 200 , the emit an error signal ( skip a frame )
+        and take N-200 to generate the next number in the sequence
+        e.g. the sequence 58,116,174,32,90,148, 6,64,122,180
+                                      X         X
+        you can see the sequence varies between runs of 2 and 3 continuous
+        frame
+        I'm not sure why it's 3 and 2 (something to learn)
+        but it does net out 58 skipped frames over 200 as we desire
+
+        in the table above I've put the denominator for each speed
+        
+11/6/17 ghost should not reverse direction right away when the mode changes, but rather when they enter the next tile
+        eating an energizer stop pacman moving for three frames
+        ghosts leaving the house direction does not match the arcade game
 
 #endif
