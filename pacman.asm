@@ -8,7 +8,7 @@ PACDEATHGFX equ 1
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-BASIC equ 1    ;
+BASIC equ 1    
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -62,7 +62,7 @@ GHOSTS_ON   equ 1    ;
 ;;; title name: Panicman
 ;;; 
 #ifconst LARGEMEM
-        org $1201
+        org $1200
 #else        
         org $0401
 #endif        
@@ -91,7 +91,7 @@ GHOSTS_ON   equ 1    ;
 
 sirenBot    equ 227
 sirenTop    equ 238
-speedBase   equ 8
+speedBase   equ 201               ; see speed calculations at EOF
 ;_SLOWPAC       equ 1             ; pacman doesn't have continuous motion
 LARGEMAZE   equ 1                 ;
 _debug      equ 1                 ; true for debugging
@@ -169,7 +169,7 @@ tunnelLCol      equ 1           ;column to start warp to right side
 ;;; the speed warp effect would start at tunnelLCol+tunnelLen
 ;;; or tunnelRCol-tunnelLen
 tunnelLen       equ 3           ;length of tunnel
-tunnelSpeed     equ speedBase*2 ;Sprite_speed setting for tunnel
+tunnelSpeed     equ speedBase/2 ;Sprite_speed setting for tunnel
 ;;; amount of time a fruit is display
 fruitTime       equ 140
         
@@ -901,19 +901,14 @@ pacEatSpeed      equ 255
 ghostFrightSpeed equ speedBase*2
 ;;; the speed of ghosts when pacman is powered up
 Sprite_speed2    dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed
-;;; pacman always runs @ 95% of top speed
-;;; ghosts start at 90%
-;;; when hard they are at 100%
-;Speed_standard   equ 9         ;95%
-Speed_standard   equ 9         ;95%
-;Speed_standard   equ 36         ;85%
-;Speed_slow       equ 34         ;80%
+;;; see speed tables at the end of this file
+;;; values are in X/200ths
+Speed_standard   equ 80         ;85%
 Speed_slow       equ 40         ;80%
-Speed_fast       equ 40         ;100%
+Speed_fast       equ 20         ;100%
 harder1          equ 2          ;level when ghost are speed standard
 harder2          equ 4          ;level when ghosts are faster
-;Sprite_base      dc.b Speed_standard,Speed_slow,Speed_slow,Speed_slow,Speed_slow
-Sprite_turnbase  dc.b 40,40,40,40,40
+Sprite_turnbase  dc.b 200,200,200,200,200
 Sprite_color     dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy setting for blinky
 blinkyCruise1    equ 1
@@ -2878,12 +2873,17 @@ SpecialKeys SUBROUTINE
         ;; and branch to {1} if allowed
         ;; note: Z=0 on return
         MAC MyTurn2
-        dec Sprite_turn,X
-        bne {1}
+        lda Sprite_turn,X
+        sec
+        sbc Sprite_speed,X
+        sta Sprite_turn,X
+        bpl {1}
         ;; we don't get to move this turn
         ;; reset the turn counter
-        lda Sprite_speed,X
+        clc
+        adc #speedBase
         sta Sprite_turn,X
+
         ENDM
         ;; Place target tile for an eaten ghost
         ;; into GHOST_TGTCOL,GHOST_TGTROW
@@ -4896,9 +4896,7 @@ level | normal | power | tunnel
         e.g. the sequence 58,116,174,32,90,148, 6,64,122,180
                                       X         X
         you can see the sequence varies between runs of 2 and 3 continuous
-        frame
-        I'm not sure why it's 3 and 2 (something to learn)
-        but it does net out 58 skipped frames over 200 as we desire
+        frames, which does net out 58 skipped frames over 200 as we desire
 
         in the table above I've put the denominator for each speed
         
