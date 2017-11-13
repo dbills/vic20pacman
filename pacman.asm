@@ -8,7 +8,7 @@ PACDEATHGFX equ 1
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-BASIC equ 1    
+;BASIC equ 1    
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -37,7 +37,7 @@ AGEFRUIT equ 1
 ;;; e.g. 10000 points is 010000 or $01
 BONUSLIFE equ $01
 ;;; if uncommented, play the intro music
-ACTORINTRO equ 1                ;
+;ACTORINTRO equ 1                ;
 ;;;
 ;;; uncomment to activate ghosts
 ;;; comment out to cause no ghost movement
@@ -298,10 +298,14 @@ Sprite_src      equ SAVE_DIR2+1           ;10 bytes
 Sprite_motion   equ Sprite_src+10
 Sprite_turn     equ Sprite_motion+5       ;5 bytes
 SirenDir        equ Sprite_turn+5         ; siren scale direction
-;;; signals to stop the waka sound after completion of next cylce
-;;; see SoundOn. 0 = halted 1 = not halted
+;;; signals to stop the waka sound after completion of next cycle
+;;; see SoundOn. 0 = halt/halted 1 = do not halt/not halted
+;;; a waka sound must complete it's full 'cycle', so you can't
+;;; just hear "half a waka".
+;;; waka sound is turned off in the following conditions:
+;;; 1) during wall checks ( which is weird )
 eat_halt        equ SirenDir+1
-;;; signals that the waka sound is stopped
+;;; signals that the waka sound is fully stopped
 eat_halted      equ eat_halt+1
 WakaIdx         equ eat_halted+1
 flashRate       equ 14              ;in 60s second
@@ -1651,17 +1655,17 @@ isr2 subroutine
 .not_power
         jsr isr3                ;run the siren
 .waka        
-        lda eat_halted
-        beq isr2_done2
-        ldx WakaIdx
-        bmi .reset
+        lda eat_halted          ;is waka sound stopped?
+        beq isr2_done2          
+        ldx WakaIdx             ;if we are at the end of the waka
+        bmi .reset              ;sound table then reset it
 .0        
-        ldy WakaTable,X
+        ldy WakaTable,X         ;load next note of waka sonud
         sty wakavoice
-        dex
+        dex                     ;update waka sound index
         stx WakaIdx
 isr2_done2
-        lda POWER_UP
+        lda POWER_UP            ;should we play power pill sound?
         bne .notpower2
         ;; manually update jiffy clock
         UpdateJiffyCounter
@@ -3111,11 +3115,8 @@ DotEaten SUBROUTINE
         ldy #$0
         jsr UpdateScore
 
-;        lda #1
-;        bit DOTCOUNT
-;        bne .noslowdown         ;penalize pacman every other dot
-        lda #-speedBase
-        sta Sprite_turn         ;for pac to slow down 1 frame per dot
+        lda #120
+        sta Sprite_speed
 .noslowdown        
         ;; 
         ldy DOTCOUNT
@@ -4139,7 +4140,6 @@ tail2tail SUBROUTINE
 ;;; note: Z != 0 on exit please
 SetSpeed subroutine
         sta Sprite_speed,X ;
-        lda #-speedBase             ;only 2 turns left
         sta Sprite_turn,X
         rts
 ;;; handle tunnel left side
@@ -4277,11 +4277,13 @@ ScrollHoriz SUBROUTINE
         rts
 ;;; attempt to turn the dot eating sound back on
 ;;; green border = eating
+;;; note the inverse logic on eat_halt, maybe I could
+;;; fix this?  probably did it to save a byte somewhere
 SoundOn SUBROUTINE
 ;        lda #13
 ;        sta 36879
-        lda eat_halt
-        bne .done
+        lda eat_halt            
+        bne .done               ;it's already on, nothing to do
         lda #1
         sei
         sta eat_halt
@@ -4290,15 +4292,18 @@ SoundOn SUBROUTINE
 .done        
         rts
 ;;; attempt to turn the dot eating sound off
+;;; Z true on exit
 EatSoundOff SUBROUTINE
-        lda eat_halted
-        beq .done
+        lda Sprite_base
+        sta Sprite_speed
+        lda eat_halted          ;already halted
+        beq .done               ;nothing to do
 ;        lda #8
 ;        sta 36879
         
         lda #0
         sei
-        sta eat_halt
+        sta eat_halt            ;request stop at next cycle
         cli
 .done        
         rts
