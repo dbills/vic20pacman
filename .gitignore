@@ -107,6 +107,7 @@ publish
 *.lst
 *~
 *.p00
+.\#*
 
 # Others
 [Bb]in
