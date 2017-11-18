@@ -8,7 +8,7 @@ PACDEATHGFX equ 1
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-;BASIC equ 1    
+BASIC equ 1    
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -62,7 +62,7 @@ GHOSTS_ON   equ 1    ;
 ;;; title name: Panicman
 ;;; 
 #ifconst LARGEMEM
-        org $1200
+        org $1201
 #else        
         org $0401
 #endif        
@@ -2280,7 +2280,7 @@ DisplayLives subroutine         ;entry point for displaying lives only
 ;;; show the ghost and pacman as quickly as possible
 ;;; used by the intro music 
 ActorIntro subroutine
-
+#ifconst ACTORINTRO        
         store16 screen+leftMargin+22*msgRow+21/2-ready_msg_sz/2,W1      ;post the player ready message
         store16 ready_msg,W2
         jsr ndPrint             ;show message
@@ -2298,6 +2298,7 @@ ActorIntro subroutine
         WaitTime 2              ;delay for 2 second after ready msg
 .cont
         jsr rsPrint             ;restore screen where text was printed
+#endif    
         ;; move jmp in main loop to proper
         ;; spot for running the game
         ModifyMainLoop
@@ -2395,9 +2396,7 @@ IntroLoop
         ;; through here, since it gets inverted on each pass
         lda Sprite_page         ;sprites havn't been rendered yet?
         beq MainLoop0           ;yes,go around one more time
-#ifconst ACTORINTRO        
-        jsr ActorIntro
-#endif        
+        jsr ActorIntro          ;message and song
 MainLoop0
         
 #ifconst MASTERDELAY        
@@ -4133,6 +4132,12 @@ tail2tail SUBROUTINE
         beq .done
         lda Sprite_base,X
 .done        
+        ENDM
+;;; set pacman speed, new speed
+;;; this routine may be implemented to provide
+;;; slightly different semantics if we are speeding up
+;;; vs slowing down the speed
+        MAC SetPacSpeed
         ENDM
 ;;; set the speed for an individual ghost
 ;;; X = ghost to set
