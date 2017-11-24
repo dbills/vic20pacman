@@ -83,6 +83,59 @@ GHOSTS_ON   equ 1    ;
 
 #endif // BASIC
         
+;;; chase table is the initial scatter/chase phases for each level
+;;; they change as levels go on
+;;; 7 seconds, 20 seconds, etc...
+;;; even values are scatter mode, odd are chase mode
+;;; iteration starts from end 
+ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 20*softTimerRes, 7*softTimerRes
+ChaseTableEnd
+ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
+;;; 
+;;; division table for division by 22
+Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
+;;; the home tiles for ghosts that are in 'scatter' mode
+;;; ghosts try to find their way to these home tiles
+GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
+VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1,0
+VolTableSz equ 15        
+;;; eating dots sound, belong in audio.asm 
+WakaTable      
+        dc.b 236
+        dc.b 239
+        dc.b 242
+        dc.b 245
+        dc.b 247
+        dc.b 248
+        dc.b 0
+        dc.b 0
+        dc.b 0
+        dc.b 248
+        dc.b 247
+        dc.b 245
+        dc.b 242
+        dc.b 239
+        dc.b 236
+        dc.b 0
+        dc.b 0
+        dc.b 0
+WakaTableEnd
+;;; groups of 7 bytes
+;;; Pacman speed: normal, dots, power, pwrdot
+;;; Ghost speed:  normal, frightened, tunnel
+Lvl1Spds
+        dc.b 40,58,20,42        ;lvl 1
+        dc.b 50,100,120
+Lvl2Spds        
+        dc.b 20,42,10,37
+        dc.b 30,90,110
+Lvl5Spds
+        dc.b 0,26,0,26
+        dc.b 10,80,100
+Lvl21Spds        
+        dc.b 20,42,0,26
+        dc.b 10,80,100
+    
 #ifconst LARGEMEM
         org $1400-(8*3)
         INCLUDE "bitmaps.asm"
@@ -725,45 +778,6 @@ blinkyCruiseOff  equ 0
 ;;; 
 ;;; resolution of system timer in 1/x seconds
 softTimerRes   equ 60
-;;; chase table is the initial scatter/chase phases for each level
-;;; they change as levels go on
-;;; 7 seconds, 20 seconds, etc...
-;;; even values are scatter mode, odd are chase mode
-;;; iteration starts from end 
-ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 20*softTimerRes, 7*softTimerRes
-ChaseTableEnd
-ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
-;;; 
-;;; division table for division by 22
-Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
-;;; the home tiles for ghosts that are in 'scatter' mode
-;;; ghosts try to find their way to these home tiles
-GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
-VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1,0
-;;; eating dots sound, belong in audio.asm 
-WakaTable      
-        dc.b 236
-        dc.b 239
-        dc.b 242
-        dc.b 245
-        dc.b 247
-        dc.b 248
-        dc.b 0
-        dc.b 0
-        dc.b 0
-        dc.b 248
-        dc.b 247
-        dc.b 245
-        dc.b 242
-        dc.b 239
-        dc.b 236
-        dc.b 0
-        dc.b 0
-        dc.b 0
-WakaTableEnd
-
-
-VolTableSz equ 15        
 ;;; swap upcoming sprite position data with current sprite data
 ;;; i.e. page flip the screen location
         MAC SwapSpritePos
