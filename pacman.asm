@@ -1751,6 +1751,31 @@ SetGhostSpeed SUBROUTINE
         lda #Speed_slow
         rts
 #endif        
+;;;
+;;; determine correct speed based on levels complete
+;;; input:
+;;; X=4 get ghost speed
+;;; X=0 get pacman speed
+;;; output: speed in A
+GetSpeed SUBROUTINE
+        lda LevelsComplete
+        cmp #1
+        bmi .level1
+        cmp #2
+        bmi .level2
+        cmp #5
+        bmi .level5
+        lda Lvl21Spds,X
+        rts
+.level5
+        lda Lvl5Spds,X
+        rts
+.level2
+        lda Lvl2Spds,X
+        rts
+.level1
+        lda Lvl1Spds,X
+        rts
 ;;; 
 ;;; reset game after pacman death, or level start
 ;;; inputs: S1==#modeResetGame draw the maze and do all initialization for a new level
