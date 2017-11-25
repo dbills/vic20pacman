@@ -215,7 +215,7 @@ zeroDigit       equ 48 | $80    ;zero digit character
 motionRight     equ 24          ;sprite locator code for right
 motionLeft      equ 22          ;sprite locator code for left
 motionUp        equ 1           ;sprite location code for up
-motionDown      equ 45          ;" for down
+motionDown      equ 45          ;sprite location for down
 tunnelRow       equ 11          ;row number that tunnel lives on
 tunnelRCol      equ 20          ;column to start warp to left side
 tunnelLCol      equ 1           ;column to start warp to right side
@@ -1704,12 +1704,6 @@ death subroutine
         ENDM
 
         MAC ResetSpriteLocs 
-        store16 pacStart , Sprite_loc+[2*0]
-        store16 g1Start  , Sprite_loc+[2*1]
-        store16 g2Start  , Sprite_loc+[2*2] 
-        store16 g3Start  , Sprite_loc+[2*3] 
-        store16 g4Start  , Sprite_loc+[2*4]
-
         store16 pacStart , Sprite_loc2+[2*0]
         store16 g1Start  , Sprite_loc2+[2*1]
         store16 g2Start  , Sprite_loc2+[2*2] 
