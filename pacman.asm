@@ -747,13 +747,6 @@ pacEatSpeed      equ 255
 ghostFrightSpeed equ speedBase*2
 ;;; the speed of ghosts when pacman is powered up
 Sprite_speed2    dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed
-;;; see speed tables at the end of this file
-;;; values are in X/200ths
-Speed_standard   equ 80         ;85%
-Speed_slow       equ 40         ;80%
-Speed_fast       equ 20         ;100%
-harder1          equ 2          ;level when ghost are speed standard
-harder2          equ 4          ;level when ghosts are faster
 Sprite_turnbase  dc.b 200,200,200,200,200
 Sprite_color     dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy setting for blinky
@@ -2902,6 +2895,7 @@ soundInc equ 3
 ;;; X: in, blinky cruise level
 ;;; X clobbered
 IncreaseBlinky subroutine
+#if 0        
         stx BlinkyCruise        ;store the current blinky cruise mode
         ;; levels > 2 are done with the IncreaseBlinkyI routine
         ;; otherwise blinky can be increased with Sprite_speed adjustments
@@ -2927,6 +2921,7 @@ IncreaseBlinky subroutine
         sta Sprite_base,X
 .over2
         IncreasePanicLevel
+#endif        
         rts
 ;;; note:
 ;;; self modifying code
@@ -4274,7 +4269,7 @@ changehoriz SUBROUTINE
         cmp #modeOutOfBox       ;are we normal out of box mode?
         beq .done               ;yes, then its considered a wall
         cmp #modeFright         ;are we frightened out of box mode?
-        beq .done               ;yes, then its considered a wall
+        beq .done               ;yes, then it's considered a wall
         cmp #modePacman         ;and pacman ain't allowed in here
         beq .done
         cmp #modeFright0
