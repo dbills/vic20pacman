@@ -1740,23 +1740,18 @@ AllSoundOff subroutine
 ;;;determine correct ghost speed based on levels complete
 ;;; output: ghost speed in A
 ;;;
-#if 1
-SetGhostSpeed SUBROUTINE
-        lda LevelsComplete
-        cmp #harder1
-        bmi .easy
-        cmp #harder2
-        bmi .hard
-        ;; hardest
-        lda #Speed_fast
-        rts
-.hard
-        lda #Speed_standard
-        rts
-.easy
-        lda #Speed_slow
-        rts
-#endif        
+        MAC GetGhostSpeed
+        saveX
+        ldx #4
+        jsr GetSpeed
+        resX
+        ENDM
+        MAC GetPacSpeed
+        saveX
+        ldx #0
+        jsr GetSpeed
+        resX
+        ENDM
 ;;;
 ;;; determine correct speed based on levels complete
 ;;; input:
@@ -1838,19 +1833,16 @@ reset_game subroutine
         sta Sprite_mode,X
         lda #dirHoriz
         sta Sprite_dir2,X
-
         cpx #0             ;are we pacman, then
         beq .skip_bmap     ;skip setting ghost bitmap and speed
-        jsr SetGhostSpeed
+        GetGhostSpeed
         sta Sprite_base,X  ;load base sprite speed
         sta Sprite_speed,X ;store it
         store16x GHOST,Sprite_src ;set bitmap for ghosts
 .skip_bmap
         dex
         bpl .0
-        ;; set pacman speed ( this may not be needed if I can
-        ;; prove it never would get set improperly )
-        lda #Speed_standard
+        GetPacSpeed
         sta Sprite_base
         sta Sprite_speed
 ;;; not needed?? pacman goes left through joystick
