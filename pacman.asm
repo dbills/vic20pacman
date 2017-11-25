@@ -126,7 +126,7 @@ WakaTableEnd
 Lvl1Spds
         dc.b 40,58,20,42        ;lvl 1
 ;        dc.b 50,100,120
-        dc.b 100,100,120
+        dc.b 170,100,120
 Lvl2Spds        
         dc.b 20,42,10,37
         dc.b 30,90,110
@@ -2713,16 +2713,17 @@ SpecialKeys SUBROUTINE
         ;; 
         ;; check if sprite X gets to move this frame
         ;; and branch to {1} if allowed
-        ;; note: Z=0 on return
         MAC MyTurn2
         lda Sprite_turn,X
         sec
         sbc Sprite_speed,X
         sta Sprite_turn,X
-        bpl {1}
+        beq .skip
+        bcs {1}
         ;; we don't get to move this turn
-        ;; reset the turn counter
-        clc
+    ;; reset the turn counter
+.skip    
+;        clc
         adc #speedBase
         sta Sprite_turn,X
 
@@ -2953,7 +2954,9 @@ DotEaten SUBROUTINE
         ldy #$0
         jsr UpdateScore
 
-        lda #120
+        ;; get pacman dot speed
+        ldx #1
+        jsr GetSpeed
         sta Sprite_speed
 .noslowdown        
         ;; 
@@ -3971,12 +3974,6 @@ tail2tail SUBROUTINE
         beq .done
         lda Sprite_base,X
 .done        
-        ENDM
-;;; set pacman speed, new speed
-;;; this routine may be implemented to provide
-;;; slightly different semantics if we are speeding up
-;;; vs slowing down the speed
-        MAC SetPacSpeed
         ENDM
 ;;; set the speed for an individual ghost
 ;;; X = ghost to set
