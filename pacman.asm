@@ -124,9 +124,8 @@ WakaTableEnd
 ;;; Pacman speed: normal, dots, power, pwrdot
 ;;; Ghost speed:  normal, frightened, tunnel
 Lvl1Spds
-        dc.b 40,58,20,42        ;lvl 1
+        dc.b 40,58,20,42 
         dc.b 50,100,120
-;        dc.b 170,100,120
 Lvl2Spds        
         dc.b 20,42,10,37
         dc.b 30,90,110
@@ -136,12 +135,22 @@ Lvl5Spds
 Lvl21Spds        
         dc.b 20,42,0,26
         dc.b 10,80,100
-    
-#ifconst LARGEMEM
+
+;;; elroy1 dots, elroy1 speed, elroy2 dots, elroy2 speed
+;;; elroy is the "cruise elroy" mode of blinky
+;;; he increases his speed twice each level based on the number
+;;; of dots remaining ( elroyX dots )
+;;; 
+Elroy1
+        dc.b 20,40,10,26        
+Elroy2
+        dc.b 30,20,15,10
+Elroy3
+        dc.b 40,20,20,10
+        
         org $1400-(8*3)
         INCLUDE "bitmaps.asm"
         org $1400+$800          ;full 2K character set
-#endif        
 
 sirenBot    equ 227
 sirenTop    equ 238
@@ -4654,81 +4663,4 @@ done:
         sta W5
         rts
 #endif        
-
-;;;
-;;;
-;;;
-#ifnconst LARGEMEM        
-        org $1c00-(8*3)
-        INCLUDE "bitmaps.asm"
-#endif
         
-#if 0
-        
-for debugging, here are the keyboard read codes for the ghost control
-up 9,down 26,left 17,right 18 a,d w,x
-        
-tile scrolling works
-we allow going to 8 or 0 which always allows to make it to the end of a tile set
-so if you are heading towards a wall, you will always be able to touch it
-when you start in the new tile after a course scroll it's always 1 or 7         
-
-        ghost box
-        row 11
-        col 9
-        
-        Speed denominators
-        
-        .40 | 120
-        .45 | 110
-        .50 | 100
-        .55 | 90
-        .60 | 80
-        .71 | 58
-        .79 | 42
-        .80 | 40
-        .83 | 37
-        .85 | 30
-        .87 | 26
-        .90 | 20
-        .95 | 10
-        
-Arcade settings for pacman speed
-        
-level| norm | dots | power | pwrdot
------------------------------------
-1      80%    71%    90%     79%   
-2-4    90%    79%    95%     83%   
-5-20   100%   87%    100%    87%   
-21+    90%    79%     -
-
-Arcade settings for ghost speed
-
-level | normal | power | tunnel
------------------------------------
-1       75%      50%     40%
-2-4     85%      55%     45%
-5-20    95%      60%     50%
-21+     95%       -      50%
-
-        napkin calculation for above percentages:
-        60 FPS * .71 = 42.6 present
-        * 10 to get rid of floating point
-        426/600 present = 142/200 present
-        200-142 = 58 skipped
-        200/58 = fraction = 3.44
-        We'll use integer addition with error correction
-        add 58, each time we > 200 , the emit an error signal ( skip a frame )
-        and take N-200 to generate the next number in the sequence
-        e.g. the sequence 58,116,174,32,90,148, 6,64,122,180
-                                      X         X
-        you can see the sequence varies between runs of 2 and 3 continuous
-        frames, which does net out 58 skipped frames over 200 as we desire
-
-        in the table above I've put the denominator for each speed
-        
-11/6/17 ghost should not reverse direction right away when the mode changes, but rather when they enter the next tile
-        eating an energizer stop pacman moving for three frames
-        ghosts leaving the house direction does not match the arcade game
-
-#endif
