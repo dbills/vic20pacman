@@ -1704,6 +1704,12 @@ death subroutine
         ENDM
 
         MAC ResetSpriteLocs 
+        store16 pacStart , Sprite_loc+[2*0]
+        store16 g1Start  , Sprite_loc+[2*1]
+        store16 g2Start  , Sprite_loc+[2*2] 
+        store16 g3Start  , Sprite_loc+[2*3] 
+        store16 g4Start  , Sprite_loc+[2*4]
+
         store16 pacStart , Sprite_loc2+[2*0]
         store16 g1Start  , Sprite_loc2+[2*1]
         store16 g2Start  , Sprite_loc2+[2*2] 
@@ -1788,14 +1794,16 @@ reset_game subroutine
         jsr AllSoundOff
         
         lda S1               ;load 'mode' of reset
-        beq .00              ;skip resetting dot count if it's a death
+        beq .pacdeath        ;skip resetting dot count if it's a death
         ldx #totalDots       ;reset dot counter for end level
         stx DOTCOUNT         ;and game reset modes
 
         cmp #modeResetGame
-        bne .00
+        bne .endlevel
         jsr reset_game1      ; full game reset
-.00        
+.endlevel
+        jsr end_level
+.pacdeath        
         ResetSpriteLocs
         ;; init loop counter
         ldx #SPRITES-1       ;SPRITES is 1 based, so -1
@@ -1871,7 +1879,7 @@ reset_game subroutine
         
         lda #flashRate          ;power pill flash timer init
         sta PwrFlashCnt
-        lda #8
+        lda #8                  ; black for
         sta 36879               ; border and screen colors
         sta volume              ; turn up the volume to 8
         lda #!JOYL
@@ -1892,12 +1900,6 @@ reset_game subroutine
         sta LevelStartTm+1
 #endif
         
-        lda S1              ;S1=0 is modePacDeath
-        beq .continue       ;skip some stuff if it's just pacman dying
-        
-        ;; for modeEndLevel,modeResetGame
-        jsr end_level          
-
 .continue        
         SetupDotCounts          ;calc when to release ghosts
         jsr initChaseTimer      ;reset ghost chase/scatter timer
@@ -1990,6 +1992,8 @@ end_level subroutine
 ;;; fantasies of making a real intro, but out of time
 ;;; and out of memory in +3k version :(
 Vanity SUBROUTINE
+        jsr AllSoundOff
+    
         lda #8
         sta 36879
         ;; 
