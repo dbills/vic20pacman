@@ -125,8 +125,8 @@ WakaTableEnd
 ;;; Ghost speed:  normal, frightened, tunnel
 Lvl1Spds
         dc.b 40,58,20,42        ;lvl 1
-;        dc.b 50,100,120
-        dc.b 170,100,120
+        dc.b 50,100,120
+;        dc.b 170,100,120
 Lvl2Spds        
         dc.b 20,42,10,37
         dc.b 30,90,110
@@ -2592,6 +2592,7 @@ MoveGhostI SUBROUTINE
         
 #ifconst GHPLAYER
 ;;; move a ghost using the keyboard
+;;; what are the keys: a,w,d,x
 GhostAsPlayer SUBROUTINE
         cpx #blinky   ;only move blinky
         beq .0   
@@ -2846,7 +2847,7 @@ GhostTurn
 ;        Display1 "G",17,GHOST_DIR
 .notfocus
 
-        UpdateMotion
+        UpdateMotion            ;up eyes for direction
 ;        jsr SpecialKeys
 .moveghost
 #ifconst GHPLAYER        
