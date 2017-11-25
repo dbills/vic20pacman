@@ -599,21 +599,6 @@ WaitTime_ subroutine
     sta VICSCRN
     brk
     endm
-    ;; MOVE instruction
-    mac mov
-    lda [{1}]
-    sta [{2}]
-    endm
-; load A and X
-    mac     ldax
-    lda     [{1}]
-    ldx     [{1}]+1
-    endm
-; store A and X
-    mac    stax
-    sta [{1}]
-    stx [{1}]+ 1
-    endm
         ;; duh, you can't use beq with this
         MAC dec16
         lda  [{1}]+0
