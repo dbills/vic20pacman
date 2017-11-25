@@ -8,7 +8,7 @@ PACDEATHGFX equ 1
 ;;;
 ;;; uncomment this to create code that will launch
 ;;; from basic
-BASIC equ 1    
+;BASIC equ 1    
 ;;; uncomment to have unlimited lives
 ;;; altough the game will still only display 3
 ;UNLIMITED_LIVES equ 1
@@ -125,7 +125,8 @@ WakaTableEnd
 ;;; Ghost speed:  normal, frightened, tunnel
 Lvl1Spds
         dc.b 40,58,20,42        ;lvl 1
-        dc.b 50,100,120
+;        dc.b 50,100,120
+        dc.b 100,100,120
 Lvl2Spds        
         dc.b 20,42,10,37
         dc.b 30,90,110
@@ -222,7 +223,6 @@ tunnelLCol      equ 1           ;column to start warp to right side
 ;;; the speed warp effect would start at tunnelLCol+tunnelLen
 ;;; or tunnelRCol-tunnelLen
 tunnelLen       equ 3           ;length of tunnel
-tunnelSpeed     equ speedBase/2 ;Sprite_speed setting for tunnel
 ;;; amount of time a fruit is display
 fruitTime       equ 140
         
@@ -1734,6 +1734,12 @@ AllSoundOff subroutine
 ;;;determine correct ghost speed based on levels complete
 ;;; output: ghost speed in A
 ;;;
+        MAC GetTunnelSpeed
+        saveX
+        ldx #6
+        jsr GetSpeed
+        resX
+        ENDM
         MAC GetGhostSpeed
         saveX
         ldx #4
@@ -3978,7 +3984,7 @@ tail2tail SUBROUTINE
 ;;; note: Z != 0 on exit please
 SetSpeed subroutine
         sta Sprite_speed,X ;
-        sta Sprite_turn,X
+;        sta Sprite_turn,X
         rts
 ;;; handle tunnel left side
 ;;; y must be undamaged on return
@@ -3995,7 +4001,7 @@ DecrementHPos SUBROUTINE
         cmp16Im W2,[tunnelRow*22]+tunnelLCol+tunnelLen+screen
         bne .1
         ;; entered from the left
-        lda #tunnelSpeed ;entered from left, slow down
+        GetTunnelSpeed  
 .set_speed
         jsr SetSpeed
         bne .done               ;jmp .done
@@ -4021,7 +4027,7 @@ IncrementHPos SUBROUTINE
 .0        
         cmp16Im W2,[tunnelRow*22]+tunnelRCol-tunnelLen+screen
         bne .1
-        lda #tunnelSpeed     ; entered from the right
+        GetTunnelSpeed  
 .set_speed        
         jsr SetSpeed
         bne .done
