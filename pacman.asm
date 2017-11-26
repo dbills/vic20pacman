@@ -384,7 +384,18 @@ SirenOffset     equ SirenTable+((sirenTop-sirenBot)*2)+1
 PowerSnd2Idx    equ SirenOffset+1
 FrameLock       equ PowerSnd2Idx+1
 Sprite_page     equ FrameLock+1
-Xsave           equ Sprite_page+1    
+Xsave           equ Sprite_page+1
+unused01        equ Xsave+1        
+unused02        equ Xsave+2        
+unused03        equ Xsave+3        
+unused04        equ Xsave+4        
+unused05        equ Xsave+5        
+unused06        equ Xsave+6        
+unused07        equ Xsave+7        
+unused08        equ Xsave+8        
+unused09        equ Xsave+9        
+unused10        equ Xsave+10        
+unused11        equ Xsave+11
 Sprite_loc      equ $a7
 Sprite_loc2     equ Sprite_loc+10    ;new screen loc
 Sprite_back     equ Sprite_loc2+10   ;background char before other sprites drawn
