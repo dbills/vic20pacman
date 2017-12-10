@@ -4911,6 +4911,19 @@ done:
         org $1c00-(8*3)
         INCLUDE "bitmaps.asm"
 #endif
+  LDX #1          ; DEVICE=1: CASSETTE
+  JSR $FFBA
+  LDA #0          ; NO FILENAME
+  JSR $FFBD
+  LDA #01        ; LOAD START ADDRESS OF SAVE
+  STA 193      ; (LOW BYTE)
+  LDA #04
+  STA 194    ; (HIGH BYTE)
+
+  LDX #$00      ; LOAD .X WITH LOW BYTE OF END OF SAVE
+  LDY #$1e    ; .Y WITH HIGH BYTE
+  LDA #193    ; LOAD ACCUMULATOR WITH PAGE 0 OFFSET
+  JSR $ffd8   ; save
         
 #if 0
 ;;; scratch text for debugging thoughts
