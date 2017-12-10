@@ -296,7 +296,7 @@ GHOST1_TGTROW   equ GHOST1_TGTCOL+1
 ;;; amount sprite move routines can shave off during cornering
 ;;; pacman get +1 on corners, ghosts get 0
 CORNER_SHAVE    equ GHOST1_TGTROW+1
-;;; non zero when pacman is powred up, indicate 'gameloop units' 
+;;; non zero when pacman is powred up, indicate .5 'gameloop units' 
 ;;; left in power mode, this does not use the jiffy timer
 POWER_UP        equ CORNER_SHAVE+1
 basePowerTime   equ 245               ;initial power pill time
@@ -2260,8 +2260,10 @@ MainLoop0
         ;; here we go ...
 
         Invert Sprite_page      ;dbl buffering, switch sprite tiles
-
-        ;; decrement game based timers such as power pills and attack/scatter timer
+        ;; only decrement game loop timer at .5 frame rate
+        ;; by inspecting A from Sprite_page which toggles at .5
+        beq .skip               
+        ;; decrement game loop based timers such as power pills
         ldy POWER_UP
         beq .skip
         dey
