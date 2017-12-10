@@ -193,7 +193,19 @@
         sbc #[{2}]>>8
         sta {1}+1
         ENDM
-        ;; increment dot count
-        ;; checking for end of level
+
+
+        MAC dec16z
+        lda  [{1}]+0            ;load lsb
+        bne .notzero
+        dec [{1}]+1             ;dec msb
+.notzero
+        dec [{1}]+0             ;dec lsb
+        beq .lsbzero
+        bne .done
+.lsbzero
+        lda {1}                 ;Z = 1 if 16bit = 0
+.done        
+        ENDM
 
     

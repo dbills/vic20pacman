@@ -1432,8 +1432,6 @@ DeathISR subroutine
 isr2 subroutine
         sei                     ;disable interrupts while in interrupt
         ;; I don't see why above is needed?
-;        dec FrameLock
-        ;; 
         ;; flash the power pellets
         dec PwrFlashCnt
         bne .00
@@ -1811,7 +1809,7 @@ reset_game subroutine
         ;; initialize a bunch of variables that can be 0
         ;; on start
         lda #0
-;        sta FrameLock
+        sta FrameLock
         sta JIFFYL              ;game timer to 0
         sta JIFFYM
         sta JIFFYH
@@ -1877,7 +1875,6 @@ reset_game subroutine
         sta LASTJOYDIR
         lda #1
         sta SirenDir
-        sta FrameLock
         sta PACFRAMED
         
         lda #modeLeaving
@@ -2720,12 +2717,11 @@ SpecialKeys SUBROUTINE
         beq .skip
         bcs {1}
         ;; we don't get to move this turn
-    ;; reset the turn counter
+        ;; reset the turn counter
 .skip    
-;        clc
+        clc
         adc #speedBase
         sta Sprite_turn,X
-
         ENDM
         ;; Place target tile for an eaten ghost
         ;; into GHOST_TGTCOL,GHOST_TGTROW
@@ -2955,7 +2951,7 @@ DotEaten SUBROUTINE
         ldy #$0
         jsr UpdateScore
 
-        ;; get pacman dot speed
+        ;; stall pacman by one frame
         ldx #1
         jsr GetSpeed
         sta Sprite_speed
@@ -3584,8 +3580,17 @@ Pacman SUBROUTINE
 
         MyTurn2 PacManTurn
         ;;not our turn to move
-        rts
+        inc FrameLock
 PacManTurn
+        ;; additional framelock check, e.g.
+        ;; powerpill, or dot stall us by FrameLock
+        ;; frames
+        lda FrameLock
+        beq NotFrameLocked
+        dec FrameLock
+        rts                     ;we are locked out this frame
+NotFrameLocked        
+        
         lda #cornerAdv
         sta CORNER_SHAVE        ;pac get +1 bonus on corners
         
