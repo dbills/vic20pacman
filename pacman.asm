@@ -529,6 +529,31 @@ PACL            equ [GH3L+4]
         adc #1
 .done        
         ENDM
+        MAC GetTunnelSpeed
+        saveX
+        ldx #6
+        jsr GetSpeed
+        resX
+        ENDM
+        ;; ghost frightened
+        MAC GetBlueSpeed
+        saveX
+        ldx #5
+        jsr GetSpeed
+        resX
+        ENDM
+        MAC GetGhostSpeed
+        saveX
+        ldx #4
+        jsr GetSpeed
+        resX
+        ENDM
+        MAC GetPacSpeed
+        saveX
+        ldx #0
+        jsr GetSpeed
+        resX
+        ENDM
 ;;; initialize the sprite loop counter
 ;;; kinda a lame macro I guess
 ;;; but I thought the name helped readability
@@ -763,10 +788,6 @@ pointTable      dc.b $16,00,$08,00,$04,00,$02,00
 ;;; the current sprite speeds
 ;;; speeds when pacman is powered up
 eyeSpeed         equ 255                ;sprite_speed setting for eyes
-pacEatSpeed      equ 255
-ghostFrightSpeed equ speedBase*2
-;;; the speed of ghosts when pacman is powered up
-Sprite_speed2    dc.b pacEatSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed,ghostFrightSpeed
 Sprite_turnbase  dc.b 200,200,200,200,200
 Sprite_color     dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy setting for blinky
@@ -1259,7 +1280,11 @@ PowerPillOff SUBROUTINE
 .0        
         dey
         bpl .loop
-.done        
+.done
+        ldx #0
+        jsr GetSpeed
+        sta Sprite_base         ;restore pacman speed
+        sta Sprite_speed        ;to normal
         rts
 ;;; 
 ;;; called when a power pill is activated
@@ -1283,17 +1308,19 @@ PowerPillOn SUBROUTINE
         bne .0                  ;nope, skip
         ;; install sad ghost bitmaps to sprite
         store16x BLUE_GHOST,Sprite_src
-        lda Sprite_speed2,X     ;value from powerpill speed table
-        jsr SetSpeed
-        ;; ghosts in the maze are now frightened
+        GetBlueSpeed
+        sta Sprite_speed,X
+        ;; ghosts _in_ the maze are now frightened
         lda #modeFright0
         sta Sprite_mode,X
 .0        
         dex
-        bne .loop               ;break out of loop on pacman
-        lda Sprite_speed2       ; load pacman speed
-        jmp SetSpeed            ; rts for us
-;        rts
+        bne .loop               ;loop while not pacman
+        ldx #2                  ;select power speed
+        jsr GetSpeed            ;get into A and store
+        sta Sprite_base         ;as new base speed
+        sta Sprite_speed
+        rts
 ;;; 
 ;;; run the siren soundtrack
 ;;; siren changes pitch when blinky gets faster
@@ -1730,24 +1757,6 @@ AllSoundOff subroutine
 ;;;determine correct ghost speed based on levels complete
 ;;; output: ghost speed in A
 ;;;
-        MAC GetTunnelSpeed
-        saveX
-        ldx #6
-        jsr GetSpeed
-        resX
-        ENDM
-        MAC GetGhostSpeed
-        saveX
-        ldx #4
-        jsr GetSpeed
-        resX
-        ENDM
-        MAC GetPacSpeed
-        saveX
-        ldx #0
-        jsr GetSpeed
-        resX
-        ENDM
 ;;;
 ;;; determine correct speed based on levels complete
 ;;; input:
@@ -2951,12 +2960,15 @@ DotEaten SUBROUTINE
         ldy #$0
         jsr UpdateScore
 
-        ;; stall pacman by one frame
+        ;; dot eating speeds
         ldx #1
+        lda POWER_UP            ;if we are powered up
+        beq .regulardot         ;then set X=3 and get
+        ldx #3                  ;power dot
+.regulardot                     ;eating speed
         jsr GetSpeed
         sta Sprite_speed
-.noslowdown        
-        ;; 
+
         ldy DOTCOUNT
 .01        
         lda #modeLeaving
