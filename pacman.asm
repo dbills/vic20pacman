@@ -1194,7 +1194,7 @@ ReverseDirection subroutine
         rts
         
 ReverseGhosts SUBROUTINE
-        ldx #5
+        ldx #SPRITES
 .loop
         dex
         beq .done
@@ -1268,20 +1268,20 @@ PowerPillOff SUBROUTINE
         lda #0
         sta 36876
         sta POWER_UP
-        ldy #SPRITES-1
+        ldx #SPRITES-1
 .loop        
-        lda Sprite_base,Y
-        sta Sprite_speed,Y
-        lda Sprite_mode,Y
+        lda Sprite_base,X
+        sta Sprite_speed,X
+        lda Sprite_mode,X
         cmp #modeFright
         bne .0
         lda #modeOutOfBox
-        sta Sprite_mode,Y
+        sta Sprite_mode,X
 .0        
-        dey
-        bpl .loop
+        dex
+        bne .loop
 .done
-        ldx #0
+        ;; assume X=0
         jsr GetSpeed
         sta Sprite_base         ;restore pacman speed
         sta Sprite_speed        ;to normal
@@ -1320,12 +1320,12 @@ PowerPillOn SUBROUTINE
         jsr GetSpeed            ;get into A and store
         sta Sprite_base         ;as new base speed
         sta Sprite_speed
-        ;; lda #3                  ;halt pacman 3 frames
-        ;; sta FrameLock           ;when eating pill
+        lda #3                  ;halt pacman 3 frames
+        sta FrameLock           ;when eating pill
         rts
 ;;; 
 ;;; run the siren soundtrack
-;;; siren changes pitch when blinky gets faster
+;;; siren changes pitch when blinky ets faster
 ;;; 
 isr3 subroutine
         ldy SirenIdx
@@ -1367,8 +1367,7 @@ EyesEatenSoundTable
 ;;; play the power up sound
 ;;; or until an eaten ghost eyes is in the maze
 isr4 subroutine
-        rts
-        ldx #5
+        ldx #SPRITES-1
         ;;figure out if there are any eyes in the
         ;; maze
 .loop0        
@@ -2359,8 +2358,11 @@ MainLoop0
 MainLoopEnd
 ;        Display1 "D",0,DOTCOUNT
         lda 9004
+        cmp #220
+        bcs Doomed              ;we were too slow
         jmp IntroLoop
-
+Doomed        
+        brk
 PelletRow equ 3
 ;;; place power pellets
 ;;; W1 pointer
@@ -2634,28 +2636,6 @@ GhostAsPlayer SUBROUTINE
         jsr scroll_down         ;
         rts
 #endif
-#if 0        
-keypressed dc.b 0        
-SpecialKeys SUBROUTINE
-        saveX
-        lda 197
-        cmp #9                  ;'w'
-        bne .done
-
-
-;        ldx #inky
-;        jsr LeaveBox
-        lda keypressed
-        bne .done
-        ldx #blinkyCruise1
-        jsr IncreaseBlinky
-        lda #1
-        sta keypressed
-
-.done        
-        resX
-        rts
-#endif
         
         MAC UpdateMotion 
         lda GHOST_DIR
@@ -2717,7 +2697,7 @@ SpecialKeys SUBROUTINE
         asl                    ;multiply by 8
         asl
         asl
-        cpy #dirHoriz          ;are we horizontall
+        cpy #dirHoriz          ;are we horizontal
         beq .horiz             ;yes, don't add offset into Y
         clc                    ;we are vertical
         adc Sprite_offset      ;add in the smooth scroll offset to pixel count
@@ -2769,7 +2749,7 @@ GhostAI SUBROUTINE
         ;; in their AI routines
         CalcPacRowCol
 
-        ldx #5
+        ldx #SPRITES
 .loop
         dex
         beq somertn            ;pacman is sprite 0, so we leave
@@ -3602,7 +3582,7 @@ Pacman SUBROUTINE
         inc FrameLock
 PacManTurn
         ;; additional framelock check, e.g.
-        ;; powerpill, or dot stall us by FrameLock
+        ;; powerpill, or dots will stall us by FrameLock
         ;; frames
         lda FrameLock
         beq NotFrameLocked
