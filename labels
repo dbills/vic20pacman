@@ -130,3 +130,4 @@ al 900b    .voice2
 al 900a    .voice1
 al 900e    .volume
 al 2517    .main
+al 9004    .vicraster

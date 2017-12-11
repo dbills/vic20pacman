@@ -299,7 +299,7 @@ CORNER_SHAVE    equ GHOST1_TGTROW+1
 ;;; non zero when pacman is powred up, indicate .5 'gameloop units' 
 ;;; left in power mode, this does not use the jiffy timer
 POWER_UP        equ CORNER_SHAVE+1
-basePowerTime   equ 245               ;initial power pill time
+basePowerTime   equ 210               ;initial power pill time
 BlinkyS1        equ POWER_UP+1         
 BlinkyS2        equ BlinkyS1+1
 InkyDots        equ BlinkyS2+1
@@ -702,7 +702,7 @@ WaitTime_ subroutine
 ;;; sprite_page controls which set of tiles we draw , it alternates
 ;;; between 0 and 1
 ;;;
-pacframes       equ #3            ; total number of pacman animation frames ( 1 based )
+pacframes       equ #3            ;total number of pacman animation frames (1 based)
 dirVert         equ 22            ;sprite oriented vertically
 dirHoriz        equ 1             ;sprite oriented horizontally
 ;;; valid modes for JmpReset
@@ -711,7 +711,7 @@ modeEndLevel    equ 1             ;see JmpReset
 modeResetGame   equ 2             ;see JmpReset
 ;;; valid modes for Sprite_mode
 modeInBox       equ 0
-modeFright      equ 1
+modeFright      equ 1             ;after ghosts have reversed from fright
 modeEaten       equ 2             ;ghost was chomped
 modeLeaving     equ 3             ;leavin the ghost box
 modeOutOfBox    equ 4             ;see sprite_mode
@@ -719,7 +719,8 @@ modePacman      equ 5             ;mode only pacman has
 ;;; causes ghosts to reverse direction
 ;;; changes from scatter to chase cause reverse for example
 modeReverse     equ 6
-modeFright0     equ 7        
+modeFright0     equ 7             ;ghosts are first frightened
+                                  ;will soon reverse
 ;;; end valid modes for Sprite_mode
 msgRow          equ 13            ;row number for displaying messages
 cherryCol       equ 21/2+1        ;to display bonus fruit
@@ -785,9 +786,6 @@ inBoxTable      dc.b 0,0,0,2,6
 ;;; for eating ghosts 200,400,800,1600 in bcd
 pointTable      dc.b $16,00,$08,00,$04,00,$02,00
 
-;;; the current sprite speeds
-;;; speeds when pacman is powered up
-eyeSpeed         equ 255                ;sprite_speed setting for eyes
 Sprite_turnbase  dc.b 200,200,200,200,200
 Sprite_color     dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy setting for blinky
@@ -1045,7 +1043,9 @@ erasesprt SUBROUTINE
 
         lda #EMPTY
         sta Sprite_back
-        sta Sprite_back2   
+        sta Sprite_back2
+        ;; restore X to pacman 
+        ldx #0
 .notpac        
         move16x Sprite_loc,W1   ;sprite location to W1
         ldy #0
@@ -1320,6 +1320,8 @@ PowerPillOn SUBROUTINE
         jsr GetSpeed            ;get into A and store
         sta Sprite_base         ;as new base speed
         sta Sprite_speed
+        ;; lda #3                  ;halt pacman 3 frames
+        ;; sta FrameLock           ;when eating pill
         rts
 ;;; 
 ;;; run the siren soundtrack
@@ -1361,8 +1363,11 @@ EyesEatenSoundTable
         dc.b 249,249,249,249,248,248,247,247,246,246,245,244,243,242,0
 ;;;
 ;;; pacman powerpill sound
-;;; 
+;;; and power up mode sound
+;;; play the power up sound
+;;; or until an eaten ghost eyes is in the maze
 isr4 subroutine
+        rts
         ldx #5
         ;;figure out if there are any eyes in the
         ;; maze
@@ -1516,7 +1521,7 @@ isr2_done2
         lda eat_halt            ;are we commanded to stop the eating sound?
         bne .nothalted
         sta eat_halted          ;A is 0
-        sta wakavoice           ;stop noise channel with 0
+        sta wakavoice           ;stop sound channel with 0
         beq isr2_done2
 .nothalted        
         ldx #WakaTableEnd-WakaTable
@@ -2353,6 +2358,7 @@ MainLoop0
 
 MainLoopEnd
 ;        Display1 "D",0,DOTCOUNT
+        lda 9004
         jmp IntroLoop
 
 PelletRow equ 3
@@ -2456,6 +2462,7 @@ mkmaze2 subroutine
         store16 screen,W2
         ;; clear top line, and left line
         ldx #22
+        ldy #0
 .loop   
         lda #EMPTY
         sta screen,x
@@ -2955,7 +2962,6 @@ IncreaseBlinky subroutine
 ;;; for blinky speed
 ;;; 
 DotEaten SUBROUTINE
-        saveX
         jsr SoundOn
 
         lda #$10
@@ -3017,7 +3023,6 @@ XBlinkyS2
         ldx #blinkyCruise2      ;select speed mode into A
         jsr IncreaseBlinky      ;invoke
 .5        
-        resX
         rts
 ;;; return true ( Z=1 ) if character in A is a wall
 ;;; W2 ( candidate position )
@@ -3775,7 +3780,7 @@ DeathDistance equ 3
         jsr SoundGhostEaten     ;play eaten sound
         sta Sprite_mode,X       ;change sprite mode to eaten
         store16x BIT_EYES,Sprite_src
-        lda #eyeSpeed           ;eyes as fast as possible
+        lda #0                  ;eyes as fast as possible
         sta Sprite_speed,X      ;store eye speed
 
         saveX
