@@ -32,7 +32,7 @@ AGEFRUIT equ 1
 ;;; 
 ;NOGHOSTDOTS equ 1
 ;;; uncomment to show chase/scatter mode debugging at top of screen
-;SHOWTIMER1 equ 1
+;SHOWTIMER1 equ 1                ;
 ;;; score when a bonus life is given ( the high byte of a 3 byte BCD number )
 ;;; e.g. 10000 points is 010000 or $01
 BONUSLIFE equ $01
@@ -120,6 +120,11 @@ WakaTable
         dc.b 0
         dc.b 0
 WakaTableEnd
+;;; the eyes eaten sound
+EyesEatenSoundTable
+        dc.b 249,249,249,249,248,248,247,247,246,246,245,244,243,242,0
+;;; power pill sound table
+PowerPillTable dc.b 227,232,236,239,241,247,0 ;null terminated
 ;;; groups of 7 bytes
 ;;; Pacman speed: normal, dots, power, pwrdot
 ;;; Ghost speed:  normal, frightened, tunnel
@@ -1213,7 +1218,7 @@ Timer1Expired SUBROUTINE
         jsr ReverseGhosts
         ldy ChaseTableIdx       ;load current table entry
         ;;
-        cpy #5
+        cpy #ChaseTableSz-1
         bne .next
         ldx #pinky
         jsr LeaveBox
@@ -1340,8 +1345,6 @@ isr3 subroutine
         sta SirenIdx
         rts
         
-;;; power pill sound table
-PowerPillTable dc.b 227,232,236,239,241,247,0 ;null terminated
 ;;; macro to generate a table based sound player
 ;;; {1} the table index
 ;;; {2} the voice
@@ -1357,10 +1360,6 @@ PowerPillTable dc.b 227,232,236,239,241,247,0 ;null terminated
         sta {1}        ;reset index to 0
         rts
         ENDM
-;;; the eyes eating sond
-;;;
-EyesEatenSoundTable
-        dc.b 249,249,249,249,248,248,247,247,246,246,245,244,243,242,0
 ;;;
 ;;; pacman powerpill sound
 ;;; and power up mode sound
