@@ -258,13 +258,42 @@ LTGREEN      equ 13
 LTBLUE       equ 14
 LTYELLOW     equ 15
 
-SPRITES      equ 5             ;count of sprites in system (1 based)
+SPRITES         equ 5              ;count of sprites in system (1 based)
+bonusInterval   equ 7              ;sound interval for award noise
+flashRate       equ 14             ;in 60s second
+basePowerTime   equ 210            ;initial power pill time
+frameCount      equ 4              ; number of pacman animation frames
+CURKEY          equ $c5            ; OpSys current key pressed
+;;; sentinal character, used in tile background routine
+;;; to indicate tile background hasn't been copied into _sback yet
+NOTCOPY         equ $fd
+;;; used by the AI engine to indicate the worst possible choice
+noChoice        equ $7f
 ;;
-;;  Zero page constants
+;; misc constants for graphical tiles
 ;;
+CHERRY          equ [BIT_CHERRY-CHAR_BEGIN]/8 
+EMPTY           equ [BIT_EMPTY-CHAR_BEGIN]/8
+PWR2            equ [BIT_PWR0-CHAR_BEGIN]/8
+PWR             equ [BIT_PWR1-CHAR_BEGIN]/8
+RTOP            equ [BIT_RTOP-CHAR_BEGIN]/8   ;right top corner
+DOT             equ [BIT_DOT-CHAR_BEGIN]/8
+HWALL           equ [BIT_HWALL-CHAR_BEGIN]/8
+VWALL           equ [BIT_VWALL-CHAR_BEGIN]/8
+;;; character we use for pacman life indicator
+PACLIFE         equ [BIT_PACRIGHTOPEN-CHAR_BEGIN]/8
+GHOST_WALL      equ [BIT_GHWALL-CHAR_BEGIN]/8        
+GHL             equ [GHOST_BEGIN-CHAR_BEGIN]/8
+GH1L            equ [GHL+4]
+GH2L            equ [GH1L+4]
+GH3L            equ [GH2L+4]    
+PACL            equ [GH3L+4] 
+;;; --------------------------------------------------------------------------------------------------
+;;;                  BEGIN ZERO PAGE CONSTANTS
+;;; 
 ;;; W prefix vars are WORD width
-;;; S or byte, short for 'scratch' and are
-;;; usually bytes
+;;; S are byte, short for 'scratch'
+;;; --------------------------------------------------------------------------------------------------
 W1              equ 0
 W2              equ W1+2
 W3              equ W2+2       
@@ -278,10 +307,8 @@ DIV22_WORK      equ S4+1                  ;word
 DIV22_RSLT      equ DIV22_WORK+2          ;div22 result
 SPRITEIDX       equ DIV22_RSLT+1      ; sprite index for main loop
 MASTERCNT       equ SPRITEIDX+1       ; countdown; see masterDelay
-;;; 
 CSPRTFRM        equ MASTERCNT+1       ; number of frames in the currently processing sprite
-DOTCOUNT        equ CSPRTFRM+1        ; dots eaten
-frameCount      equ 4                 ; number of pacman animation frames
+DOTCOUNT        equ CSPRTFRM+1        ; dots remaining
 PACFRAMED       equ DOTCOUNT+1        ; pacframe dir
 DSPL_1          equ PACFRAMED+1       ; used by DisplayNum routine
 BCD             equ DSPL_1+1          ; used by Bin2Hex routine
@@ -302,28 +329,26 @@ GHOST1_TGTROW   equ GHOST1_TGTCOL+1
 ;;; amount sprite move routines can shave off during cornering
 ;;; pacman get +1 on corners, ghosts get 0
 CORNER_SHAVE    equ GHOST1_TGTROW+1
-;;; non zero when pacman is powred up, indicate .5 'gameloop units' 
+;;; non zero when pacman is powered up, indicate .5 'gameloop units' 
 ;;; left in power mode, this does not use the jiffy timer
 POWER_UP        equ CORNER_SHAVE+1
-basePowerTime   equ 210               ;initial power pill time
-BlinkyS1        equ POWER_UP+1         
-BlinkyS2        equ BlinkyS1+1
-InkyDots        equ BlinkyS2+1
-PinkyDots       equ InkyDots+1
+BlinkyS1        equ POWER_UP+1        ;cruise elroy 1 dotcount
+BlinkyS2        equ BlinkyS1+1        ;cruise elroy 2 dotcount
+InkyDots        equ BlinkyS2+1        ;dotcount for inky leave
+PinkyDots       equ InkyDots+1        ;dotcount for pinky leave
 ClydeDots       equ PinkyDots+1
 S5              equ ClydeDots+1   
 S6              equ S5+1
 PACXPIXEL       equ S6+1
 PACYPIXEL       equ PACXPIXEL+1       
 BlinkyCruise    equ PACYPIXEL+1       ;see BlinkyCruise1 and 2 
-
-GHOST_COL       equ BlinkyCruise+1
-GHOST_ROW       equ GHOST_COL+1
+GHOST_COL       equ BlinkyCruise+1    ;ghost ai target col
+GHOST_ROW       equ GHOST_COL+1       ;ghost ai target row
 W5              equ GHOST_ROW+1
 W5_h            equ W5+1
 W6              equ W5_h+1
 W6_h            equ W6+1    
-PowerPillTime   equ W6_h+1
+PowerPillTime   equ W6_h+1      ; remaining time
 ;;;offset for normalizing a 9x9 sprite movement block to the upper left block
 ;;; used by the sprite orientation changing routines
 SPRT_LOCATOR    equ PowerPillTime+1
@@ -345,17 +370,16 @@ Sprite_offset   equ Div22Table+10
 ;;; ------------5 bytes
 PacLives        equ Sprite_offset+5
 SirenIdx        equ PacLives+1
-EatenIdx        equ SirenIdx+1 ; number of ghosts eaten since power pill
-PACDEATH        equ EatenIdx+1 ; pacman death animation pointer
-ChaseTableIdx   equ PACDEATH+1
-PowerPillPtr    equ ChaseTableIdx+1        ;ptr to power pill sound
+EatenIdx        equ SirenIdx+1 ;number of ghosts eaten since power pill
+PACDEATH        equ EatenIdx+1 ;pacman death animation pointer
+ChaseTableIdx   equ PACDEATH+1 ;index in scatter/chase timer table
+PowerPillPtr    equ ChaseTableIdx+1        ;index in power pill sound table
 Audio1          equ PowerPillPtr+1         ;see audio.asm
 FruitSoundOn    equ Audio1+1
-FruitPillPtr    equ FruitSoundOn+1
+FruitPillPtr    equ FruitSoundOn+1         ;index in points table
 FruitIsOut      equ FruitPillPtr+1         ;true if fruit is displayed
 DeathSoundPtr   equ FruitIsOut+1           ;sound table index
-         
-JIFFYH          equ DeathSoundPtr+1        ; jiffy clock lsb - msb
+JIFFYH          equ DeathSoundPtr+1        ; jiffy clock 
 JIFFYM          equ JIFFYH+1
 JIFFYL          equ JIFFYM+1
 SAVE_OFFSET     equ JIFFYL+1
@@ -368,18 +392,16 @@ Sprite_turn     equ Sprite_motion+5       ;5 bytes
 SirenDir        equ Sprite_turn+5         ; siren scale direction
 ;;; signals to stop the waka sound after completion of next cycle
 ;;; see SoundOn. 0 = halt/halted 1 = do not halt/not halted
-;;; a waka sound must complete it's full 'cycle', so you can't
+;;; a waka sound must complete its full 'cycle', so you can't
 ;;; just hear "half a waka".
 ;;; waka sound is turned off in the following conditions:
 ;;; 1) during wall checks ( which is weird )
 eat_halt        equ SirenDir+1
 ;;; signals that the waka sound is fully stopped
 eat_halted      equ eat_halt+1
-WakaIdx         equ eat_halted+1
-flashRate       equ 14              ;in 60s second
+WakaIdx         equ eat_halted+1    ;index in waka sound table
 PwrFlashCnt     equ WakaIdx+1       ;countdown to flash power pill
 PwrFlashSt      equ PwrFlashCnt+1   ;state of power pill flash 0 = blank
-bonusInterval   equ 7               ;sound interval for award noise
 BonusAwarded    equ PwrFlashSt+1    ;true if bonus life was awarded
 Agonizer        equ BonusAwarded+1  ;keeps track of when to increment difficulty
 BonusSound      equ Agonizer+1
@@ -422,40 +444,14 @@ Sprite_mode     equ LevelsComplete+1          ;length 5
 ;;; your turn gets skipped every N loops of Sprite_speed
 ;;; for example: if sprite speed for sprite 0 =10
 ;;; then every 10th game loop that sprite doens't get to move
-;;; see equates for Sprite_fast, Sprite_standard, Sprite_slow
-;;; for basic speeds
 Sprite_speed    equ Sprite_mode+5  ; current sprite speed 
 Sprite_base     equ Sprite_speed+5 ; base speed of sprites for this level
 Sprite_frame    equ Sprite_base+5  ; animation frame of sprite as offset from _src
-;;; points for eating fruits
-fruitPoints     equ Sprite_frame+5
-    
-CURKEY          equ $c5             ;OpSys current key pressed
-;;; sentinal character, used in tile background routine
-;;; to indicate tile background hasn't been copied into _sback yet
-NOTCOPY         equ $fd
-;;; used by the AI engine to indicate the worst possible choice
-noChoice        equ $7f
-
-;;
-;; misc constants for graphical tiles
-;;
-CHERRY          equ [BIT_CHERRY-CHAR_BEGIN]/8 
-EMPTY           equ [BIT_EMPTY-CHAR_BEGIN]/8
-PWR2            equ [BIT_PWR0-CHAR_BEGIN]/8
-PWR             equ [BIT_PWR1-CHAR_BEGIN]/8
-RTOP            equ [BIT_RTOP-CHAR_BEGIN]/8   ;right top corner
-DOT             equ [BIT_DOT-CHAR_BEGIN]/8
-HWALL           equ [BIT_HWALL-CHAR_BEGIN]/8
-VWALL           equ [BIT_VWALL-CHAR_BEGIN]/8
-;;; character we use for pacman life indicator
-PACLIFE         equ [BIT_PACRIGHTOPEN-CHAR_BEGIN]/8
-GHOST_WALL      equ [BIT_GHWALL-CHAR_BEGIN]/8        
-GHL             equ [GHOST_BEGIN-CHAR_BEGIN]/8
-GH1L            equ [GHL+4]
-GH2L            equ [GH1L+4]
-GH3L            equ [GH2L+4]    
-PACL            equ [GH3L+4] 
+fruitPoints     equ Sprite_frame+5 ; fruit points, a BCD word
+EndOfZP         equ fruitPoints+2  ; this better be < $ff
+;;; --------------------------------------------------------------------------------------------------
+;;;                  END OF ZERO PAGE CONSTANTS
+;;; --------------------------------------------------------------------------------------------------
 ;
 ;------------------------------------
 ; Utility macros
@@ -720,8 +716,8 @@ totalDots       equ $A2+4        ;total dots in maze
 fruit1Dots      equ 70           ;dots to release fruit
 fruit2Dots      equ 120          ;dots to release fruit2
 clydeDots       equ totalDots-30 ;dots to release clyde ( about 33% )
-inkyDots        equ totalDots-10 ;dots to release inky  ( )
-pinkyDots       equ totalDots-20 ;dots to release pinky ( should be 1)
+inkyDots        equ totalDots-20 ;dots to release inky 
+pinkyDots       equ totalDots-10 ;dots to release pinky ( should be 1)
 
 
 maxLives        equ 4           ;max lives ever possible on left display
@@ -740,7 +736,6 @@ g2Start         equ screen+22*outOfBoxRow+outOfBoxCol
 g3Start         equ screen+22*11+11
 g4Start         equ screen+22*11+11
 #endif        
-;;; saved tunnel speed when ghosts are in tunnel
 
 Sprite_tile     dc.b PACL,GHL,GH1L,GH2L,GH3L      ;foreground char
 ;;; sprite chargen ram ( where to put the source bmap )
@@ -752,6 +747,7 @@ inBoxTable      dc.b 0,0,0,2,6
 pointTable      dc.b $16,00,$08,00,$04,00,$02,00
 
 Sprite_turnbase  dc.b 200,200,200,200,200
+;;; colors: pacman,inky,blinky,pinky,clyde         
 Sprite_color     dc.b #YELLOW,#CYAN,#RED,#GREEN,#PURPLE
 ;;; cruise elroy setting for blinky
 blinkyCruise1    equ 1
@@ -1628,15 +1624,15 @@ death subroutine
         MAC SetupDotCounts
         lda DOTCOUNT
         clc
-        lsr                     ;2
-        sta XBlinkyS1+1
+        lsr                     ;/2
+        sta XBlinkyS1+1         ;blinky enters cruise elroy1
         lsr                     ;4
-        sta ClydeDots
-        sta XBlinkyS2+1         ;blinky to full speed at 75% of dots eaten
+        sta ClydeDots           ;clyde exits at 75% dots eaten
+        sta XBlinkyS2+1         ;blinky to full speed at 75% dots eaten
         lsr                     ;8
-        sta PinkyDots
-        lsr                     ;16
         sta InkyDots
+        lsr                     ;16
+        sta PinkyDots
         ;;
         lda DOTCOUNT
         tay
@@ -1756,7 +1752,7 @@ reset_game subroutine
         sta Sprite_page
         sta Sprite_frame,X
         sta Sprite_sback,X
-        sta Sprite_mode,X
+        sta Sprite_mode,X       ;set to modeInBox
         lda #dirHoriz
         sta Sprite_dir2,X
         cpx #0             ;are we pacman, then
@@ -1807,7 +1803,7 @@ reset_game subroutine
         sta PACFRAMED
         
         lda #modeLeaving
-        sta Sprite_mode+1       ;inky leaves right away
+        sta Sprite_mode+pinky   ;pinky leaves right away
 #if 0
         ;; store the time the level was started
         lda JIFFYL
