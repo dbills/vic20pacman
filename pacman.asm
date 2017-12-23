@@ -759,7 +759,7 @@ blinkyCruise2    equ 2
 blinkyCruiseOff  equ 0
 ;;; 
 ;;; resolution of system timer in 1/x seconds
-softTimerRes   equ 60
+softTimerRes   equ 30
 ;;; swap upcoming sprite position data with current sprite data
 ;;; i.e. page flip the screen location
         MAC SwapSpritePos
@@ -1208,7 +1208,7 @@ initChaseTimer
         rts
 ;;; 
 ;;; called when a power pill is de-activated
-;;; 
+;;; Z!=0 on return 
 PowerPillOff SUBROUTINE
         lda #0
         sta 36876
@@ -1774,7 +1774,6 @@ reset_game subroutine
         sta eat_halted
         sta eat_halt
         sta FruitIsOut
-;        sta Sprite_turn,X
         sta Sprite_page
         sta Sprite_frame,X
         sta Sprite_sback,X
@@ -2202,18 +2201,18 @@ MainLoop0
         ;; here we go ...
 
         Invert Sprite_page      ;dbl buffering, switch sprite tiles
-        ;; only decrement game loop timer at .5 frame rate
+        ;; only decrement game loop timers at .5 frame rate
         ;; by inspecting A from Sprite_page which toggles at .5
         beq .skip               
         ;; decrement game loop based timers such as power pills
-        ldy POWER_UP
-        beq .skip
-        dey
-        sty POWER_UP
-        bne .skip
-        jsr PowerPillOff
+        lda POWER_UP
+        beq .notpowered         
+        dec POWER_UP            ;we're powered, decrement timer
+        bne .skip               
+        jsr PowerPillOff        ;shut off power up mode
+.notpowered                     ;not powered, decrement chase/scatter
+        HasTimerExpired TIMER1,Timer1Expired ;timer and notify
 .skip
-        HasTimerExpired TIMER1,Timer1Expired        ;test if Timer1 expired and notify
 
 ;        Display1 "P",0,PowerPillTime
 ;        Display2 "T",0,TIMER1+1,TIMER1
