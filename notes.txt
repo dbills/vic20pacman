@@ -88,7 +88,8 @@ ghost | tunnel | dots1| spd1|dots2|spd2
         at level 19 ghosts should stop turning blue
 
 TODO:
-        get doteatn speed reduction working
+        x get doteatn speed reduction working
+        x scatter timer doesn't run when frightened
         get 3 frame pause working ( animation flaws)
         timer for clyde is broken on level1
         get intermission

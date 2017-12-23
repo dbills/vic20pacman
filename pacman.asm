@@ -1270,8 +1270,8 @@ PowerPillOn SUBROUTINE
         rts
 ;;; 
 ;;; run the siren soundtrack
-;;; siren changes pitch when blinky ets faster
-;;; 
+;;; siren changes pitch when blinky gets faster
+;;; which is know as cruise elroy mode
 isr3 subroutine
         ldy SirenIdx
         lda SirenTable,Y
@@ -1321,17 +1321,6 @@ isr4 subroutine
 .eyessound
         TableSoundPlayer PowerSnd2Idx,36876,EyesEatenSoundTable,whatever
         
-#if 0        
-        ldy PowerPillPtr
-        lda PowerPillTable,Y
-        beq isr4_reset
-        sta 36876
-        inc PowerPillPtr
-        rts
-isr4_reset
-        sta PowerPillPtr        ;reset index to 0
-        rts
-#endif        
 ;;; bonus life sound
 isr6 subroutine
         dec BonusSound
@@ -1355,8 +1344,7 @@ isr6 subroutine
         sta 36875
 .done        
         rts
-;;; sound for when pacman eats a fruit
-;;; 
+;;; sound when pacman eats a fruit
 isr5 subroutine
         ldy FruitPillPtr        ;load note table index
         lda FruitSound,Y        ;load value from note table
@@ -1525,7 +1513,6 @@ SoundGhostEaten SUBROUTINE
         pha
         jsr uninstall_isr           ;turn off all sound but this
 
-
         ldx #195
 .loop
         jsr delay
@@ -1558,10 +1545,6 @@ longJmp subroutine
         jmp PacDeathEntry
 
         MAC ClearPacSite
-        ;; lda Sprite_sback
-        ;; pha
-        ;; lda Sprite_sback2
-        ;; pha
         lda #EMPTY
         sta Sprite_sback
         sta Sprite_sback2
@@ -1696,10 +1679,6 @@ AllSoundOff subroutine
         jsr PowerPillOff
         jsr EatSoundOff            ;waka off
         rts
-;;;
-;;;determine correct ghost speed based on levels complete
-;;; output: ghost speed in A
-;;;
 ;;;
 ;;; determine correct speed based on levels complete
 ;;; input:
@@ -2840,37 +2819,34 @@ soundInc equ 3
         cli
         ENDM
 ;;; increases the speed of blinky
-;;; levels > 2 use the IncreaseBlinkyHard
-;;; levels <=2 use this routine, and manipulate
-;;; the sprite speed
+;;; +5% mode 1, 
 ;;; X: in, blinky cruise level
 ;;; X clobbered
 IncreaseBlinky subroutine
-#if 0        
         stx BlinkyCruise        ;store the current blinky cruise mode
-        ;; levels > 2 are done with the IncreaseBlinkyI routine
-        ;; otherwise blinky can be increased with Sprite_speed adjustments
+        ;; levels > 5, no sense, ghosts are all at 95%
         lda LevelsComplete
-        cmp #harder2 ;no sense, ghosts are already fastest
-        bcs .over2              ;ghosts are already fast
-        cpx #1                  ;what cruise mode are we supposed to be entering?
-        bne .cruise2
-.cruise1        
-        lda #Speed_standard
-        bne .store              ;jmp .store
-.cruise2
-        lda #Speed_fast
+        cmp #5
+        bcs .over5
+        ldx #4
+        jsr GetSpeed
+        ldx BlinkyCruise
+        sec
+        sbc #10                 ;up 5%
+        cpx #2                  ;are we level 2?
+        bne .store              ;nope, that's enough
+        sbc #10                 ;yes, then up another 5%
 .store
         ;; don't increase current speed if he is frightened
-        ;; but rather the base speed
-        ldx #blinky
+        ;; but rather only the base speed
         ldy Sprite_mode+blinky
         cpy #modeFright
         beq .fright
+        ldx #blinky
         sta Sprite_speed,x
 .fright        
         sta Sprite_base,X
-.over2
+.over5
         IncreasePanicLevel
 #endif        
         rts
@@ -3511,9 +3487,7 @@ Divide22_16 SUBROUTINE
 ;;; Service PACMAN, read joystick and move
 ;;; 
 Pacman SUBROUTINE
-
         ldx #0
-
         MyTurn2 PacManTurn
         ;;not our turn to move
         inc FrameLock
