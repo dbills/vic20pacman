@@ -2242,7 +2242,8 @@ MainLoop0
         sta clrram+cherryRow*22+cherryCol
 #ifconst AGEFRUIT
         ;; age the fruit, so it dissappears after a while
-        lda Sprite_page
+        lda JIFFYL
+        and #2
         beq .player1            ;only age fruit every other frame
         dec FruitIsOut
         bne .player1            ;fruit is still good, no worries
@@ -2842,10 +2843,9 @@ IncreaseBlinky subroutine
         ldy Sprite_mode+blinky
         cpy #modeFright
         beq .fright
-        ldx #blinky
-        sta Sprite_speed,x
+        sta Sprite_speed + blinky
 .fright        
-        sta Sprite_base,X
+        sta Sprite_base + blinky
 .over5
         IncreasePanicLevel
 #endif        
@@ -2912,8 +2912,8 @@ XBlinkyS1
         ldy DOTCOUNT            ;Y was clobbered by previous, remember this is dots remaining
 XBlinkyS2
         cpy #[totalDots/3]      ;time to go into mode 2?
-        bcs .5                  ;< dots needed  skip mode2
-        ldx #blinkyCruise2      ;select speed mode into A
+        bcs .5                  ;< dots needed skip mode2
+        ldx #blinkyCruise2      ;select speed mode
         jsr IncreaseBlinky      ;invoke
 .5        
         rts
