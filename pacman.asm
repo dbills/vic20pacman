@@ -2676,7 +2676,7 @@ ailoop0
 GhostTurn
         lda Sprite_mode,X
         cmp #modeReverse
-        beq .reversing
+        beq .notfrightened
         cmp #modeLeaving
         beq .leaving
         cmp #modeEaten
@@ -2714,6 +2714,9 @@ GhostTurn
         
 .decide                         ;entering a new tile
 #endif        
+        lda Sprite_mode,X       ;were we supposed to reverse
+        cmp #modeReverse        ;on tile entry?
+        beq .reversing          ;yes, finish the reverse
         lda CHASEMODE
         bne .chasing
         jsr ScatterGhostAI
