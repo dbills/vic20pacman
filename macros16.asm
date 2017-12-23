@@ -198,13 +198,16 @@
         MAC dec16z
         lda  [{1}]+0            ;load lsb
         bne .notzero
+        ;; double decrement needed
         dec [{1}]+1             ;dec msb
 .notzero
         dec [{1}]+0             ;dec lsb
         beq .lsbzero
         bne .done
 .lsbzero
-        lda {1}                 ;Z = 1 if 16bit = 0
+        ;; lsb was 0, load msb, it it's also zero
+        ;; the Z flag will correct for 16 bit number
+        lda {1}+1         
 .done        
         ENDM
 

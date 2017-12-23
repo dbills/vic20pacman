@@ -32,7 +32,7 @@ AGEFRUIT equ 1
 ;;; 
 ;NOGHOSTDOTS equ 1
 ;;; uncomment to show chase/scatter mode debugging at top of screen
-;SHOWTIMER1 equ 1                ;
+SHOWTIMER1 equ 1                ;
 ;;; score when a bonus life is given ( the high byte of a 3 byte BCD number )
 ;;; e.g. 10000 points is 010000 or $01
 BONUSLIFE equ $01
@@ -87,7 +87,8 @@ GHOSTS_ON   equ 1    ;
 ;;; they change as levels go on
 ;;; 7 seconds, 20 seconds, etc...
 ;;; even values are scatter mode, odd are chase mode
-;;; iteration starts from end 
+;;; iteration starts from end
+;;;                      Chase               Scatter         Chase            Scatter          Chae           Scatter
 ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 20*softTimerRes, 7*softTimerRes
 ChaseTableEnd
 ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
@@ -334,11 +335,11 @@ SCRL_VAL        equ END_SCRL_VAL+1
 LASTJOY         equ SCRL_VAL+1
 LASTJOYDIR      equ LASTJOY+1         ;last joy reading that had a switch thrown
 MOVEMADE        equ LASTJOYDIR+1      ;true if last pacman move was successful
-TIMER1          equ MOVEMADE+1        ;compared against jiffy clock for chase/scatter modes
-TIMER1_h        equ TIMER1+1          ;timer1 high byte
-TIMER1_hh       equ TIMER1_h+1        
-r_seed          equ TIMER1_hh+1       ; random number seed
-Div22Table      equ r_seed+1          ; table for fast 22 division
+TIMER1          equ MOVEMADE+1        ;for chase/scatter modes
+TIMER1H         equ TIMER1+1
+unused          equ TIMER1H+1
+r_seed          equ TIMER1H+2         ;random number seed 
+Div22Table      equ r_seed+1          ;table for fast 22 division
 ;;; ----------- 10 bytes
 Sprite_offset   equ Div22Table+10
 ;;; ------------5 bytes
@@ -497,25 +498,13 @@ PACL            equ [GH3L+4]
         tax
         pla
         ENDM
-        ;; test if jiffy timer > timer1
+        ;; decrement 16 bit timer in {1}
+        ;; if expired jsr to {2}
         MAC HasTimerExpired
-           sei         ;disable interrupt while we compare against the clock
-           LDA JIFFYH  ; compare high bytes
-           CMP {1}+2
-           BCC .LABEL2 ; if JIFFYH < NUM2H then NUM1 < NUM2
-           BNE .LABEL1 ; if NUM1H <> NUM2H then NUM1 > NUM2 (so NUM1 >= NUM2)
-           LDA JIFFYM  ; compare middle bytes
-           CMP {1}+1
-           BCC .LABEL2 ; if NUM1M < NUM2M then NUM1 < NUM2
-           BNE .LABEL1 ; if NUM1M <> NUM2M then NUM1 > NUM2 (so NUM1 >= NUM2)
-           LDA JIFFYL  ; compare low bytes
-           CMP {1}
-           BCC .LABEL2 ; if NUM1L < NUM2L then NUM1 < NUM2
-.LABEL1                ; notify timer1 expired
-           cli
-           jsr {2}
-.LABEL2
-           cli
+        dec16z {1}
+        bne .done
+        jsr {2}
+.done
         ENDM
         ;; make a number negative ( if it isn't ) by creating the 2's complement of it
         ;; number in A
@@ -599,35 +588,6 @@ PACL            equ [GH3L+4]
         tax
 
         pla                     ;restore A
-        ENDM
-;;; display in hex
-;;; display a single byte {3} at offset {2} on top line prefixed by char {1}
-        MAC Display1
-        saveAll
-        
-        lda #[{1}-"A"+1 | $80]
-        ldx #{2}
-        sta screen,X
-        lda clrram,X
-        and #%00000111          ;read existing color
-        clc
-        adc #1                  ;add one to it
-        cmp #8                  ;wrap around
-        bne .storeit
-        lda #WHITE
-.storeit        
-        sta clrram,X
-        inx
-#if 0                           ;decimal
-        lda {3}
-        jsr DisplayNum
-#else                           ;hex
-        lda {3}
-        sta BCD
-        jsr DisplayBCD
-#endif        
-        resAll
-
         ENDM
         ;; wait for number jiffies in {1}
 WaitTime_ subroutine
@@ -1238,33 +1198,13 @@ initChaseTimer
 .0
         sty ChaseTableIdx
         move16y ChaseTable,TIMER1   ;chase time to TIMER1
-        sei                         ;prevent clock updates while we do some math
-        lda JIFFYL
-        clc
-        adc TIMER1
-        sta TIMER1
-        lda JIFFYM
-        adc TIMER1+1
-        sta TIMER1+1
-        lda JIFFYH
-        adc #0
-        sta TIMER1_hh
-        cli                     ;re-enable interrupts
-#ifconst SHOWTIMER1        
-        Display1 "S",10,#1
-#endif
-        
         iny                     ;add 1 such that even/odd works the way we want
         tya                     ;
         and #1                  ;bit 0 controls chase or scatter even or odd
         sta CHASEMODE           ;engage chase mode, scatter when clear
-        
 #ifconst SHOWTIMER1        
-        beq .done
-        Display1 "C",10,#1
+        Display1 "M",10,CHASEMODE
 #endif
-        
-.done
         rts
 ;;; 
 ;;; called when a power pill is de-activated
@@ -1853,9 +1793,8 @@ reset_game subroutine
         GetPacSpeed
         sta Sprite_base
         sta Sprite_speed
-;;; not needed?? pacman goes left through joystick
-;        lda #motionLeft
-;        sta Sprite_motion
+        lda #motionLeft         ;pacman goes left to start
+        sta Sprite_motion
         lda #motionRight
         sta Sprite_motion+1
 #ifconst LARGEMAZE        
@@ -2354,11 +2293,11 @@ MainLoop0
         jsr render_sprite
         jmp .playerloop
 
-MainLoopEnd
 ;        Display1 "D",0,DOTCOUNT
         lda 9004
         cmp #220
         bcs Doomed              ;we were too slow
+MainLoopEnd
         jmp IntroLoop
 Doomed        
         brk

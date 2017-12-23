@@ -1,6 +1,35 @@
 ;;; file for debug routines and other dead/maybe dead but possibly useful
 ;;; code for this project
 
+;;; display in hex
+;;; display a single byte {3} at offset {2} on top line prefixed by char {1}
+        MAC Display1
+        saveAll
+        
+        lda #[{1}-"A"+1 | $80]
+        ldx #{2}
+        sta screen,X
+        lda clrram,X
+        and #%00000111          ;read existing color
+        clc
+        adc #1                  ;add one to it
+        cmp #8                  ;wrap around
+        bne .storeit
+        lda #WHITE
+.storeit        
+        sta clrram,X
+        inx
+#if 0                           ;decimal
+        lda {3}
+        jsr DisplayNum
+#else                           ;hex
+        lda {3}
+        sta BCD
+        jsr DisplayBCD
+#endif        
+        resAll
+
+        ENDM
 ;;; move sprite side to side
         MAC moveS
         lda Sprite_motion,X
