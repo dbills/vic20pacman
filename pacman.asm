@@ -89,15 +89,15 @@ GHOSTS_ON   equ 1    ;
 ;;; even values are scatter mode, odd are chase mode
 ;;; iteration starts from end
 ;;;                      Chase               Scatter         Chase            Scatter          Chae           Scatter
-ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 20*softTimerRes, 7*softTimerRes
+ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 20*softTimerRes, 170*softTimerRes
 ChaseTableEnd
 ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
 ;;; 
 ;;; division table for division by 22
 Div22Table_i      dc.w [22*1],[22*2],[22*4],[22*8],[22*16]
 ;;; the home tiles for ghosts that are in 'scatter' mode
-;;; ghosts try to find their way to these home tiles
-GhosthomeTable  dc.b inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
+;;; ghosts try to find their way to these home tiles, pacman is 0,0 and not relevant
+GhosthomeTable  dc.b 0,0,inkyHomeCol,inkyHomeRow,blinkyHomeCol,blinkyHomeRow,pinkyHomeCol,pinkyHomeRow,clydeHomeCol,clydeHomeRow
 VolTable        dc.b 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1,0
 VolTableSz equ 15        
 ;;; eating dots sound, belong in audio.asm 
@@ -697,13 +697,13 @@ pacStartCol     equ outOfBoxCol
 pacStart        equ screen+22*pacStartRow+pacStartCol
 testDot         equ pacStart+4        
 pinkyHomeCol    equ 3        
-pinkyHomeRow    equ 3
-blinkyHomeCol   equ 22-3
-blinkyHomeRow   equ 3
-clydeHomeCol    equ 6
-clydeHomeRow    equ 23-2
-inkyHomeCol     equ 23-6
-inkyHomeRow     equ 23-2        
+pinkyHomeRow    equ 5
+blinkyHomeCol   equ 19
+blinkyHomeRow   equ 5
+clydeHomeCol    equ 0
+clydeHomeRow    equ 24
+inkyHomeCol     equ 22
+inkyHomeRow     equ 24
 ;;; screen location of ghost box exit, the block above it
 ghostBoxExit    equ [screen+[22*outOfBoxRow]+outOfBoxCol]
 ghostBoxHall    equ ghostBoxExit+22
@@ -3294,8 +3294,8 @@ FrightAI SUBROUTINE
 ;;; next scatter to 1/60
 ;;; level 5 scatter goes to 5 seconds
 ScatterGhostAI SUBROUTINE
-        tya                     ;mul by 2
-        lsr
+        txa                     ;mul by 2
+        asl
         tay
         lda GhosthomeTable,Y
         sta GHOST_TGTCOL
