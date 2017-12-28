@@ -187,7 +187,7 @@ sopSeqMapIdx    equ W2 ; only need 1 byte of this
         
 ; loadNextStepBas
         ldy basSeqMapIdx
-        lda (W3),Y ; load the offset of the basesequence
+        lda (W3),Y ; load the offset of the bas sequence
         cmp #$FF
         bne .1
         rts ; END_OF_MUSIC
@@ -228,6 +228,56 @@ sopSeqMapIdx    equ W2 ; only need 1 byte of this
         lda (W6),Y ; note offset assumed in Y
         sta voice1
         inc basBeatCt
+
+
+.playstepSop
+        lda sopBeatCt
+        cmp sopDur
+        bne .playSop
+        
+; loadNextStepSop
+        ldy sopSeqMapIdx
+        lda (W3),Y ; load the offset of the sop sequence
+        cmp #$FF
+        bne .1
+        rts ; END_OF_MUSIC
+.1
+        ; derive the correct offset within the sequence table
+        clc
+        adc sopSeqIdx
+        tay
+        lda (W5),Y ; get the note,duration nybbles
+
+        ; this is like SplitByte except Y,A instead of X,A
+        pha
+        lsr
+        lsr
+        lsr
+        lsr
+        tay ; note offset in Y
+        pla
+        and #$0F ; duration in A; also Z flag is initialized
+
+        ; cmp #0 ; duration of 0 means advance to next seq (Z flag already set)
+        beq .nextSopSeq
+        
+        sta sopDur
+        lda #0
+        sta sopBeatCt ; reset the beat count
+        inc sopSeqIdx
+        jmp .playSop
+
+.nextSopSeq ; setup a new sequence
+        inc sopSeqMapIdx
+        lda #0
+        sta sopSeqIdx
+        sta sopBeatCt ; reset the beat count
+        jmp .playstepSop
+
+.playSop
+        lda (W6),Y ; note offset assumed in Y
+        sta voice3
+        inc sopBeatCt
 
 ;;
 ;;
