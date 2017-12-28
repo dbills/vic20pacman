@@ -37,7 +37,7 @@ SHOWTIMER1 equ 1                ;
 ;;; e.g. 10000 points is 010000 or $01
 BONUSLIFE equ $01
 ;;; if uncommented, play the intro music
-;ACTORINTRO equ 1                ;
+ACTORINTRO equ 1                ;
 ;;;
 ;;; uncomment to activate ghosts
 ;;; comment out to cause no ghost movement
@@ -2051,7 +2051,8 @@ ActorIntro subroutine
         cmp #totalDots          ;less than total, then we died midlevel
         bcc .skipsong           ;and no song
 ;        jsr WaitFire
-        jsr player              ;play pac intro song
+                                ;        jsr player              ;play pac intro song
+        jsr intrmPlyr
         jmp .cont
 .skipsong                       ;unless we played the pacsong
         WaitTime 2              ;delay for 2 second after ready msg
@@ -2070,7 +2071,7 @@ ActorIntro subroutine
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
-#if 1
+#if 0
         lda #8
         sta 36879               ; border and screen colors
         sta volume              ; turn up the volume to 8

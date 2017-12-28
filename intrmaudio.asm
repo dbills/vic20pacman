@@ -37,6 +37,7 @@ basSeqA
         dc.b [0<<4] + 8 	; .8
         dc.b [3<<4] + 3 	; f3
         dc.b [0<<4] + 1 	; .1
+        dc.b 0                  ; ..
 
 basSeqB
         dc.b [3<<4] + 4 	; f4
@@ -230,7 +231,7 @@ sopSeqMapIdx    equ W2 ; only need 1 byte of this
 
 ;;
 ;;
-        lda #4
+        lda #2
         jsr WaitTime_
         jmp .playstepBas
 
