@@ -164,6 +164,8 @@ sopBeatCt       equ S4
 sopDur          equ W1 ; only need 1 byte of this
 sopSeqIdx       equ W1+1
 sopSeqMapIdx    equ W2 ; only need 1 byte of this
+sopSequencesPtr equ W6+2
+sopFreqsPtr     equ W6+4
 
         lda #0
         sta basBeatCt
@@ -176,9 +178,11 @@ sopSeqMapIdx    equ W2 ; only need 1 byte of this
         sta sopSeqMapIdx
 
         store16 basSeqMap,W3
-        store16 sopSeqMap,W4
         store16 basSequences,W5
         store16 basFreqs,W6
+        store16 sopSeqMap,W4
+        store16 sopSequences,sopSequencesPtr
+        store16 sopFreqs,sopFreqsPtr
 
 .playstepBas
         lda basBeatCt
@@ -246,7 +250,7 @@ sopSeqMapIdx    equ W2 ; only need 1 byte of this
         clc
         adc sopSeqIdx
         tay
-        lda (W6),Y ; get the note,duration nybbles
+        lda (sopSequencesPtr),Y ; get the note,duration nybbles
 
         ; this is like SplitByte except Y,A instead of X,A
         pha
@@ -275,7 +279,7 @@ sopSeqMapIdx    equ W2 ; only need 1 byte of this
         jmp .playstepSop
 
 .playSop
-        lda (W6),Y ; note offset assumed in Y
+        lda (sopFreqsPtr),Y ; note offset assumed in Y
         sta voice3
         inc sopBeatCt
 
