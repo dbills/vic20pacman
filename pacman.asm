@@ -2070,12 +2070,13 @@ ActorIntro subroutine
 ; MAIN()
 ;-------------------------------------------
 main SUBROUTINE
-#if 0        
+#if 1
         lda #8
         sta 36879               ; border and screen colors
         sta volume              ; turn up the volume to 8
         cli
-        jsr player
+        jmp intrmPlyr
+        brk
 #endif        
 #if 0
         lda #$ea
@@ -4588,4 +4589,4 @@ done:
         sta W5
         rts
 #endif        
-        
+                INCLUDE "intrmaudio.asm"
