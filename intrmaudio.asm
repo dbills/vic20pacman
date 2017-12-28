@@ -237,16 +237,16 @@ sopSeqMapIdx    equ W2 ; only need 1 byte of this
         
 ; loadNextStepSop
         ldy sopSeqMapIdx
-        lda (W3),Y ; load the offset of the sop sequence
+        lda (W4),Y ; load the offset of the sop sequence
         cmp #$FF
-        bne .1
+        bne .2
         rts ; END_OF_MUSIC
-.1
+.2
         ; derive the correct offset within the sequence table
         clc
         adc sopSeqIdx
         tay
-        lda (W5),Y ; get the note,duration nybbles
+        lda (W6),Y ; get the note,duration nybbles
 
         ; this is like SplitByte except Y,A instead of X,A
         pha
