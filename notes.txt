@@ -77,8 +77,8 @@ ghost | tunnel | dots1| spd1|dots2|spd2
 
         in the table above I've put the denominator for each speed
         
-11/6/17 ghost should not reverse direction right away when the mode changes, but rather when they enter the next tile
-        eating an energizer stop pacman moving for three frames
+11/6/17 x ghost should not reverse direction right away when the mode changes, but rather when they enter the next tile
+        x eating an energizer stop pacman moving for three frames
         ghosts leaving the house direction does not match the arcade game
 
         cruise elroy mode, blink's scatter mode should change to he still chases you
@@ -88,10 +88,17 @@ ghost | tunnel | dots1| spd1|dots2|spd2
         at level 19 ghosts should stop turning blue
 
 TODO:
+        blinky hot pursuit mode is not functioning properly
+        I can get into areas of the maze where blinky can't get to me
+        e.g. upper spot of lower left upside down T on the right side
+        while blinky continuually laps the left upside down L
+        special areas of maze where ghosts can't make certain turns
         x get doteatn speed reduction working
         x scatter timer doesn't run when frightened
-        get 3 frame pause working ( animation flaws)
-        timer for clyde is broken on level1
+        x get 3 frame pause working ( animation flaws)
+        x timer for clyde is broken on level1
+        get rid of setting color for clyde when he is pursuing vs fleeing
+        try doubling sound interrupt level
         get intermission
         agonizer needs visited ( are we reducing the power pill time correctly)
 #endif

@@ -2476,13 +2476,14 @@ scroll_right SUBROUTINE
         sta SCRL_VAL
         jmp ScrollHoriz        ;rts for us
 
-
+        ;; W3: bitmap for ghost direction
+        ;; i.e. eyes change direction for left/right
         MAC MoveGhost
         lda Sprite_mode,X
         beq .done               ;ghost in box don't get to move
         jsr MoveGhostI
-        lda Sprite_mode,X
-        cmp #4                          ;< 4 no copy needed
+        lda Sprite_mode,X       ;frightened, eaten or newly
+        cmp #modeOutOfBox       ;exited ghosts bitmaps don't need updated
         bcc .done
         move16x2 W3,Sprite_src
 .done        
@@ -3290,6 +3291,8 @@ FrightAI SUBROUTINE
 ;;; next scatter to 1/60
 ;;; level 5 scatter goes to 5 seconds
 ScatterGhostAI SUBROUTINE
+        cpx #blinky
+        beq .blinky
         txa                     ;mul by 2
         asl
         tay
@@ -3299,7 +3302,8 @@ ScatterGhostAI SUBROUTINE
         lda GhosthomeTable,Y
         sta GHOST_TGTROW
         rts
-
+.blinky
+        jmp Ghost2AI
 ;;; 
 ;;; the ghost that runs away when pacman is too close
 ;;; sue or clyde

@@ -72,6 +72,11 @@
     ;; move word index by X, does correct pointer
     ;; arithmetic for 'word'
     ;; move16x source[X],dest
+    ;;
+    ;; C equiv:
+    ;; unsigned char x;
+    ;; unsigned short *souce[],*dest;
+    ;; dest = source[x];
     mac move16x
     txa
     pha

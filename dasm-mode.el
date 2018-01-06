@@ -77,7 +77,7 @@
   (make-local-variable 'font-lock-defaults)
   (setq font-lock-defaults '(dasm-font-lock-keywords nil t))
   (make-local-variable 'compilations-read-command)
-  (setq compilation-read-command nil)
+  (setq compilation-read-command t)
   (setq dasm-outfile
 	(concat (substring (buffer-name) 0 (string-match "\\." (buffer-name))) 
 		".prg"))
