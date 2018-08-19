@@ -14,6 +14,3 @@ chk: all
 	@if [ `sum panicman3k.prg | cut -f1 -d' '` -ne 20566 ]; then echo "3k broken";exit 1;fi
 	@if [ `sum panicman8k.prg | cut -f1 -d' '` -ne 15391 ]; then echo "8k broken";exit 1;fi
 	@echo "no changes found"
-
-labels1:
-	awk '{printf "al %s %s\n",$$2,$$3}' < panicman8k.lst | egrep -v 'ENDM|INCLUDE|else|endif|processor|ifconst|endm' | egrep '^al [0-9A-F]{4} [A-Za-z0-9]{4,}' >> labels2.ll

@@ -83,9 +83,18 @@ ghost | tunnel | dots1| spd1|dots2|spd2
 
         cruise elroy mode, blink's scatter mode should change to he still chases you
         if after blinky has become elroy, you die, he only remains normal  until Clyde comes out
-        then it's back to elroy again
+        then it's back to elroy again ( I'm currently testing this, with a long first phase timer1 )
 
         at level 19 ghosts should stop turning blue
+
+        my ghosts do not actually look ahead
+        they are supposed to make the decision of where to head next
+        1 tile ahead of where they are, bake that decision in
+        and then use it when they in fact reach that tile,
+        do my ghosts behave this way?
+
+        home tiles were wrong
+        inky , blinky, clyde, pinky
 
 TODO:
         blinky hot pursuit mode is not functioning properly

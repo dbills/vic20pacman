@@ -88,7 +88,7 @@ GHOSTS_ON   equ 1    ;
 ;;; 7 seconds, 20 seconds, etc...
 ;;; even values are scatter mode, odd are chase mode
 ;;; iteration starts from end
-;;;                      Chase               Scatter         Chase            Scatter          Chae           Scatter
+;;;                      Chase               Scatter         Chase            Scatter          Chase           Scatter
 ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 20*softTimerRes, 170*softTimerRes
 ChaseTableEnd
 ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table 
@@ -1173,10 +1173,9 @@ ReverseGhosts SUBROUTINE
 Timer1Expired SUBROUTINE
         jsr ReverseGhosts
         ldy ChaseTableIdx       ;load current table entry
-        ;;
-        cpy #ChaseTableSz-1
-        bne .next
-        ldx #pinky
+        cpy #ChaseTableSz-1     ;is first timer switch?
+        bne .next               ;nope
+        ldx #pinky              ;send out 2 ghosts
         jsr LeaveBox
         ldx #clyde
         jsr LeaveBox
@@ -1184,13 +1183,13 @@ Timer1Expired SUBROUTINE
         dey                     ;move down to nxt table entry
         ;;
         ;; TODO
-        ;; if ghosts havn't all come out by the beginning of the third
+        ;; if ghosts haven't all come out by the beginning of the third
         ;; scatter period, then send them out
         ;;
-        bpl .0                  ;branch positive
-        ;; < 0 wrapping around table
+        bpl .0                  ;table still have entries?
+        ;; nope, < 0 so wrapping around table
 initChaseTimer        
-        ldy #ChaseTableSz-1        ;reload table index to top of table
+        ldy #ChaseTableSz-1     ;reload table index to top of table
 .0
         sty ChaseTableIdx
         move16y ChaseTable,TIMER1   ;chase time to TIMER1
@@ -2852,7 +2851,8 @@ IncreaseBlinky subroutine
         rts
 ;;; note:
 ;;; self modifying code
-;;; for blinky speed
+;;; for blinky speed ( probably a bad idea )
+;;; the Arcade ghost exit order is Blinky, Pinky, Inky, Clyde
 ;;; 
 DotEaten SUBROUTINE
         jsr SoundOn
@@ -3290,6 +3290,8 @@ FrightAI SUBROUTINE
 ;;; 3d chase mode goes higher
 ;;; next scatter to 1/60
 ;;; level 5 scatter goes to 5 seconds
+;;; supposedly blinky stays in pursuit mode, even during scatter
+;;; 
 ScatterGhostAI SUBROUTINE
         cpx #blinky
         beq .blinky
