@@ -77,9 +77,10 @@
     ;; unsigned char x;
     ;; unsigned short *souce[],*dest;
     ;; dest = source[x];
+    ;; uses Y=X on return
     mac move16x
     txa
-    pha
+    tay                         ; PGOTCHA: replace with pha if problems
     asl                         ; x*2 since it's a word
     tax
     lda [{1}],X
@@ -87,7 +88,7 @@
     inx
     lda [{1}],X
     sta [{2}]+1
-    pla
+    tya                     ; PGOTCHA: replace with pla if problems
     tax
     endm
     ;; move word index by Y, does correct pointer

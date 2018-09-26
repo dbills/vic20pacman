@@ -32,7 +32,7 @@ AGEFRUIT equ 1
 ;;;
 ;NOGHOSTDOTS equ 1
 ;;; uncomment to show chase/scatter mode debugging at top of screen
-SHOWTIMER1 equ 1                ;
+;SHOWTIMER1 equ 1                ;
 ;;; score when a bonus life is given ( the high byte of a 3 byte BCD number )
 ;;; e.g. 10000 points is 010000 or $01
 BONUSLIFE equ $01
@@ -89,7 +89,7 @@ GHOSTS_ON   equ 1    ;
 ;;; even values are scatter mode, odd are chase mode
 ;;; iteration starts from end
 ;;;                      Chase               Scatter         Chase            Scatter          Chase           Scatter
-ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 20*softTimerRes, 170*softTimerRes
+ChaseTable     dc.w  (5*60)*softTimerRes, 5*softTimerRes, 20*softTimerRes, 7*softTimerRes, 170*softTimerRes, 1*softTimerRes
 ChaseTableEnd
 ChaseTableSz  equ [[ChaseTableEnd-ChaseTable]/2] ;entries in above table
 ;;;
@@ -314,7 +314,7 @@ DSPL_1          equ PACFRAMED+1       ; used by DisplayNum routine
 BCD             equ DSPL_1+1          ; used by Bin2Hex routine
 DSPL_2          equ BCD+1
 DSPL_3          equ DSPL_2+1
-CHASEMODE       equ DSPL_3+1          ; ghosts in scatter mode or chase
+CHASEMODE       equ DSPL_3+1          ; ghosts in scatter mode or chase 1=chase
 GHOST_DIST      equ CHASEMODE+1       ; best distance for current ghost AI calcs
 GHOST_DIR       equ GHOST_DIST+1      ; best move matching GHOST_DIST
 DIV22_REM       equ GHOST_DIR+1
@@ -710,7 +710,7 @@ blinky          equ 2
 pinky           equ 3
 clyde           equ 4
 nobody          equ 10
-focusGhost      equ nobody       ;ghost to print debugging for
+focusGhost      equ blinky       ;ghost to print debugging for
 totalDots       equ $A2+4        ;total dots in maze
 ;totalDots       equ 10          ;total dots in maze
 fruit1Dots      equ 70           ;dots to release fruit
@@ -866,7 +866,6 @@ softTimerRes   equ 30
 ;;; S2 sprite to render
 render_sprite SUBROUTINE
         stx S2                  ;set for call to blith
-;        jsr dumpBack2
         move16x Sprite_src,W1   ;bitmap source -> W1
         lda Sprite_frame,X
         asl                     ;mul by 8
@@ -2576,21 +2575,47 @@ GhostAsPlayer SUBROUTINE
         ScreenToColRow W1,GHOST_COL,GHOST_ROW
 
         ENDM
+;;; based on the pixel offset load the correct sprite
+;;; tile into {2} ( either the head or the tail )
+        MAC ldSprtCurPos
+        lda Sprite_offset,X
+        cmp #5                  ;5,6,7,8 are tail
+        bcc .inhead
+        ldSprtTailPos {1},{2}
+        jmp .done
+.inhead        
+        ldSprtHeadPos {1},{2}
+.done        
+        ENDM
+;;; load sprite head tile screen position pointer into {2}
+;;; X = sprite
+        MAC ldSprtHeadPos
+        move16x {1},{2}
+        endm
+        ;; you can pick loc or loc2
+        ;; load sprite's tail tile screen position pointer into word {2}
+        ;; e.g. ldSprtTailPos Sprite_loc,W1
+        ;; e.g. ldSprtTailPos Sprite_loc2,W1
+        mac ldSprtTailPos
+        move16x {1},{2}
+#if {1}=Sprite_loc
+        lda Sprite_dir,X
+#else
+        lda Sprite_dir2,X
+#endif
+        clc                     ;16 bit add the sprite_dir
+        adc {2}
+        sta {2}
+        lda {2}+1
+        adc #0
+        sta {2}+1
+        ENDM
         ;; pac upcoming row col into variables
         ;; OUTPUT: PACCOL,PACROW
         MAC CalcPacRowCol
-        ;; alternate to save a few bytes from below
-        lda Sprite_loc
-        sec
-        sbc #screen&$ff
-        sta W1
-        lda Sprite_loc+1
-        sbc #screen>>8
-        sta W1+1
-        ;;
-;        move16 Sprite_loc2,W1
-;        sub16Im W1,screen
-        ;;
+        ldx #0
+        ldSprtCurPos Sprite_loc,W1
+        sub16Im W1,screen
         jsr Divide22_16
         lda W1
         sta PACCOL             ;store tile column
@@ -2604,7 +2629,6 @@ GhostAsPlayer SUBROUTINE
         adc Sprite_offset      ;add in pixel count to X
 .vert
         sta PACXPIXEL          ;store pixel column
-
         lda DIV22_RSLT         ;get row result from division
         sta PACROW             ;store tile row
         asl                    ;multiply by 8
@@ -3016,29 +3040,6 @@ ones:
         sta {2}
 .done
         ENDM
-;;; load sprite head tile screen position pointer into {2}
-;;; X = sprite
-        MAC ldSprtHeadPos
-        move16x {1},{2}
-        endm
-        ;; you can pick loc or loc2
-        ;; load sprite's tail tile screen position pointer into word {2}
-        ;; e.g. ldSprtTailPos Sprite_loc,W1
-        ;; e.g. ldSprtTailPos Sprite_loc2,W1
-        mac ldSprtTailPos
-        move16x {1},{2}
-#if {1}=Sprite_loc
-        lda Sprite_dir,X
-#else
-        lda Sprite_dir2,X
-#endif
-        clc                     ;16 bit add the sprite_dir
-        adc {2}
-        sta {2}
-        lda {2}+1
-        adc #0
-        sta {2}+1
-        ENDM
 ;;; convert tiles to pixels
 ;;; X sprite to convert
 ;;; {1} source col
@@ -3150,10 +3151,10 @@ RestoreSprite SUBROUTINE
         ;; {1}=display letter {2}=offset
         ;; displays distance from target tile
         MAC IfFocus
-;;         cpx #focusGhost
-;;         bne .not
-;;         Display1 {1},{2},S3            ;
-;; .not
+        cpx #focusGhost
+        bne .not
+        Display1 {1},{2},S3            ;
+.not
         ENDM
 ;;; X ghost to check
 ;;; the AI has determined a target tile for us
