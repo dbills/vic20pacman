@@ -431,22 +431,23 @@ Sprite_sback    equ Sprite_back2+5
 Sprite_sback2   equ Sprite_sback+5
 Sprite_dir      equ Sprite_sback2+5  ;
 Sprite_dir2     equ Sprite_dir+5     ;sprite direction 1(horiz),22(vert)
-Sprite_offset   equ Sprite_dir2+5   ;sprite bit offset in tiles
-Sprite_offset2  equ Sprite_offset+5    ;upcoming sprite bit offset in tiles
-PlayerScore_h   equ Sprite_offset2+5 ;3 byte BCD player score, MSB order
-PlayerScore_m   equ PlayerScore_h+1
-PlayerScore_l   equ PlayerScore_m+1
-ResetPoint      equ PlayerScore_l+1           ;stack reset location for game reset ( longjmp )
-LevelsComplete  equ ResetPoint+1              ;length 1 : number of levels completed so far
-Sprite_mode     equ LevelsComplete+1          ;length 5
+Sprite_offset   equ Sprite_dir2+5    ;sprite bit offset in tiles
+Sprite_offset2  equ Sprite_offset+5  ;upcoming sprite bit offset in tiles
+Sprite_mode     equ Sprite_offset2+5 ;length 5
 ;;; your turn gets skipped every N loops of Sprite_speed
 ;;; for example: if sprite speed for sprite 0 =10
 ;;; then every 10th game loop that sprite doens't get to move
 Sprite_speed    equ Sprite_mode+5  ; current sprite speed
 Sprite_base     equ Sprite_speed+5 ; base speed of sprites for this level
 Sprite_frame    equ Sprite_base+5  ; animation frame of sprite as offset from _src
-fruitPoints     equ Sprite_frame+5 ; fruit points, a BCD word
-EndOfZP         equ fruitPoints+2  ; this better be < $ff
+        
+PlayerScore_h   equ Sprite_frame+5 ;3 byte BCD player score, MSB order
+PlayerScore_m   equ PlayerScore_h+1
+PlayerScore_l   equ PlayerScore_m+1
+ResetPoint      equ PlayerScore_l+1 ;stack reset location for game reset ( longjmp )
+LevelsComplete  equ ResetPoint+1    ;length 1 : number of levels completed so far
+fruitPoints     equ LevelsComplete+1 ;fruit points, a BCD word
+EndOfZP         equ fruitPoints+2  ;this better be < $ff : $fe
 ;;; --------------------------------------------------------------------------------------------------
 ;;;                  END OF ZERO PAGE CONSTANTS
 ;;; --------------------------------------------------------------------------------------------------
