@@ -1,6 +1,7 @@
 ;;; macros for manipulaing 16 bit quantites
 
-;;; compare {1} with #{2} 
+;;; compare {1} with #{2}
+;;; you can use beq,bne with this
         MAC cmp16Im
         lda {1}+1
         cmp #{2} >> 8       ; load high byte
@@ -77,7 +78,7 @@
     ;; unsigned char x;
     ;; unsigned short *souce[],*dest;
     ;; dest = source[x];
-    ;; uses Y=X on return
+    ;; uses Y.  =X on return
     mac move16x
     txa
     tay                         ; PGOTCHA: replace with pha if problems
@@ -216,5 +217,12 @@
         lda {1}+1         
 .done        
         ENDM
+        ;; duh, you can't use beq with this
+        MAC dec16
+        lda  [{1}]+0
+        bne .done
+        dec [{1}]+1
+.done
+        dec [{1}]+0
+        ENDM
 
-    

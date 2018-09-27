@@ -1,0 +1,9 @@
+mneumonics all lower case
+MAC assembler directives in caps
+macro names CamelCase ( underscore allowed if meaningul )
+comments on right aligned when possible, but don't have to have any particular column
+local labels all lower case, underscores
+function label begin at left, CamelCase
+funcion comments three semicolons
+macro indent same level as code
+macro comments two semicolons

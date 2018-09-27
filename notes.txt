@@ -97,8 +97,8 @@ ghost | tunnel | dots1| spd1|dots2|spd2
         inky , blinky, clyde, pinky
 
 TODO:
-        blinky hot pursuit mode is not functioning properly
-        I can get into areas of the maze where blinky can't get to me
+x        blinky hot pursuit mode is not functioning properly
+x        I can get into areas of the maze where blinky can't get to me
         e.g. upper spot of lower left upside down T on the right side
         while blinky continuually laps the left upside down L
         special areas of maze where ghosts can't make certain turns

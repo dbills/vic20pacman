@@ -458,42 +458,7 @@ EndOfZP         equ fruitPoints+2  ; this better be < $ff
 ;------------------------------------
                                 ;
         INCLUDE "macros16.asm"
-        ;; logical not of 1, used to switch between on/off states
-        MAC Invert
-        lda #1                  ;dbl buffering, switch sprite tiles
-        eor {1}                 ; 0 = 1
-        sta {1}                 ; or 1 = 0
-        ENDM
-        MAC saveY
-        tya
-        pha
-        ENDM
-        MAC resY
-        pla
-        tay
-        ENDM
-        ;; save X
-        MAC saveX
-        stx Xsave
-        ENDM
-        ;; restore X
-        MAC resX
-        ldx Xsave
-        ENDM
-        MAC saveAll
-        pha
-        txa
-        pha
-        tya
-        pha
-        ENDM
-        MAC resAll
-        pla
-        tay
-        pla
-        tax
-        pla
-        ENDM
+        INCLUDE "macros.asm"
         ;; decrement 16 bit timer in {1}
         ;; if expired jsr to {2}
         MAC HasTimerExpired
@@ -502,47 +467,22 @@ EndOfZP         equ fruitPoints+2  ; this better be < $ff
         jsr {2}
 .done
         ENDM
-        ;; make a number negative ( if it isn't ) by creating the 2's complement of it
-        ;; number in A
-        MAC MakeNegative
-        bmi .done
-        eor #$ff
-        clc
-        adc #1
-.done
-        ENDM
-        ;; abs of number in A
-        MAC Abs
-        bpl .done
-        eor #$ff
-        clc
-        adc #1
-.done
-        ENDM
         MAC GetTunnelSpeed
-        saveX
-        ldx #6
+        ldy #6
         jsr GetSpeed
-        resX
         ENDM
         ;; ghost frightened
         MAC GetBlueSpeed
-        saveX
-        ldx #5
+        ldy #5
         jsr GetSpeed
-        resX
         ENDM
         MAC GetGhostSpeed
-        saveX
-        ldx #4
+        ldy #4
         jsr GetSpeed
-        resX
         ENDM
         MAC GetPacSpeed
-        saveX
-        ldx #0
+        ldy #0
         jsr GetSpeed
-        resX
         ENDM
 ;;; initialize the sprite loop counter
 ;;; kinda a lame macro I guess
@@ -598,20 +538,6 @@ WaitTime_ subroutine
         MAC WaitTime
         lda #60*{1}               ;seconds
         jsr WaitTime_
-        ENDM
-    ;; ABORT instruction
-    mac abort
-    lda #$c0
-    sta VICSCRN
-    brk
-    endm
-        ;; duh, you can't use beq with this
-        MAC dec16
-        lda  [{1}]+0
-        bne .done
-        dec [{1}]+1
-.done
-        dec [{1}]+0
         ENDM
 
 ;;; find the character font address of the tile
@@ -1220,7 +1146,7 @@ PowerPillOff SUBROUTINE
         dex
         bne .loop
 .done
-        ;; assume X=0
+        ldy #0
         jsr GetSpeed
         sta Sprite_base         ;restore pacman speed
         sta Sprite_speed        ;to normal
@@ -1255,7 +1181,7 @@ PowerPillOn SUBROUTINE
 .0
         dex
         bne .loop               ;loop while not pacman
-        ldx #2                  ;select power speed
+        ldy #2                  ;select power speed
         jsr GetSpeed            ;get into A and store
         sta Sprite_base         ;as new base speed
         sta Sprite_speed
@@ -1676,8 +1602,8 @@ AllSoundOff subroutine
 ;;;
 ;;; determine correct speed based on levels complete
 ;;; input:
-;;; X=4 get ghost speed
-;;; X=0 get pacman speed
+;;; Y=4 get ghost speed
+;;; Y=0 get pacman speed
 ;;; output: speed in A
 GetSpeed SUBROUTINE
         lda LevelsComplete
@@ -1687,16 +1613,16 @@ GetSpeed SUBROUTINE
         bmi .level2
         cmp #5
         bmi .level5
-        lda Lvl21Spds,X
+        lda Lvl21Spds,Y
         rts
 .level5
-        lda Lvl5Spds,X
+        lda Lvl5Spds,Y
         rts
 .level2
-        lda Lvl2Spds,X
+        lda Lvl2Spds,Y
         rts
 .level1
-        lda Lvl1Spds,X
+        lda Lvl1Spds,Y
         rts
 ;;;
 ;;; reset game after pacman death, or level start
@@ -2024,12 +1950,13 @@ DisplayLives subroutine         ;entry point for displaying lives only
         lda #BLACK
         sta clrram+lifeStart,Y
 .cont
-        tya
-        sec
+        tya                     ;y = y - 44
+        sec                     ;i.e.
         sbc #44                 ;move down screen 2 spaces
         tay
-        dex
-        bpl .0
+        
+        dex                     ;while paclives >= 0
+        bpl .0                  ;
 .done
         pla
         tax
@@ -2596,7 +2523,7 @@ GhostAsPlayer SUBROUTINE
         ;; load sprite's tail tile screen position pointer into word {2}
         ;; e.g. ldSprtTailPos Sprite_loc,W1
         ;; e.g. ldSprtTailPos Sprite_loc2,W1
-        mac ldSprtTailPos
+        MAC ldSprtTailPos
         move16x {1},{2}
 #if {1}=Sprite_loc
         lda Sprite_dir,X
@@ -2866,7 +2793,7 @@ IncreaseBlinky subroutine
         lda LevelsComplete
         cmp #5
         bcs .over5
-        ldx #4
+        ldy #4
         jsr GetSpeed
         ldx BlinkyCruise
         sec
@@ -2900,10 +2827,10 @@ DotEaten SUBROUTINE
         jsr UpdateScore
 
         ;; dot eating speeds
-        ldx #1
+        ldy #1
         lda POWER_UP            ;if we are powered up
         beq .regulardot         ;then set X=3 and get
-        ldx #3                  ;power dot
+        ldy #3                  ;power dot
 .regulardot                     ;eating speed
         jsr GetSpeed
         sta Sprite_speed
@@ -3079,7 +3006,6 @@ PixelPos SUBROUTINE
 CalcDistance SUBROUTINE
         sub16Im W1,screen       ;w1 = offset from screen start, input to divide
         jsr Divide22_16         ;calc row/column by division
-;        DisplayDivResults
         lda DIV22_RSLT
         sta GHOST_ROW
         sec
@@ -3091,7 +3017,6 @@ CalcDistance SUBROUTINE
         sec
         sbc GHOST_TGTCOL        ;subtract pac column
         Abs                     ;absolute value of A
-
         ;; add row + columns
         clc
         adc S2
@@ -3151,11 +3076,14 @@ PossibleMoves SUBROUTINE
         lda #motionDown
         cmp Sprite_motion,X
         beq .endup
+        ;; check if forbidden zone
+        ;;cmp16Im screen+[22*9]+8
+        
         ;; check if we can go up
         jsr scroll_up
         bcs .endup
         ;; we could go up;
-        ldSprtHeadPos Sprite_loc2,W1 ;
+        ldSprtCurPos Sprite_loc2,W1 ;
         jsr CalcDistance             ;
         jsr RestoreSprite            ;
         IfFocus "U",9                ;
@@ -3169,7 +3097,7 @@ PossibleMoves SUBROUTINE
         jsr ScrollLeft               ;
         bcs .endleft
         ;; we could go left
-        ldSprtHeadPos Sprite_loc2,W1 ;
+        ldSprtCurPos Sprite_loc2,W1 ;
         jsr CalcDistance             ;
         jsr RestoreSprite            ;
         IfFocus "L",5                ;
@@ -3183,7 +3111,7 @@ PossibleMoves SUBROUTINE
         jsr scroll_down         ;
         bcs .enddown
         ;; we could go down
-        ldSprtTailPos Sprite_loc2,W1 ;correct
+        ldSprtCurPos Sprite_loc2,W1 ;correct
         jsr CalcDistance
         jsr RestoreSprite
         IfFocus "D",13
@@ -3197,7 +3125,7 @@ PossibleMoves SUBROUTINE
         jsr scroll_right            ;
         bcs .endright
         ;; we could go right
-        ldSprtTailPos Sprite_loc2,W1 ;correct
+        ldSprtCurPos Sprite_loc2,W1 ;correct
         jsr CalcDistance             ;
         jsr RestoreSprite            ;
         IfFocus "R",1                ;
@@ -3343,8 +3271,9 @@ Ghost4AI SUBROUTINE
 ;;; doubles the length of the vector
 ;;; and uses the result as his target tile
 Ghost1AI SUBROUTINE
+        txa
+        pha
 
-        saveX
         ;; our initial target is 2 in front of pacman
         ;; we'll leverage ghost 3's routines for us
         ;; his target tile is 4 in front of pacman and he can
@@ -3369,8 +3298,8 @@ Ghost1AI SUBROUTINE
 ;        Display1 "X",5,GHOST_TGTCOL
         ;; should have our final target tile
 
-        resX
-
+        pla
+        tax
         rts
 
 ;;;
@@ -3444,8 +3373,7 @@ Ghost3AI SUBROUTINE
 ;;; in the context of the game screen
 ;;; DIV22_RSLT is the row, and W1 is the column
 Divide22_16 SUBROUTINE
-        txa
-        pha
+        saveX
 
         lda #$00
         sta DIV22_RSLT      ;Init the result variable
@@ -3460,11 +3388,8 @@ Divide22_16 SUBROUTINE
         dex
         bpl .loop
 .done
-        pla
-        tax
-
+        resX
         rts
-
 ;;;
 ;;; Service PACMAN, read joystick and move
 ;;;
@@ -3656,7 +3581,8 @@ DeathDistance equ 3
         lda #0                  ;eyes as fast as possible
         sta Sprite_speed,X      ;store eye speed
 
-        saveX
+        txa                     ;save X
+        pha
 ;;; todo: maybe, display ghost eaten score
 ;        move16x Sprite_loc,W1
 ;        store16 ready_msg,W2
@@ -3671,12 +3597,11 @@ DeathDistance equ 3
         dex                     ;move to next table entry
         stx EatenIdx            ;save updated index
         jsr UpdateScore         ;A,Y are inputs
-        resX                    ;restore X reg
+        pla                    ;restore X reg
+        tax
 .skip                           ;really shouldn't be here
         ;; we ran off the beginning of the point table
-
 .done
-        ;; GHOST_ROW,GHOST_COL
         rts
 ;;; animate a sprite by changing its source frames
 Animate SUBROUTINE
