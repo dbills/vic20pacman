@@ -2647,16 +2647,12 @@ GhostAsPlayer SUBROUTINE
 .done
         ENDM
         ;; pac upcoming row col into variables
-        ;; OUTPUT: PACCOL,PACROW
+        ;; and pixels
+        ;; OUTPUT: PACCOL,PACROW,PACXPIXEL,PACYPIXEL
         MAC CalcPacRowCol
         ldx #0
         ldSprtCurPos Sprite_loc,W1
-        sub16Im W1,screen
-        jsr Divide22_16
-        lda W1
-        sta PACCOL             ;store tile column
-        lda DIV22_RSLT         ;get row result from division
-        sta PACROW             ;store tile row
+        ScreenToColRow W1, PACCOL,PACROW
         TileToPixels PACCOL,PACROW,PACXPIXEL,PACYPIXEL
         ENDM
         ;;
