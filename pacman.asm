@@ -2567,16 +2567,16 @@ GhostAsPlayer SUBROUTINE
 
         ENDM
         ;; calculate the ghost in X's
-        ;; about to be display row and column
+        ;; "about to be displayed" row and column
         ;; Output: GHOST_ROW,GHOST_COL
         MAC CalcGhostRowCol
-
-        move16x Sprite_loc,W1
+        ldSprtCurPos Sprite_loc,W1
         ScreenToColRow W1,GHOST_COL,GHOST_ROW
-
         ENDM
 ;;; based on the pixel offset load the correct sprite
 ;;; tile into {2} ( either the head or the tail )
+;;; X=sprite {1} sprite work attribute ( e.g. Sprite_loc )
+;;; {2} destination word
         MAC ldSprtCurPos
         lda Sprite_offset,X
         cmp #5                  ;5,6,7,8 are tail
@@ -2610,6 +2610,42 @@ GhostAsPlayer SUBROUTINE
         adc #0
         sta {2}+1
         ENDM
+;;; convert tiles to pixels
+;;; X sprite to convert
+;;; {1} source col
+;;; {2} source row
+;;; {3} output column pixels
+;;; {4} output row pixels
+;;; X sprite to convert
+        MAC TileToPixels
+        lda {1}
+        asl                     ;mul by 8
+        asl
+        asl
+        sta {3}
+        lda {2}
+        asl                     ;mul by 8
+        asl
+        asl
+        sta {4}
+        lda Sprite_offset,X
+        ldy Sprite_dir,X
+        cpy #dirVert
+        beq .vert
+        cpy #dirHoriz
+        beq .horiz
+        brk                     ;unknown
+.vert
+        clc
+        adc {4}
+        sta {4}
+        bcc .done               ;no way carry should ever be set
+.horiz
+        clc
+        adc {3}
+        sta {3}
+.done
+        ENDM
         ;; pac upcoming row col into variables
         ;; OUTPUT: PACCOL,PACROW
         MAC CalcPacRowCol
@@ -2619,27 +2655,9 @@ GhostAsPlayer SUBROUTINE
         jsr Divide22_16
         lda W1
         sta PACCOL             ;store tile column
-        asl                    ;multiply by 8
-        asl
-        asl
-        ldy Sprite_dir         ;are we oriented vertically?
-        cpy #dirVert
-        beq .vert              ;yes, don't add offset into X pixel
-        clc                    ;we are horiz
-        adc Sprite_offset      ;add in pixel count to X
-.vert
-        sta PACXPIXEL          ;store pixel column
         lda DIV22_RSLT         ;get row result from division
         sta PACROW             ;store tile row
-        asl                    ;multiply by 8
-        asl
-        asl
-        cpy #dirHoriz          ;are we horizontal
-        beq .horiz             ;yes, don't add offset into Y
-        clc                    ;we are vertical
-        adc Sprite_offset      ;add in the smooth scroll offset to pixel count
-.horiz
-        sta PACYPIXEL           ;store pixel row
+        TileToPixels PACCOL,PACROW,PACXPIXEL,PACYPIXEL
         ENDM
         ;;
         ;; check if sprite X gets to move this frame
@@ -3040,42 +3058,6 @@ ones:
         sta {2}
 .done
         ENDM
-;;; convert tiles to pixels
-;;; X sprite to convert
-;;; {1} source col
-;;; {2} source row
-;;; {3} output column pixels
-;;; {4} output row pixels
-;;; X sprite to convert
-        MAC TileToPixels
-        lda {1}
-        asl                     ;mul by 8
-        asl
-        asl
-        sta {3}
-        lda {2}
-        asl                     ;mul by 8
-        asl
-        asl
-        sta {4}
-        lda Sprite_offset,X
-        ldy Sprite_dir,X
-        cpy #dirVert
-        beq .vert
-        cpy #dirHoriz
-        beq .horiz
-        brk                     ;unknown
-.vert
-        clc
-        adc {4}
-        sta {4}
-        bcc .done               ;no way carry should ever be set
-.horiz
-        clc
-        adc {3}
-        sta {3}
-.done
-        ENDM
 ;;;
 PixelPos SUBROUTINE
 #if 0
@@ -3462,11 +3444,9 @@ Ghost3AI SUBROUTINE
 
 
 ;;; W1 contains dividend ( word )
-;;; w1 contains remainder on exit
 ;;; DIV22_RSLT contains result up to 5 bits of precision
-;;;
 ;;; in the context of the game screen
-;;; DIV22_RSLT is the row, and A is the column
+;;; DIV22_RSLT is the row, and W1 is the column
 Divide22_16 SUBROUTINE
         txa
         pha
