@@ -366,9 +366,7 @@ unused          equ TIMER1H+1
 r_seed          equ TIMER1H+2         ;random number seed
 Div22Table      equ r_seed+1          ;table for fast 22 division
 ;;; ----------- 10 bytes
-Sprite_offset   equ Div22Table+10
-;;; ------------5 bytes
-PacLives        equ Sprite_offset+5
+PacLives        equ Div22Table+10
 SirenIdx        equ PacLives+1
 EatenIdx        equ SirenIdx+1 ;number of ghosts eaten since power pill
 PACDEATH        equ EatenIdx+1 ;pacman death animation pointer
@@ -433,8 +431,8 @@ Sprite_sback    equ Sprite_back2+5
 Sprite_sback2   equ Sprite_sback+5
 Sprite_dir      equ Sprite_sback2+5  ;
 Sprite_dir2     equ Sprite_dir+5     ;sprite direction 1(horiz),22(vert)
-;Sprite_offset   equ Sprite_dir2+5   ;sprite bit offset in tiles
-Sprite_offset2  equ Sprite_dir2+5    ;upcoming sprite bit offset in tiles
+Sprite_offset   equ Sprite_dir2+5   ;sprite bit offset in tiles
+Sprite_offset2  equ Sprite_offset+5    ;upcoming sprite bit offset in tiles
 PlayerScore_h   equ Sprite_offset2+5 ;3 byte BCD player score, MSB order
 PlayerScore_m   equ PlayerScore_h+1
 PlayerScore_l   equ PlayerScore_m+1
