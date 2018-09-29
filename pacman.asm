@@ -191,7 +191,7 @@ mychars     equ $1c00             ; 3K font start
 #ifconst GHPLAYER
 defaultISR  equ $eabf             ; os default IRQ
 #else
-defaultISR  equ  $eb15            ; the minimum isr ( no keyboard polling or other stuff )
+defaultISR  equ $eb15             ; the minimum isr ( no keyboard polling or other stuff )
 #endif
 defaultVol  equ 8                 ; default volume for app
 VICRASTER   equ $9004
@@ -422,10 +422,10 @@ unused08        equ Xsave+8
 unused09        equ Xsave+9
 unused10        equ Xsave+10
 unused11        equ Xsave+11
-Sprite_loc      equ $a7
+Sprite_loc      equ unused02      ;02 doesn't work $8111
 Sprite_loc2     equ Sprite_loc+10    ;new screen loc
 Sprite_back     equ Sprite_loc2+10   ;background char before other sprites drawn
-Sprite_back2    equ Sprite_back+5    ;static screen background
+Sprite_back2    equ Sprite_back+5    ;static screen background ( is this the tail tile? )
 ;;;current screen background ( might include some other sprite tile that was laid down )
 Sprite_sback    equ Sprite_back2+5
 Sprite_sback2   equ Sprite_sback+5
@@ -936,7 +936,7 @@ erasesprt SUBROUTINE
         ldy #0
         lda Sprite_back,X
         sta (W1),Y
-
+;;; DOOMED - because we didn't initialize sprite_dir?
         ldy Sprite_dir,X
         lda Sprite_back2,X
 
@@ -1468,13 +1468,6 @@ longJmp subroutine
         sta Sprite_sback
         sta Sprite_sback2
         ENDM
-
-        MAC REstorePacSite
-        pla
-        sta Sprite_sback
-        pla
-        sta Sprite_sback2
-        ENDM
         ;; Wait for a keypress
         MAC WaitKey
 .wait
@@ -1532,7 +1525,6 @@ death subroutine
 .done
         lda #1
         jsr WaitTime_
-;        RestorePacSite
         jsr stopSound
         jsr DecrementLives
         JmpReset modePacDeath   ;reset level, pacman died mode
@@ -1649,8 +1641,11 @@ reset_game subroutine
         ;; init loop counter
         ldx #SPRITES-1       ;SPRITES is 1 based, so -1
 .0
-        jsr erasesprt
-
+        ;; lda S1
+        ;; cmp #modeResetGame
+        ;; bne .skip_erase
+        jsr erasesprt ;erases current sprite location(i.e. Sprite_loc)
+;; .skip_erase
         lda inBoxTable,X
         sta Sprite_offset2,X
         sta Sprite_offset,X
@@ -1881,7 +1876,7 @@ reset_game1 subroutine
 
         lda #pacLives           ;1 based : number of lives + 1
         sta PacLives
-;BLARGO1
+
         ldx #4
 .loop
         move16xx Div22Table_i,Div22Table
@@ -2018,7 +2013,7 @@ main SUBROUTINE
 ;        store16 maingo,$0316    ;on error, restart game
         ldx #$ff                ;init stack to top of page 1
         txs
-        stx ResetPoint
+        stx ResetPoint          ;for C style longjump
         store16 defaultISR,$0314 ;replace standard isr with minimal ISR ( jiffy clock only )
         lda #$7f
         sta $911e               ;disable nmi
@@ -2330,7 +2325,7 @@ mkmaze2 subroutine
         placePellets screen
         lda #WHITE
         placePellets clrram
-        sta clrram+[22*pacStartRow]+pacStartCol
+;        sta clrram+[22*pacStartRow]+pacStartCol
         rts
 .begin
         lda (W1),Y              ;fetch high nibble
